@@ -49,6 +49,7 @@ function logAndBuildErrorRedirect(origin: string, reason: string): NextResponse 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  const next = searchParams.get('next')
   const upstreamError = searchParams.get('error_description') ?? searchParams.get('error')
 
   if (upstreamError) {
@@ -77,6 +78,18 @@ export async function GET(request: NextRequest) {
 
     if (error || !data.user) {
       return logAndBuildErrorRedirect(origin, error?.message ?? 'echange_session_echoue')
+    }
+
+    // Flux de récupération de mot de passe (ex: /admin/forgot-password) : on
+    // redirige directement vers `next` sans passer par la logique de
+    // complétion de profil / rôle ci-dessous — la session est bien établie
+    // (les cookies sont posés plus bas comme pour tout autre échange), mais
+    // l'utilisateur doit d'abord définir un nouveau mot de passe avant
+    // d'atterrir sur son espace habituel.
+    if (next?.startsWith('/admin/reset-password')) {
+      const response = NextResponse.redirect(`${origin}${next}`)
+      cookiesToApply.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
+      return response
     }
 
     const { data: profile } = await supabase

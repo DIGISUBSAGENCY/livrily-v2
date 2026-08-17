@@ -39,12 +39,19 @@ export async function updateSession(request: NextRequest) {
   // liste des commerces) puisque "commerces" contient "commerce" comme
   // sous-chaîne — d'où la vérification de frontière de segment ci-dessous.
   const isCommerceRoute = pathname === '/commerce' || pathname.startsWith('/commerce/')
-  const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/')
+  // /admin/login est exclue du garde-fou ci-dessous : elle vit dans son propre
+  // groupe de routes (app/(admin-auth)/admin/login), sans passer par le
+  // dashboard admin — mais le préfixe /admin/ la matcherait quand même sans
+  // cette exception, provoquant une boucle de redirection infinie pour un
+  // visiteur non connecté.
+  const isAdminLoginRoute = pathname === '/admin/login'
+  const isAdminRoute = !isAdminLoginRoute && (pathname === '/admin' || pathname.startsWith('/admin/'))
+  const loginPath = isAdminRoute ? '/admin/login' : '/login'
 
   if (isCommerceRoute || isAdminRoute) {
     if (!user) {
       const url = request.nextUrl.clone()
-      url.pathname = '/login'
+      url.pathname = loginPath
       url.searchParams.set('next', pathname)
       return NextResponse.redirect(url)
     }
@@ -57,7 +64,7 @@ export async function updateSession(request: NextRequest) {
 
     if (error || !profile || !profile.is_active) {
       const url = request.nextUrl.clone()
-      url.pathname = '/login'
+      url.pathname = loginPath
       return NextResponse.redirect(url)
     }
 

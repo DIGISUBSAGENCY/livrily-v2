@@ -16,6 +16,20 @@ export const signUpSchema = z
     path: ['confirmPassword'],
   })
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Adresse email invalide.'),
+})
+
+export const resetPasswordSchema = z
+  .object({
+    password: z.string().min(6, 'Le mot de passe doit contenir au moins 6 caractères.'),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Les mots de passe ne correspondent pas.',
+    path: ['confirmPassword'],
+  })
+
 // Coordonnée optionnelle : le champ hidden envoie '' quand l'adresse a été
 // saisie manuellement (fallback sans clé Google Maps, cf. AddressAutocomplete).
 // On ne bloque jamais la complétion de profil pour une histoire de clé API
