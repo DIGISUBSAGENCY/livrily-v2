@@ -2,8 +2,6 @@ import type { Metadata } from 'next'
 import localFont from 'next/font/local'
 import { GoogleMapsProvider } from '@/components/maps/GoogleMapsProvider'
 import { CartProvider } from '@/lib/cart/CartContext'
-import { Header } from '@/components/layout/Header'
-import { Footer } from '@/components/layout/Footer'
 import { OneSignalInit } from '@/components/notifications/OneSignalInit'
 import { createClient } from '@/lib/supabase/server'
 import './globals.css'
@@ -60,11 +58,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col bg-slate-50 font-sans text-slate-900 antialiased`}
       >
         <GoogleMapsProvider>
-          <CartProvider>
-            <Header />
-            <div className="flex-1">{children}</div>
-            <Footer />
-          </CartProvider>
+          <CartProvider>{children}</CartProvider>
         </GoogleMapsProvider>
         <OneSignalInit userId={user?.id ?? null} />
       </body>

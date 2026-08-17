@@ -1,3 +1,4 @@
+import { AdminTopBar } from '@/components/layout/AdminTopBar'
 import { NavTabs } from '@/components/layout/NavTabs'
 
 const links = [
@@ -11,9 +12,13 @@ const links = [
   { href: '/admin/parametres/virement', label: 'Virement' },
 ]
 
+// Dédié à /admin : sa propre barre (logo + utilisateur + déconnexion), sans
+// le Header/Footer marketing du site public (cf. app/(client)/layout.tsx et
+// les layouts frères qui, eux, les conservent).
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div>
+    <div className="min-h-screen bg-slate-50">
+      <AdminTopBar />
       <NavTabs links={links} maxWidthClassName="max-w-4xl" />
       {children}
     </div>
