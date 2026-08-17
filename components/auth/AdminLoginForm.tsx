@@ -17,40 +17,47 @@ export function AdminLoginForm({ next }: { next?: string }) {
   const [state, formAction] = useFormState(adminSignIn, initialState)
 
   return (
-    <form action={formAction} className="space-y-4">
-      {next && <input type="hidden" name="next" value={next} />}
+    <div className="space-y-4">
+      <form action={formAction} className="space-y-4">
+        {next && <input type="hidden" name="next" value={next} />}
 
-      <div>
-        <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" autoComplete="email" required hasError={!!state.error} />
-      </div>
+        <div>
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" autoComplete="email" required hasError={!!state.error} />
+        </div>
 
-      <div>
-        <Label htmlFor="password">Mot de passe</Label>
-        <Input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          hasError={!!state.error}
-        />
-      </div>
+        <div>
+          <Label htmlFor="password">Mot de passe</Label>
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            hasError={!!state.error}
+          />
+        </div>
 
-      {state.error && <ErrorText>{state.error}</ErrorText>}
+        {state.error && <ErrorText>{state.error}</ErrorText>}
 
-      <SubmitButton className="w-full" pendingLabel="Connexion…">
-        Se connecter
-      </SubmitButton>
+        <SubmitButton className="w-full" pendingLabel="Connexion…">
+          Se connecter
+        </SubmitButton>
+      </form>
 
+      {/* Volontairement HORS du <form> ci-dessus (form action={formAction} lié
+          à un Server Action) : un lien de navigation n'a rien à faire imbriqué
+          dans un formulaire, même si ça ne devrait normalement pas interférer
+          avec le clic. */}
       <p className="text-center text-sm">
         <Link
           href="/admin/forgot-password"
+          prefetch={false}
           className="font-medium text-brand-600 transition-colors hover:text-brand-700 hover:underline"
         >
           Mot de passe oublié ?
         </Link>
       </p>
-    </form>
+    </div>
   )
 }
