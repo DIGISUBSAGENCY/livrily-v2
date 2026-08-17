@@ -105,6 +105,13 @@ export function AddressAutocomplete({
       defaultValue={defaultValue}
       autoComplete="off"
       hasError={hasError}
+      // Filet de sécurité : si l'utilisateur tape une adresse en texte libre
+      // et ne clique jamais sur une suggestion Google (mobile, suggestions
+      // lentes à charger, ville non reconnue...), on remonte quand même le
+      // texte tapé (lat/lng = null) plutôt que de laisser le formulaire
+      // bloqué indéfiniment. Un choix réel dans le dropdown déclenche ensuite
+      // 'place_changed' et écrase cette valeur avec les coordonnées géocodées.
+      onChange={(e) => onPlaceSelectedRef.current({ address: e.target.value, lat: null, lng: null })}
     />
   )
 }
