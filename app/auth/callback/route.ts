@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, full_name, phone, address, referred_by')
+      .select('role, full_name, phone, address, country, referred_by')
       .eq('id', data.user.id)
       .single()
 
@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const profileComplete = Boolean(profile?.full_name && profile?.phone && profile?.address)
+    const profileComplete = Boolean(profile?.full_name && profile?.phone && profile?.address && profile?.country)
     const destination = profileComplete ? roleHome(profile!.role) : '/profil/completer'
 
     const response = NextResponse.redirect(`${origin}${destination}`)

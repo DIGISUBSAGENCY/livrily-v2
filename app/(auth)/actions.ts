@@ -37,7 +37,7 @@ export async function signIn(_prevState: AuthFormState, formData: FormData): Pro
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('role, full_name, is_active')
+    .select('role, full_name, phone, address, country, is_active')
     .eq('id', data.user.id)
     .single()
 
@@ -50,8 +50,13 @@ export async function signIn(_prevState: AuthFormState, formData: FormData): Pro
     return { error: 'Ce compte a été désactivé. Contacte le support Livrily.' }
   }
 
+  // Même condition que /auth/callback (flux Google/confirmation email) : ne
+  // vérifiait auparavant que full_name, ce qui laissait passer un compte
+  // créé par mot de passe sans jamais lui demander téléphone/adresse/pays.
+  const profileComplete = Boolean(profile.full_name && profile.phone && profile.address && profile.country)
+
   revalidatePath('/', 'layout')
-  redirect(profile.full_name ? roleHome(profile.role) : '/profil/completer')
+  redirect(profileComplete ? roleHome(profile.role) : '/profil/completer')
 }
 
 export async function signUp(_prevState: AuthFormState, formData: FormData): Promise<AuthFormState> {

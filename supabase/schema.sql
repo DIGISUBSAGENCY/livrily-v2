@@ -136,6 +136,8 @@ create table if not exists public.profiles (
   full_name text,
   phone text,
   address text,
+  country text, -- code pays (ex: 'TN'), liste dans lib/constants/countries.ts
+  profession text, -- libre, optionnel
   address_lat double precision,
   address_lng double precision,
   address_location geography(Point, 4326),
@@ -165,6 +167,8 @@ alter table public.profiles add column if not exists referred_by uuid references
 alter table public.profiles add column if not exists referral_reward_granted boolean not null default false;
 alter table public.profiles add column if not exists wallet_balance numeric not null default 0;
 alter table public.profiles add column if not exists onesignal_player_id text;
+alter table public.profiles add column if not exists country text;
+alter table public.profiles add column if not exists profession text;
 
 create index if not exists profiles_role_idx on public.profiles(role);
 

@@ -5,13 +5,25 @@ import { useFormState } from 'react-dom'
 import { updateProfile, type ProfileFormState } from '@/app/profil/completer/actions'
 import { Label } from '@/components/ui/Label'
 import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
 import { ErrorText } from '@/components/ui/ErrorText'
 import { SubmitButton } from '@/components/ui/SubmitButton'
 import { AddressAutocomplete, type SelectedPlace } from '@/components/maps/AddressAutocomplete'
+import { COUNTRIES } from '@/lib/constants/countries'
 
 const initialState: ProfileFormState = { error: null }
 
-export function ProfileForm({ defaultFullName = '' }: { defaultFullName?: string }) {
+interface ProfileFormProps {
+  defaultFullName?: string
+  defaultCountry?: string
+  defaultProfession?: string
+}
+
+export function ProfileForm({
+  defaultFullName = '',
+  defaultCountry = 'TN',
+  defaultProfession = '',
+}: ProfileFormProps) {
   const [state, formAction] = useFormState(updateProfile, initialState)
   const [place, setPlace] = useState<SelectedPlace | null>(null)
 
@@ -30,6 +42,29 @@ export function ProfileForm({ defaultFullName = '' }: { defaultFullName?: string
           type="tel"
           placeholder="20123456"
           required
+          hasError={!!state.error}
+        />
+      </div>
+
+      <div>
+        <Label htmlFor="country">Pays</Label>
+        <Select id="country" name="country" defaultValue={defaultCountry} required hasError={!!state.error}>
+          {COUNTRIES.map((country) => (
+            <option key={country.value} value={country.value}>
+              {country.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      <div>
+        <Label htmlFor="profession">Profession / Métier (optionnel)</Label>
+        <Input
+          id="profession"
+          name="profession"
+          type="text"
+          placeholder="Ingénieur, Étudiant, Commerçant…"
+          defaultValue={defaultProfession}
           hasError={!!state.error}
         />
       </div>

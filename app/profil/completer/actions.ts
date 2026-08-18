@@ -34,6 +34,8 @@ export async function updateProfile(
     full_name: formData.get('full_name'),
     phone: formData.get('phone'),
     address: formData.get('address'),
+    country: formData.get('country'),
+    profession: formData.get('profession'),
     address_lat: formData.get('address_lat'),
     address_lng: formData.get('address_lng'),
   })
@@ -48,6 +50,8 @@ export async function updateProfile(
       full_name: parsed.data.full_name,
       phone: parsed.data.phone,
       address: parsed.data.address,
+      country: parsed.data.country,
+      profession: parsed.data.profession,
       address_lat: parsed.data.address_lat,
       address_lng: parsed.data.address_lng,
     })

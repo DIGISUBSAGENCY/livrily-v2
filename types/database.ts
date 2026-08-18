@@ -43,6 +43,8 @@ export interface Database {
           full_name: string | null
           phone: string | null
           address: string | null
+          country: string | null
+          profession: string | null
           address_lat: number | null
           address_lng: number | null
           is_active: boolean
@@ -61,6 +63,8 @@ export interface Database {
           full_name?: string | null
           phone?: string | null
           address?: string | null
+          country?: string | null
+          profession?: string | null
           address_lat?: number | null
           address_lng?: number | null
           is_active?: boolean

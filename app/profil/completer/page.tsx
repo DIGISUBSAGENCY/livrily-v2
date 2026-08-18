@@ -24,8 +24,14 @@ export default async function CompleterProfilPage() {
 
   // Déjà rempli pour un compte créé via Google (metadata OAuth) : évite de
   // retaper un nom que Google connaît déjà. Vide pour un compte email/mot
-  // de passe classique (handle_new_user ne le renseigne pas).
-  const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
+  // de passe classique (handle_new_user ne le renseigne pas). country/
+  // profession sont repris tels quels si l'utilisateur revient sur cette
+  // page après une première tentative (évite de perdre sa saisie).
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name, country, profession')
+    .eq('id', user.id)
+    .single()
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-gradient-to-b from-brand-50/50 to-white px-4 py-12">
@@ -37,7 +43,11 @@ export default async function CompleterProfilPage() {
           </p>
         </div>
         <Card>
-          <ProfileForm defaultFullName={profile?.full_name ?? ''} />
+          <ProfileForm
+            defaultFullName={profile?.full_name ?? ''}
+            defaultCountry={profile?.country ?? 'TN'}
+            defaultProfession={profile?.profession ?? ''}
+          />
         </Card>
       </div>
     </div>

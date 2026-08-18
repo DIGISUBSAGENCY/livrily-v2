@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { COUNTRY_CODES } from '@/lib/constants/countries'
 
 export const signInSchema = z.object({
   email: z.string().trim().toLowerCase().email('Adresse email invalide.'),
@@ -50,6 +51,15 @@ export const profileSchema = z.object({
     .trim()
     .regex(/^(\+216)?\d{8}$/, 'Numéro tunisien invalide (8 chiffres, ex: 20123456).'),
   address: z.string().trim().min(5, 'Adresse requise.'),
+  country: z.enum(COUNTRY_CODES, { message: 'Sélectionne un pays.' }),
+  // Libre et optionnel : transformé en null (plutôt que chaîne vide) pour
+  // rester cohérent avec le reste du schéma DB (colonne nullable).
+  profession: z
+    .string()
+    .trim()
+    .max(100, 'Profession trop longue (100 caractères max).')
+    .optional()
+    .transform((v) => (v ? v : null)),
   address_lat: optionalCoordinate(-90, 90),
   address_lng: optionalCoordinate(-180, 180),
 })
