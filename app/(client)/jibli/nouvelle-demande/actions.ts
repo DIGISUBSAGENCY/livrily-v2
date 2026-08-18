@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { travelRequestSchema } from '@/lib/validations/travel'
+import { getIdentityStatus, isIdentityVerified } from '@/lib/identity'
 
 export interface TravelRequestFormState {
   error: string | null
@@ -20,6 +21,14 @@ export async function createTravelRequest(
   } = await supabase.auth.getUser()
 
   if (!user) redirect('/login?next=/jibli/nouvelle-demande')
+
+  // Prérequis KYC : uniquement pour publier/accepter (pas pour naviguer,
+  // cf. lib/identity.ts) — vérifié ici, pas seulement côté UI, puisque
+  // l'action reste appelable directement.
+  const identityStatus = await getIdentityStatus(supabase, user.id)
+  if (!isIdentityVerified(identityStatus)) {
+    return { error: "Vérifie ton identité avant de publier une demande (page Profil)." }
+  }
 
   const parsed = travelRequestSchema.safeParse({
     item_description: formData.get('item_description'),

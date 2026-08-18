@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { travelProposalSchema, counterOfferSchema } from '@/lib/validations/travel'
 import { generateFlouciPayment, isFlouciConfigured, tndToMillimes, FlouciConfigError, FlouciApiError } from '@/lib/flouci'
+import { getIdentityStatus, isIdentityVerified } from '@/lib/identity'
 
 export interface ProposalFormState {
   error: string | null
@@ -79,6 +80,13 @@ export async function acceptProposalVirement(
 
   if (!user) redirect(`/login?next=/jibli/${requestId}`)
 
+  // Même prérequis KYC que createTravelRequest — "accepter une offre" =
+  // ce point d'entrée et initiateFlouciPayment ci-dessous.
+  const identityStatus = await getIdentityStatus(supabase, user.id)
+  if (!isIdentityVerified(identityStatus)) {
+    return { error: "Vérifie ton identité avant d'accepter une offre (page Profil)." }
+  }
+
   const proofFile = formData.get('payment_proof')
   if (!(proofFile instanceof File) || proofFile.size === 0) {
     return { error: "Merci de joindre une capture d'écran de la preuve de virement." }
@@ -126,6 +134,11 @@ export async function initiateFlouciPayment(requestId: string, proposalId: strin
   } = await supabase.auth.getUser()
 
   if (!user) redirect(`/login?next=/jibli/${requestId}`)
+
+  const identityStatus = await getIdentityStatus(supabase, user.id)
+  if (!isIdentityVerified(identityStatus)) {
+    return { error: "Vérifie ton identité avant d'accepter une offre (page Profil)." }
+  }
 
   const { data: proposal, error: proposalError } = await supabase
     .from('travel_proposals')
