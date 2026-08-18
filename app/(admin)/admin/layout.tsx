@@ -1,27 +1,19 @@
 import { AdminTopBar } from '@/components/layout/AdminTopBar'
-import { NavTabs } from '@/components/layout/NavTabs'
-
-const links = [
-  { href: '/admin', label: 'Tableau de bord' },
-  { href: '/admin/commandes', label: 'Commandes' },
-  { href: '/admin/commerces', label: 'Commerces' },
-  { href: '/admin/zones', label: 'Zones' },
-  { href: '/admin/comptes-commerce', label: 'Comptes commerce' },
-  { href: '/admin/paiements', label: 'Paiements commandes' },
-  { href: '/admin/jibli-paiements', label: 'Paiements Jibli' },
-  { href: '/admin/retraits', label: 'Retraits' },
-  { href: '/admin/parametres/virement', label: 'Virement' },
-  { href: '/admin/parametres/commission', label: 'Commission' },
-]
+import { AdminNav } from '@/components/layout/AdminNav'
 
 // Dédié à /admin : sa propre barre (logo + utilisateur + déconnexion), sans
 // le Header/Footer marketing du site public (cf. app/(client)/layout.tsx et
 // les layouts frères qui, eux, les conservent).
+//
+// AdminNav (regroupée en sous-menus) remplace ici l'ancienne liste plate de
+// 10 liens portée par NavTabs — devenue difficile à lire. NavTabs reste
+// utilisé tel quel par /commerce (components/layout/AdminNav.tsx explique
+// pourquoi ce n'est pas le composant partagé qui a été modifié).
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-slate-50">
       <AdminTopBar />
-      <NavTabs links={links} maxWidthClassName="max-w-4xl" />
+      <AdminNav />
       {children}
     </div>
   )
