@@ -95,7 +95,7 @@ export async function signUp(_prevState: AuthFormState, formData: FormData): Pro
     return { error: message }
   }
 
-  redirect('/signup/verification-envoyee')
+  redirect(`/signup/verification-envoyee?email=${encodeURIComponent(parsed.data.email)}`)
 }
 
 export async function signOut() {
