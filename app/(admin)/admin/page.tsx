@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ClipboardList, Package, Store, TrendingUp, Clock, CreditCard } from 'lucide-react'
+import { ClipboardList, Package, Store, TrendingUp, Clock, CreditCard, ShieldCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -32,6 +32,7 @@ export default async function AdminDashboardPage() {
     { count: travelAwaiting },
     { count: travelOpen },
     { count: withdrawalsAwaiting },
+    { count: verificationsAwaiting },
   ] = await Promise.all([
     supabase.from('orders').select('id', { count: 'exact', head: true }).gte('created_at', todayIso),
     supabase.from('orders').select('total').eq('status', 'delivered').gte('created_at', todayIso),
@@ -49,6 +50,7 @@ export default async function AdminDashboardPage() {
     supabase.from('travel_payments').select('id', { count: 'exact', head: true }).eq('status', 'awaiting_verification'),
     supabase.from('travel_requests').select('id', { count: 'exact', head: true }).eq('status', 'open'),
     supabase.from('withdrawal_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('identity_verifications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
   ])
 
   const caToday = (deliveredToday ?? []).reduce((sum, o) => sum + o.total, 0)
@@ -156,6 +158,19 @@ export default async function AdminDashboardPage() {
               <p className="text-sm text-slate-500">Demandes de retrait en attente de traitement</p>
             </div>
             {(withdrawalsAwaiting ?? 0) > 0 && <Badge tone="warning">{withdrawalsAwaiting}</Badge>}
+          </Card>
+        </Link>
+
+        <Link href="/admin/verifications">
+          <Card interactive className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <ShieldCheck className="h-5 w-5 flex-shrink-0 text-slate-500" aria-hidden />
+              <div>
+                <p className="font-medium text-slate-900">Vérifications d&apos;identité</p>
+                <p className="text-sm text-slate-500">Soumissions KYC en attente d&apos;examen</p>
+              </div>
+            </div>
+            {(verificationsAwaiting ?? 0) > 0 && <Badge tone="warning">{verificationsAwaiting}</Badge>}
           </Card>
         </Link>
       </div>

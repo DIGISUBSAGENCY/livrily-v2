@@ -32,6 +32,7 @@ const items: NavItem[] = [
   { href: '/admin', label: 'Tableau de bord' },
   { href: '/admin/commandes', label: 'Commandes' },
   { href: '/admin/utilisateurs', label: 'Utilisateurs' },
+  { href: '/admin/verifications', label: 'Vérifications' },
   {
     label: 'Commerces',
     links: [
