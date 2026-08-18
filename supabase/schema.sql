@@ -158,6 +158,9 @@ create table if not exists public.profiles (
   -- nécessaire) : juste un jeton d'appareil, déjà éditable par son
   -- propriétaire via la policy profiles_update_own_or_admin existante.
   onesignal_player_id text,
+  -- Tour guidé (4 étapes) affiché une seule fois à la première connexion
+  -- client (cf. app/(client)/jibli/page.tsx) — null = jamais vu.
+  onboarding_seen_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -169,6 +172,7 @@ alter table public.profiles add column if not exists wallet_balance numeric not 
 alter table public.profiles add column if not exists onesignal_player_id text;
 alter table public.profiles add column if not exists country text;
 alter table public.profiles add column if not exists profession text;
+alter table public.profiles add column if not exists onboarding_seen_at timestamptz;
 
 create index if not exists profiles_role_idx on public.profiles(role);
 

@@ -9,6 +9,7 @@ import { MyRequestsPreview } from '@/components/travel/MyRequestsPreview'
 import { MyProposalsPreview } from '@/components/travel/MyProposalsPreview'
 import { Button } from '@/components/ui/Button'
 import { IdentityBanner } from '@/components/account/IdentityBanner'
+import { OnboardingTour } from '@/components/onboarding/OnboardingTour'
 import { getIdentityStatus } from '@/lib/identity'
 import { pageMetadata } from '@/lib/seo'
 import type { TravelRequest, TravelProposal, TravelRequestStatus } from '@/types/database'
@@ -63,6 +64,7 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
   // page (marketplace publique ci-dessous, inchangée pour tout le monde,
   // y compris les visiteurs non connectés).
   let role: string | null = null
+  let showOnboarding = false
   let identityStatus: Awaited<ReturnType<typeof getIdentityStatus>> = 'unverified'
   let identityRejectionReason: string | null = null
   let myRequests: TravelRequest[] = []
@@ -73,10 +75,16 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
   let myProposalsRequestById = new Map<string, { item_description: string; status: TravelRequestStatus }>()
 
   if (user) {
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, onboarding_seen_at')
+      .eq('id', user.id)
+      .single()
     role = profile?.role ?? null
 
     if (role === 'client') {
+      showOnboarding = !profile?.onboarding_seen_at
+
       const [{ data: verification }, { data: allMyRequests }, { data: allMyProposals }] = await Promise.all([
         supabase.from('identity_verifications').select('status, rejection_reason').eq('profile_id', user.id).maybeSingle(),
         supabase.from('travel_requests').select('*').eq('client_id', user.id).order('created_at', { ascending: false }),
@@ -114,6 +122,8 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
+      {role === 'client' && <OnboardingTour shouldShow={showOnboarding} />}
+
       {role === 'client' && (
         <div className="mb-8 space-y-6">
           <IdentityBanner status={identityStatus} rejectionReason={identityRejectionReason} />

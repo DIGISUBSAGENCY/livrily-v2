@@ -55,6 +55,7 @@ export interface Database {
           referral_reward_granted: boolean
           wallet_balance: number
           onesignal_player_id: string | null
+          onboarding_seen_at: string | null
           created_at: string
           updated_at: string
         }
@@ -75,6 +76,7 @@ export interface Database {
           referral_reward_granted?: boolean
           wallet_balance?: number
           onesignal_player_id?: string | null
+          onboarding_seen_at?: string | null
         }
         Update: Partial<Database['public']['Tables']['profiles']['Insert']>
         Relationships: []
