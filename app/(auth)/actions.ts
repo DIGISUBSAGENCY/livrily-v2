@@ -88,6 +88,17 @@ export async function signUp(_prevState: AuthFormState, formData: FormData): Pro
   })
 
   if (error) {
+    // Même angle mort que resetPasswordForEmail avant son propre fix : la
+    // vraie erreur (ex: "Error sending confirmation email" côté SMTP, cf.
+    // diagnostic du bug signup) était jusqu'ici totalement avalée. Loguée
+    // en entier côté serveur, jamais exposée au client (fuite d'infos
+    // internes).
+    console.error('[signup] auth.signUp a échoué', {
+      message: error.message,
+      status: error.status,
+      code: error.code,
+      name: error.name,
+    })
     const message =
       error.code === 'user_already_exists'
         ? 'Un compte existe déjà avec cet email.'
