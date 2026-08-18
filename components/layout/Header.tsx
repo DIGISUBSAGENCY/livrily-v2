@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { signOut } from '@/app/(auth)/actions'
 import { Button } from '@/components/ui/Button'
 import { CartLink } from '@/components/cart/CartLink'
+import { MobileNav } from '@/components/layout/MobileNav'
 
 // Server Component : lit la session une fois par requête et affiche la nav
 // adaptée au rôle. La déconnexion passe par une Server Action (formulaire),
@@ -82,6 +83,13 @@ export async function Header() {
               </Link>
             </div>
           )}
+
+          <MobileNav
+            showJibli={showJibli}
+            showParrainage={role === 'client'}
+            isLoggedIn={!!user}
+            displayName={displayName}
+          />
         </div>
       </div>
     </header>
