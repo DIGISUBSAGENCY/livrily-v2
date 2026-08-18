@@ -79,7 +79,11 @@ export async function adjustUserWallet(userId: string, formData: FormData): Prom
 // pas un flux self-service) AVANT de toucher profiles, pour ne jamais
 // laisser les deux désynchronisés si l'appel Admin API échoue (ex: email
 // déjà utilisé par un autre compte).
-export async function updateUserProfile(userId: string, formData: FormData): Promise<ActionResult> {
+export async function updateUserProfile(
+  userId: string,
+  _prevState: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
   const parsed = adminUserEditSchema.safeParse({
     full_name: formData.get('full_name'),
     email: formData.get('email'),

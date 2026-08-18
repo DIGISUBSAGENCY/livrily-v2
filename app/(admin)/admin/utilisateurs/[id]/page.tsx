@@ -3,9 +3,12 @@ import { notFound } from 'next/navigation'
 import { Wallet, Package, Plane, Luggage, Receipt } from 'lucide-react'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { UserStatusToggle } from '@/components/admin/UserStatusToggle'
+import { UserProfileEditForm } from '@/components/admin/UserProfileEditForm'
+import { WalletAdjustmentForm } from '@/components/admin/WalletAdjustmentForm'
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge'
 import { TravelRequestStatusBadge } from '@/components/travel/TravelRequestStatusBadge'
 import { TravelProposalStatusBadge } from '@/components/travel/TravelProposalStatusBadge'
+import { WithdrawalStatusBadge } from '@/components/travel/WithdrawalStatusBadge'
 import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import { COUNTRIES } from '@/lib/constants/countries'
@@ -32,39 +35,51 @@ export default async function AdminUserDetailPage({ params }: UserDetailPageProp
     notFound()
   }
 
-  const [{ data: orders }, { data: travelRequests }, { data: proposals }, { data: walletCredits }, { data: withdrawals }] =
-    await Promise.all([
-      supabase
-        .from('orders')
-        .select('id, commerce_id, total, status, created_at')
-        .eq('client_id', id)
-        .order('created_at', { ascending: false })
-        .limit(HISTORY_LIMIT),
-      supabase
-        .from('travel_requests')
-        .select('id, item_description, status, created_at')
-        .eq('client_id', id)
-        .order('created_at', { ascending: false })
-        .limit(HISTORY_LIMIT),
-      supabase
-        .from('travel_proposals')
-        .select('id, request_id, item_price, delivery_fee, status, created_at')
-        .eq('voyageur_id', id)
-        .order('created_at', { ascending: false })
-        .limit(HISTORY_LIMIT),
-      supabase
-        .from('wallet_credits')
-        .select('id, amount, reason, created_at')
-        .eq('profile_id', id)
-        .order('created_at', { ascending: false })
-        .limit(HISTORY_LIMIT),
-      supabase
-        .from('withdrawal_requests')
-        .select('id, amount, status, requested_at')
-        .eq('voyageur_id', id)
-        .order('requested_at', { ascending: false })
-        .limit(HISTORY_LIMIT),
-    ])
+  const [
+    { data: orders },
+    { data: travelRequests },
+    { data: proposals },
+    { data: walletCredits },
+    { data: withdrawals },
+    { data: adjustments },
+  ] = await Promise.all([
+    supabase
+      .from('orders')
+      .select('id, commerce_id, total, status, created_at')
+      .eq('client_id', id)
+      .order('created_at', { ascending: false })
+      .limit(HISTORY_LIMIT),
+    supabase
+      .from('travel_requests')
+      .select('id, item_description, status, created_at')
+      .eq('client_id', id)
+      .order('created_at', { ascending: false })
+      .limit(HISTORY_LIMIT),
+    supabase
+      .from('travel_proposals')
+      .select('id, request_id, item_price, delivery_fee, status, created_at')
+      .eq('voyageur_id', id)
+      .order('created_at', { ascending: false })
+      .limit(HISTORY_LIMIT),
+    supabase
+      .from('wallet_credits')
+      .select('id, amount, reason, created_at')
+      .eq('profile_id', id)
+      .order('created_at', { ascending: false })
+      .limit(HISTORY_LIMIT),
+    supabase
+      .from('withdrawal_requests')
+      .select('id, amount, status, requested_at')
+      .eq('voyageur_id', id)
+      .order('requested_at', { ascending: false })
+      .limit(HISTORY_LIMIT),
+    supabase
+      .from('wallet_adjustments')
+      .select('id, amount, reason, created_by, created_at')
+      .eq('profile_id', id)
+      .order('created_at', { ascending: false })
+      .limit(HISTORY_LIMIT),
+  ])
 
   const commerceIds = Array.from(new Set((orders ?? []).map((o) => o.commerce_id)))
   const { data: commerces } = commerceIds.length
@@ -92,24 +107,43 @@ export default async function AdminUserDetailPage({ params }: UserDetailPageProp
 
   const countryLabel = COUNTRIES.find((c) => c.value === user.country)?.label ?? user.country ?? '—'
 
-  // Fusion crédits (+ parrainage) et retraits (- disponible) en un seul
-  // historique chronologique, chacun avec son propre badge de statut/signe.
-  const transactions = [
+  const adjusterIds = Array.from(new Set((adjustments ?? []).map((a) => a.created_by)))
+  const { data: adjusters } = adjusterIds.length
+    ? await supabase.from('profiles').select('id, full_name').in('id', adjusterIds)
+    : { data: [] as { id: string; full_name: string | null }[] }
+  const adjusterNameById = new Map((adjusters ?? []).map((a) => [a.id, a.full_name ?? 'Admin']))
+
+  // Deux historiques séparés, VOLONTAIREMENT non fusionnés : wallet_credits
+  // et wallet_adjustments modifient tous les deux profiles.wallet_balance
+  // (le solde parrainage affiché dans la carte ci-dessous), alors que
+  // withdrawal_requests n'y touche jamais — travel_voyageur_balance() (gains
+  // crowd-shipping, /jibli/mes-gains) est recalculée à la volée depuis
+  // travel_payments/withdrawal_requests, indépendamment de wallet_balance.
+  // Les mélanger dans un même "Historique du solde" laisserait croire à
+  // tort qu'ils affectent le même solde.
+  const walletHistory = [
     ...(walletCredits ?? []).map((w) => ({
       id: `credit-${w.id}`,
       date: w.created_at,
       label: walletReasonLabels[w.reason] ?? w.reason,
       amount: w.amount,
-      kind: 'credit' as const,
     })),
-    ...(withdrawals ?? []).map((w) => ({
-      id: `withdrawal-${w.id}`,
-      date: w.requested_at,
-      label: `Retrait — ${w.status === 'paid' ? 'payé' : w.status === 'rejected' ? 'rejeté' : 'en attente'}`,
-      amount: -w.amount,
-      kind: 'withdrawal' as const,
+    ...(adjustments ?? []).map((a) => ({
+      id: `adjustment-${a.id}`,
+      date: a.created_at,
+      label: `Ajustement admin (${adjusterNameById.get(a.created_by) ?? 'Admin'}) — ${a.reason}`,
+      amount: a.amount,
     })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  const withdrawalHistory = (withdrawals ?? [])
+    .map((w) => ({
+      id: w.id,
+      date: w.requested_at,
+      amount: w.amount,
+      status: w.status,
+    }))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
@@ -123,47 +157,23 @@ export default async function AdminUserDetailPage({ params }: UserDetailPageProp
       </div>
 
       <Card className="mt-6">
-        <h2 className="mb-3 font-semibold text-slate-900">Profil</h2>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-          <div>
-            <dt className="text-slate-500">Email</dt>
-            <dd className="text-slate-900">{user.email ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Téléphone</dt>
-            <dd className="text-slate-900">{user.phone ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Pays</dt>
-            <dd className="text-slate-900">{countryLabel}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Profession</dt>
-            <dd className="text-slate-900">{user.profession ?? '—'}</dd>
-          </div>
-          <div className="col-span-2">
-            <dt className="text-slate-500">Adresse</dt>
-            <dd className="text-slate-900">{user.address ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Inscription</dt>
-            <dd className="text-slate-900">{new Date(user.created_at).toLocaleDateString('fr-TN')}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Dernière connexion</dt>
-            <dd className="text-slate-900">
-              {lastSignInAt ? new Date(lastSignInAt).toLocaleString('fr-TN') : '—'}
-            </dd>
-          </div>
-        </dl>
+        <UserProfileEditForm user={user} countryLabel={countryLabel} />
+        <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-400">
+          Dernière connexion : {lastSignInAt ? new Date(lastSignInAt).toLocaleString('fr-TN') : '—'}
+        </p>
       </Card>
 
-      <Card className="mt-6 flex items-center gap-3">
-        <Wallet className="h-8 w-8 text-brand-600" aria-hidden />
-        <div>
-          <p className="text-2xl font-bold tracking-tight text-brand-700">{formatTND(user.wallet_balance)}</p>
-          <p className="text-sm text-slate-500">Solde disponible (portefeuille)</p>
+      <Card className="mt-6 space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Wallet className="h-8 w-8 text-brand-600" aria-hidden />
+            <div>
+              <p className="text-2xl font-bold tracking-tight text-brand-700">{formatTND(user.wallet_balance)}</p>
+              <p className="text-sm text-slate-500">Solde parrainage (wallet_balance)</p>
+            </div>
+          </div>
         </div>
+        <WalletAdjustmentForm userId={user.id} />
       </Card>
 
       <section className="mt-6">
@@ -238,12 +248,12 @@ export default async function AdminUserDetailPage({ params }: UserDetailPageProp
       <section className="mt-6">
         <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-900">
           <Receipt className="h-5 w-5 text-slate-500" aria-hidden />
-          Historique du solde ({transactions.length})
+          Historique solde parrainage ({walletHistory.length})
         </h2>
-        {transactions.length === 0 && <p className="text-sm text-slate-500">Aucune transaction.</p>}
-        {transactions.length > 0 && (
+        {walletHistory.length === 0 && <p className="text-sm text-slate-500">Aucune transaction.</p>}
+        {walletHistory.length > 0 && (
           <Card className="p-3">
-            {transactions.map((tx) => (
+            {walletHistory.map((tx) => (
               <div key={tx.id} className="flex items-center justify-between gap-3 border-b border-slate-100 px-1 py-2 text-sm last:border-0">
                 <div>
                   <p className="text-slate-700">{tx.label}</p>
@@ -253,6 +263,31 @@ export default async function AdminUserDetailPage({ params }: UserDetailPageProp
                   {tx.amount >= 0 ? '+' : ''}
                   {formatTND(tx.amount)}
                 </span>
+              </div>
+            ))}
+          </Card>
+        )}
+      </section>
+
+      <section className="mt-6">
+        <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-900">
+          <Wallet className="h-5 w-5 text-slate-500" aria-hidden />
+          Retraits crowd-shipping ({withdrawalHistory.length})
+        </h2>
+        <p className="mb-3 text-xs text-slate-400">
+          N&apos;affecte pas le solde parrainage ci-dessus — calculé séparément depuis les paiements
+          crowd-shipping libérés (travel_voyageur_balance).
+        </p>
+        {withdrawalHistory.length === 0 && <p className="text-sm text-slate-500">Aucun retrait.</p>}
+        {withdrawalHistory.length > 0 && (
+          <Card className="p-3">
+            {withdrawalHistory.map((w) => (
+              <div key={w.id} className="flex items-center justify-between gap-3 border-b border-slate-100 px-1 py-2 text-sm last:border-0">
+                <p className="text-xs text-slate-400">{new Date(w.date).toLocaleDateString('fr-TN')}</p>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-slate-900">{formatTND(w.amount)}</span>
+                  <WithdrawalStatusBadge status={w.status} />
+                </div>
               </div>
             ))}
           </Card>
