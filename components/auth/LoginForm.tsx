@@ -43,14 +43,30 @@ export function LoginForm() {
         <SubmitButton className="w-full" pendingLabel="Connexion…">
           Se connecter
         </SubmitButton>
-
-        <p className="text-center text-sm text-slate-600">
-          Pas encore de compte ?{' '}
-          <Link href="/signup" className="font-medium text-brand-600 transition-colors hover:text-brand-700 hover:underline">
-            Créer un compte
-          </Link>
-        </p>
       </form>
+
+      {/* Volontairement HORS du <form> ci-dessus (form action={formAction}
+          lié à un Server Action) — même précaution que AdminLoginForm.tsx :
+          un lien de navigation n'a rien à faire imbriqué dans ce formulaire.
+          prefetch={false} pour la même raison qu'admin : éviter qu'un
+          prefetch fait avant qu'une éventuelle redirection middleware ne
+          soit corrigée ne reste caché dans le cache du routeur. */}
+      <p className="text-center text-sm">
+        <Link
+          href="/forgot-password"
+          prefetch={false}
+          className="font-medium text-brand-600 transition-colors hover:text-brand-700 hover:underline"
+        >
+          Mot de passe oublié ?
+        </Link>
+      </p>
+
+      <p className="text-center text-sm text-slate-600">
+        Pas encore de compte ?{' '}
+        <Link href="/signup" className="font-medium text-brand-600 transition-colors hover:text-brand-700 hover:underline">
+          Créer un compte
+        </Link>
+      </p>
     </div>
   )
 }

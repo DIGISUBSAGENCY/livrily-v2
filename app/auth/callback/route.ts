@@ -80,13 +80,14 @@ export async function GET(request: NextRequest) {
       return logAndBuildErrorRedirect(origin, error?.message ?? 'echange_session_echoue')
     }
 
-    // Flux de récupération de mot de passe (ex: /admin/forgot-password) : on
-    // redirige directement vers `next` sans passer par la logique de
-    // complétion de profil / rôle ci-dessous — la session est bien établie
-    // (les cookies sont posés plus bas comme pour tout autre échange), mais
-    // l'utilisateur doit d'abord définir un nouveau mot de passe avant
-    // d'atterrir sur son espace habituel.
-    if (next?.startsWith('/admin/reset-password')) {
+    // Flux de récupération de mot de passe (/forgot-password côté client,
+    // /admin/forgot-password côté admin) : on redirige directement vers
+    // `next` sans passer par la logique de complétion de profil / rôle
+    // ci-dessous — la session est bien établie (les cookies sont posés plus
+    // bas comme pour tout autre échange), mais l'utilisateur doit d'abord
+    // définir un nouveau mot de passe avant d'atterrir sur son espace
+    // habituel.
+    if (next === '/reset-password' || next?.startsWith('/admin/reset-password')) {
       const response = NextResponse.redirect(`${origin}${next}`)
       cookiesToApply.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
       return response

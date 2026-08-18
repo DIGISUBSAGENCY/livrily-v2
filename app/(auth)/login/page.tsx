@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
 
 interface LoginPageProps {
-  searchParams: Promise<{ error?: string }>
+  searchParams: Promise<{ error?: string; reset?: string }>
 }
 
 export const metadata: Metadata = pageMetadata({
@@ -16,9 +16,10 @@ export const metadata: Metadata = pageMetadata({
 // `error` vient d'une redirection depuis /auth/callback (confirmation email
 // ou OAuth Google en échec) — affiché tel quel pour l'instant : ce n'est pas
 // une donnée utilisateur sensible, juste un code/message d'erreur GoTrue,
-// utile pour diagnostiquer sans avoir à lire les logs serveur.
+// utile pour diagnostiquer sans avoir à lire les logs serveur. `reset` vient
+// de /reset-password après un changement de mot de passe réussi.
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const { error } = await searchParams
+  const { error, reset } = await searchParams
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-gradient-to-b from-brand-50/50 to-white px-4 py-12">
@@ -30,6 +31,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         {error && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             La connexion a échoué : {decodeURIComponent(error)}
+          </div>
+        )}
+        {reset === 'success' && (
+          <div className="mb-4 rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm text-brand-700">
+            Mot de passe mis à jour. Connecte-toi avec ton nouveau mot de passe.
           </div>
         )}
         <Card>
