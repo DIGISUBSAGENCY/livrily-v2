@@ -58,6 +58,15 @@ export async function updateProfile(
     .eq('id', user.id)
 
   if (updateError) {
+    // Erreur Postgres/PostgREST réelle (colonne manquante, contrainte
+    // violée...) auparavant totalement avalée — logué côté serveur pour
+    // diagnostiquer sans exposer les détails internes au client.
+    console.error('[profil/completer] update profiles a échoué', {
+      message: updateError.message,
+      code: updateError.code,
+      details: updateError.details,
+      hint: updateError.hint,
+    })
     return { error: "Impossible d'enregistrer ton profil, réessaie." }
   }
 
