@@ -33,7 +33,7 @@ export default async function AdminResetPasswordPage({ searchParams }: AdminRese
           </p>
           <h1 className="mt-3 text-2xl font-bold tracking-tight text-white">Nouveau mot de passe</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Entre le code à 6 chiffres reçu par email et choisis un nouveau mot de passe.
+            Entre le code à 8 chiffres reçu par email et choisis un nouveau mot de passe.
           </p>
         </div>
         <Card>

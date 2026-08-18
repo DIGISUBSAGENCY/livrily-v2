@@ -8,7 +8,7 @@ export interface ResetPasswordFormState {
   error: string | null
 }
 
-// Vérifie le code OTP à 6 chiffres reçu par email (verifyOtp établit lui-
+// Vérifie le code OTP à 8 chiffres reçu par email (verifyOtp établit lui-
 // même la session — aucun passage par /auth/callback nécessaire, contrai-
 // rement à l'ancien flux par lien), puis définit le nouveau mot de passe
 // dans la foulée. Un Server Action peut écrire les cookies de session

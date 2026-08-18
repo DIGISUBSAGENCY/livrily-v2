@@ -21,21 +21,27 @@ export const forgotPasswordSchema = z.object({
   email: z.string().trim().toLowerCase().email('Adresse email invalide.'),
 })
 
-// Vérification par CODE (OTP à 6 chiffres) plutôt que par lien cliquable —
-// un lien envoyé par email est systématiquement récupéré et pré-consommé
-// par le click-tracking automatique de la chaîne d'envoi (Resend → AWS SES,
+// Vérification par CODE (OTP) plutôt que par lien cliquable — un lien
+// envoyé par email est systématiquement récupéré et pré-consommé par le
+// click-tracking automatique de la chaîne d'envoi (Resend → AWS SES,
 // domaine awstrack.me), rendant le token à usage unique déjà expiré au
 // moment du vrai clic humain. Un code en texte brut dans l'email n'a rien
 // qu'un service de tracking puisse pré-charger : immunisé structurellement,
 // pas juste "moins probable de poser problème". email répété ici (requis
 // par supabase.auth.verifyOtp({ email, token, type: 'recovery' })).
+//
+// 8 chiffres, pas 6 : la longueur du OTP email GoTrue est configurable côté
+// Supabase (GOTRUE_MAILER_OTP_LENGTH, Dashboard → Authentication → Email)
+// et dépend de quand/comment le projet a été provisionné — ce projet-ci en
+// génère 8, vérifié empiriquement sur un email reçu (pas une valeur par
+// défaut supposée à tort à 6, l'erreur initiale ici).
 export const resetPasswordSchema = z
   .object({
     email: z.string().trim().toLowerCase().email('Adresse email invalide.'),
     token: z
       .string()
       .trim()
-      .regex(/^\d{6}$/, 'Le code doit contenir exactement 6 chiffres.'),
+      .regex(/^\d{8}$/, 'Le code doit contenir exactement 8 chiffres.'),
     password: z.string().min(6, 'Le mot de passe doit contenir au moins 6 caractères.'),
     confirmPassword: z.string(),
   })

@@ -13,7 +13,7 @@ interface ResetPasswordPageProps {
   searchParams: Promise<{ email?: string }>
 }
 
-// Vérification par CODE (6 chiffres reçu par email), pas par lien cliquable
+// Vérification par CODE (8 chiffres reçu par email), pas par lien cliquable
 // — cf. lib/validations/auth.ts::resetPasswordSchema pour le contexte
 // complet (click-tracking Resend/AWS SES qui pré-consommait le lien). Cette
 // page n'est donc plus atteinte via /auth/callback : elle est directement
@@ -28,7 +28,7 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
         <div className="mb-6 text-center">
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Nouveau mot de passe</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Entre le code à 6 chiffres reçu par email et choisis un nouveau mot de passe.
+            Entre le code à 8 chiffres reçu par email et choisis un nouveau mot de passe.
           </p>
         </div>
         <Card>

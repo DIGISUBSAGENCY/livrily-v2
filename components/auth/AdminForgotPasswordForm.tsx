@@ -17,7 +17,7 @@ export function AdminForgotPasswordForm() {
     return (
       <div className="text-center">
         <p className="text-sm text-slate-700">
-          Un email vient de t&apos;être envoyé avec un code à 6 chiffres. Entre-le sur la page
+          Un email vient de t&apos;être envoyé avec un code à 8 chiffres. Entre-le sur la page
           suivante avec ton nouveau mot de passe.
         </p>
         <Link

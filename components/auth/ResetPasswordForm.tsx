@@ -34,9 +34,9 @@ export function ResetPasswordForm({ defaultEmail = '' }: { defaultEmail?: string
           name="token"
           type="text"
           inputMode="numeric"
-          pattern="\d{6}"
-          maxLength={6}
-          placeholder="123456"
+          pattern="\d{8}"
+          maxLength={8}
+          placeholder="12345678"
           autoComplete="one-time-code"
           required
           hasError={!!state.error}

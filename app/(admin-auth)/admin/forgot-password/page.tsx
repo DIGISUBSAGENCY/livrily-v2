@@ -24,7 +24,7 @@ export default function AdminForgotPasswordPage() {
           </p>
           <h1 className="mt-3 text-2xl font-bold tracking-tight text-white">Mot de passe oublié</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Entre ton email, on t&apos;envoie un code à 6 chiffres pour choisir un nouveau mot de
+            Entre ton email, on t&apos;envoie un code à 8 chiffres pour choisir un nouveau mot de
             passe.
           </p>
         </div>
