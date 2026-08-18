@@ -6,13 +6,16 @@ import { forgotPasswordSchema } from '@/lib/validations/auth'
 export interface ForgotPasswordFormState {
   error: string | null
   success: boolean
+  email?: string
 }
 
-// Même pattern que app/(admin-auth)/admin/forgot-password/actions.ts,
-// pour le compte client cette fois (redirectTo → /reset-password au lieu
-// de /admin/reset-password). Toujours le même message de succès, que
-// l'email corresponde ou non à un compte existant — resetPasswordForEmail()
-// ne renvoie de toute façon pas d'erreur dans ce cas (anti-énumération).
+// Toujours le même message de succès, que l'email corresponde ou non à un
+// compte existant — resetPasswordForEmail() ne renvoie de toute façon pas
+// d'erreur dans ce cas (anti-énumération). redirectTo est conservé par
+// défense en profondeur (si jamais le template email garde un lien en plus
+// du code — cf. resetPasswordSchema) mais n'est plus le chemin principal :
+// /reset-password se vérifie désormais par code OTP, entré manuellement,
+// immunisé contre le click-tracking qui pré-consommait le lien.
 export async function requestPasswordReset(
   _prevState: ForgotPasswordFormState,
   formData: FormData
@@ -43,5 +46,5 @@ export async function requestPasswordReset(
     return { error: "Impossible d'envoyer l'email pour le moment, réessaie.", success: false }
   }
 
-  return { error: null, success: true }
+  return { error: null, success: true, email: parsed.data.email }
 }
