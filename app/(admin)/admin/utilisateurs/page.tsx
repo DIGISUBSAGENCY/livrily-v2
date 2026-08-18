@@ -1,8 +1,10 @@
-import { Users } from 'lucide-react'
+import Link from 'next/link'
+import { Users, Plus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { UserRow } from '@/components/admin/UserRow'
 import { UserSearchFilters } from '@/components/admin/UserSearchFilters'
 import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 
 interface AdminUsersPageProps {
   searchParams: Promise<{ q?: string; status?: string; type?: string; sort?: string }>
@@ -56,10 +58,18 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
-      <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
-        <Users className="h-6 w-6 text-brand-600" aria-hidden />
-        Utilisateurs
-      </h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+          <Users className="h-6 w-6 text-brand-600" aria-hidden />
+          Utilisateurs
+        </h1>
+        <Link href="/admin/utilisateurs/nouveau">
+          <Button size="sm">
+            <Plus className="h-4 w-4" aria-hidden />
+            Créer un utilisateur
+          </Button>
+        </Link>
+      </div>
       <p className="mt-1 text-sm text-slate-500">
         Comptes clients (inclut les voyageurs — même rôle, pas de distinction en base).
       </p>

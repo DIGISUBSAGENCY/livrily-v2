@@ -15,6 +15,7 @@ import { COUNTRIES } from '@/lib/constants/countries'
 
 interface UserDetailPageProps {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ warning?: string }>
 }
 
 const walletReasonLabels: Record<string, string> = {
@@ -25,8 +26,9 @@ const walletReasonLabels: Record<string, string> = {
 
 const HISTORY_LIMIT = 20
 
-export default async function AdminUserDetailPage({ params }: UserDetailPageProps) {
+export default async function AdminUserDetailPage({ params, searchParams }: UserDetailPageProps) {
   const { id } = await params
+  const { warning } = await searchParams
   const supabase = await createClient()
 
   const { data: user, error } = await supabase.from('profiles').select('*').eq('id', id).eq('role', 'client').single()
@@ -155,6 +157,13 @@ export default async function AdminUserDetailPage({ params }: UserDetailPageProp
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">{user.full_name ?? 'Sans nom'}</h1>
         <UserStatusToggle userId={user.id} initialIsActive={user.is_active} />
       </div>
+
+      {warning === 'profil_incomplet' && (
+        <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Compte créé, mais téléphone/adresse/pays n&apos;ont pas pu être enregistrés — complète-les
+          ci-dessous.
+        </p>
+      )}
 
       <Card className="mt-6">
         <UserProfileEditForm user={user} countryLabel={countryLabel} />
