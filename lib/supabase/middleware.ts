@@ -39,16 +39,19 @@ export async function updateSession(request: NextRequest) {
   // liste des commerces) puisque "commerces" contient "commerce" comme
   // sous-chaîne — d'où la vérification de frontière de segment ci-dessous.
   const isCommerceRoute = pathname === '/commerce' || pathname.startsWith('/commerce/')
-  // /admin/login et /admin/forgot-password sont exclues du garde-fou
-  // ci-dessous : elles vivent dans leur propre groupe de routes
-  // (app/(admin-auth)/admin/...), sans passer par le dashboard admin, et
-  // doivent justement rester accessibles à un visiteur NON connecté (c'est
-  // tout le but de "mot de passe oublié") — sans cette exception, le préfixe
-  // /admin/ les matcherait quand même et le garde-fou "!user" ci-dessous les
-  // renverrait en boucle vers /admin/login. /admin/reset-password reste,
-  // elle, volontairement soumise au garde-fou : elle exige une vraie session
-  // de récupération authentifiée (cf. son actions.ts).
-  const isPublicAdminAuthRoute = pathname === '/admin/login' || pathname === '/admin/forgot-password'
+  // /admin/login, /admin/forgot-password et /admin/reset-password sont
+  // exclues du garde-fou ci-dessous : elles vivent dans leur propre groupe
+  // de routes (app/(admin-auth)/admin/...), sans passer par le dashboard
+  // admin, et doivent rester accessibles à un visiteur NON connecté. C'était
+  // déjà le cas pour login/forgot-password ; /admin/reset-password l'a
+  // rejoint depuis le passage à la vérification par code OTP (au lieu d'un
+  // lien cliquable, vulnérable au click-tracking automatique de la chaîne
+  // d'envoi) — l'admin n'a plus de session de récupération pré-établie en
+  // arrivant sur cette page (aucun /auth/callback ne s'exécute avant), la
+  // session n'existe qu'une fois le code soumis via verifyOtp() dans son
+  // Server Action. La exiger ici bloquerait l'accès à la page elle-même.
+  const isPublicAdminAuthRoute =
+    pathname === '/admin/login' || pathname === '/admin/forgot-password' || pathname === '/admin/reset-password'
   const isAdminRoute = !isPublicAdminAuthRoute && (pathname === '/admin' || pathname.startsWith('/admin/'))
   const loginPath = isAdminRoute ? '/admin/login' : '/login'
 
