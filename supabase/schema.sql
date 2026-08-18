@@ -2411,6 +2411,73 @@ where p.role = 'client'
 group by p.id;
 
 -- ============================================================================
+-- Table: wallet_adjustments
+-- Ajustements manuels de wallet_balance par un admin, depuis
+-- /admin/utilisateurs/[id] — table dédiée plutôt que de réutiliser
+-- wallet_credits (dont `reason` est contraint par un check enum spécifique
+-- au parrainage : referral_referrer/referral_referred/checkout_redemption,
+-- cf. plus haut). Mélanger les deux aurait forcé soit à assouplir cette
+-- contrainte (risque pour le système de parrainage), soit à mentir sur la
+-- raison — une table séparée est plus propre.
+-- ============================================================================
+create table if not exists public.wallet_adjustments (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles(id),
+  amount numeric(10,3) not null check (amount <> 0),
+  reason text not null check (length(trim(reason)) > 0),
+  created_by uuid not null references public.profiles(id),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists wallet_adjustments_profile_idx on public.wallet_adjustments(profile_id);
+
+alter table public.wallet_adjustments enable row level security;
+
+drop policy if exists "wallet_adjustments_select_own_or_admin" on public.wallet_adjustments;
+create policy "wallet_adjustments_select_own_or_admin"
+  on public.wallet_adjustments for select
+  using (profile_id = auth.uid() or public.is_admin());
+
+-- Pas de policy INSERT côté client : passe exclusivement par
+-- adjust_wallet_balance() (SECURITY DEFINER, vérifie is_admin() elle-même)
+-- pour que l'écriture dans wallet_adjustments et la mise à jour de
+-- wallet_balance restent atomiques (même transaction).
+
+-- Ajuste wallet_balance ET trace l'ajustement dans wallet_adjustments en une
+-- seule transaction (SECURITY DEFINER = tout ou rien). is_admin() vérifiée
+-- explicitement ici (ne pas se reposer uniquement sur grant execute, qui
+-- n'empêche pas un compte client authentifié d'appeler la fonction).
+create or replace function public.adjust_wallet_balance(
+  p_profile_id uuid,
+  p_amount numeric,
+  p_reason text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Seul un administrateur peut ajuster un solde.';
+  end if;
+  if p_amount = 0 then
+    raise exception 'Le montant de l''ajustement ne peut pas être nul.';
+  end if;
+  if p_reason is null or length(trim(p_reason)) = 0 then
+    raise exception 'Une raison est requise pour un ajustement de solde.';
+  end if;
+
+  update public.profiles set wallet_balance = wallet_balance + p_amount where id = p_profile_id;
+
+  insert into public.wallet_adjustments (profile_id, amount, reason, created_by)
+  values (p_profile_id, p_amount, p_reason, auth.uid());
+end;
+$$;
+
+grant execute on function public.adjust_wallet_balance(uuid, numeric, text) to authenticated;
+
+-- ============================================================================
 -- Fin du schéma Phase 0/1/2/3 + Crowd-shipping.
 --
 -- À faire manuellement dans le dashboard Supabase (non scriptable en SQL) :

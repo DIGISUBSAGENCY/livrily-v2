@@ -549,6 +549,26 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['withdrawal_requests']['Insert']>
         Relationships: []
       }
+      wallet_adjustments: {
+        Row: {
+          id: string
+          profile_id: string
+          amount: number
+          reason: string
+          created_by: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          profile_id: string
+          amount: number
+          reason: string
+          created_by: string
+          created_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['wallet_adjustments']['Insert']>
+        Relationships: []
+      }
     }
     Views: {
       admin_client_stats: {
@@ -561,6 +581,10 @@ export interface Database {
       }
     }
     Functions: {
+      adjust_wallet_balance: {
+        Args: { p_profile_id: string; p_amount: number; p_reason: string }
+        Returns: undefined
+      }
       accept_travel_proposal: {
         Args: {
           p_proposal_id: string
@@ -607,6 +631,7 @@ export type Rating = Database['public']['Tables']['ratings']['Row']
 export type BankTransferInfo = Database['public']['Tables']['bank_transfer_info']['Row']
 export type PlatformSettings = Database['public']['Tables']['platform_settings']['Row']
 export type AdminClientStats = Database['public']['Views']['admin_client_stats']['Row']
+export type WalletAdjustment = Database['public']['Tables']['wallet_adjustments']['Row']
 export type TravelRequest = Database['public']['Tables']['travel_requests']['Row']
 export type TravelProposal = Database['public']['Tables']['travel_proposals']['Row']
 export type TravelProposalOffer = Database['public']['Tables']['travel_proposal_offers']['Row']
