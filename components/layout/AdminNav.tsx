@@ -76,7 +76,14 @@ export function AdminNav() {
 
   return (
     <nav className="relative border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-4xl gap-1 overflow-x-auto px-4">
+      {/* PAS de overflow-x-auto ici (contrairement à NavTabs) : sur cet axe,
+          le CSS force overflow-y à passer de "visible" à "auto" dès que
+          overflow-x n'est pas "visible" — ça rognait les menus déroulants
+          absolus qui dépassent sous la barre (régression constatée après
+          coup : les dropdowns "s'ouvraient" mais restaient invisibles/
+          incliquables). 6 entrées de premier niveau tiennent sans scroll
+          horizontal, contrairement à l'ancienne liste à plat de 10 liens. */}
+      <div className="mx-auto flex max-w-4xl flex-wrap gap-1 px-4">
         {items.map((item) => {
           if (!isGroup(item)) {
             return (
