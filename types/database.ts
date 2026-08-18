@@ -32,6 +32,8 @@ export type TravelPaymentStatus = 'awaiting_verification' | 'escrowed' | 'releas
 
 export type WithdrawalStatus = 'pending' | 'paid' | 'rejected'
 
+export type IdentityVerificationStatus = 'pending' | 'approved' | 'rejected'
+
 export interface Database {
   public: {
     Tables: {
@@ -569,6 +571,32 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['wallet_adjustments']['Insert']>
         Relationships: []
       }
+      identity_verifications: {
+        Row: {
+          id: string
+          profile_id: string
+          id_document_url: string
+          selfie_url: string
+          status: IdentityVerificationStatus
+          rejection_reason: string | null
+          reviewed_by: string | null
+          reviewed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          profile_id: string
+          id_document_url: string
+          selfie_url: string
+          status?: IdentityVerificationStatus
+          rejection_reason?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['identity_verifications']['Insert']>
+        Relationships: []
+      }
     }
     Views: {
       admin_client_stats: {
@@ -583,6 +611,10 @@ export interface Database {
     Functions: {
       adjust_wallet_balance: {
         Args: { p_profile_id: string; p_amount: number; p_reason: string }
+        Returns: undefined
+      }
+      submit_identity_verification: {
+        Args: { p_id_document_url: string; p_selfie_url: string }
         Returns: undefined
       }
       accept_travel_proposal: {
@@ -632,6 +664,7 @@ export type BankTransferInfo = Database['public']['Tables']['bank_transfer_info'
 export type PlatformSettings = Database['public']['Tables']['platform_settings']['Row']
 export type AdminClientStats = Database['public']['Views']['admin_client_stats']['Row']
 export type WalletAdjustment = Database['public']['Tables']['wallet_adjustments']['Row']
+export type IdentityVerification = Database['public']['Tables']['identity_verifications']['Row']
 export type TravelRequest = Database['public']['Tables']['travel_requests']['Row']
 export type TravelProposal = Database['public']['Tables']['travel_proposals']['Row']
 export type TravelProposalOffer = Database['public']['Tables']['travel_proposal_offers']['Row']

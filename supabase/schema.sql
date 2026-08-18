@@ -2478,6 +2478,123 @@ $$;
 grant execute on function public.adjust_wallet_balance(uuid, numeric, text) to authenticated;
 
 -- ============================================================================
+-- Table: identity_verifications
+-- Vérification d'identité (KYC) client — v1 simple : Storage + une table,
+-- pas de prestataire tiers. Une ligne par profil (profile_id unique) : une
+-- resoumission ÉCRASE la précédente plutôt que d'empiler un historique —
+-- suffisant pour v1, pas de besoin de conserver les tentatives rejetées.
+-- ============================================================================
+create type public.identity_verification_status as enum ('pending', 'approved', 'rejected');
+
+create table public.identity_verifications (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null unique references public.profiles(id),
+  id_document_url text not null,
+  selfie_url text not null,
+  status public.identity_verification_status not null default 'pending',
+  rejection_reason text,
+  reviewed_by uuid references public.profiles(id),
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index identity_verifications_status_idx on public.identity_verifications(status);
+
+drop trigger if exists trg_identity_verifications_updated_at on public.identity_verifications;
+create trigger trg_identity_verifications_updated_at
+  before update on public.identity_verifications
+  for each row execute function public.set_updated_at();
+
+alter table public.identity_verifications enable row level security;
+
+-- Pas de policy insert/update pour un compte client : toute soumission ou
+-- resoumission passe exclusivement par submit_identity_verification()
+-- ci-dessous (SECURITY DEFINER) — impossible pour un client de s'auto-
+-- approuver en écrivant `status` directement via une policy update trop
+-- permissive.
+drop policy if exists "identity_verifications_select_own_or_admin" on public.identity_verifications;
+create policy "identity_verifications_select_own_or_admin"
+  on public.identity_verifications for select
+  using (profile_id = auth.uid() or public.is_admin());
+
+drop policy if exists "identity_verifications_update_admin_only" on public.identity_verifications;
+create policy "identity_verifications_update_admin_only"
+  on public.identity_verifications for update
+  using (public.is_admin());
+
+-- Upsert la vérification du compte appelant : toujours remise à 'pending',
+-- champs de revue vidés (une resoumission après rejet doit repasser par un
+-- examen complet, pas garder l'ancien statut/raison affichés par erreur).
+create or replace function public.submit_identity_verification(
+  p_id_document_url text,
+  p_selfie_url text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_client() then
+    raise exception 'Seul un compte client peut soumettre une vérification d''identité.';
+  end if;
+
+  insert into public.identity_verifications (profile_id, id_document_url, selfie_url, status)
+  values (auth.uid(), p_id_document_url, p_selfie_url, 'pending')
+  on conflict (profile_id) do update set
+    id_document_url = excluded.id_document_url,
+    selfie_url = excluded.selfie_url,
+    status = 'pending',
+    rejection_reason = null,
+    reviewed_by = null,
+    reviewed_at = null;
+end;
+$$;
+
+grant execute on function public.submit_identity_verification(text, text) to authenticated;
+
+-- ============================================================================
+-- Storage : bucket identity-documents (CIN + selfie pour le KYC)
+-- ============================================================================
+-- Privé, comme payment-proofs. Même convention de chemin ({user_id}/...) et
+-- mêmes policies insert/select — un compte ne voit que son propre dossier,
+-- un admin voit tout (pour la revue depuis /admin/verifications).
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('identity-documents', 'identity-documents', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do nothing;
+
+drop policy if exists "identity_documents_insert_own_folder" on storage.objects;
+create policy "identity_documents_insert_own_folder"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'identity-documents'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- upsert:true (resoumission) nécessite aussi une policy update, contraire-
+-- ment à payment-proofs qui n'en a pas eue besoin jusqu'ici — ajoutée ici
+-- explicitement pour éviter la même ambiguïté.
+drop policy if exists "identity_documents_update_own_folder" on storage.objects;
+create policy "identity_documents_update_own_folder"
+  on storage.objects for update
+  using (
+    bucket_id = 'identity-documents'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "identity_documents_select_own_or_admin" on storage.objects;
+create policy "identity_documents_select_own_or_admin"
+  on storage.objects for select
+  using (
+    bucket_id = 'identity-documents'
+    and (
+      (storage.foldername(name))[1] = auth.uid()::text
+      or public.is_admin()
+    )
+  );
+
+-- ============================================================================
 -- Fin du schéma Phase 0/1/2/3 + Crowd-shipping.
 --
 -- À faire manuellement dans le dashboard Supabase (non scriptable en SQL) :
