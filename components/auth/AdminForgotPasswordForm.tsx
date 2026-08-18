@@ -17,14 +17,14 @@ export function AdminForgotPasswordForm() {
     return (
       <div className="text-center">
         <p className="text-sm text-slate-700">
-          Un email de réinitialisation a été envoyé. Vérifie ta boîte mail et clique sur le lien pour
-          choisir un nouveau mot de passe.
+          Un email vient de t&apos;être envoyé avec un code à 6 chiffres. Entre-le sur la page
+          suivante avec ton nouveau mot de passe.
         </p>
         <Link
-          href="/admin/login"
+          href={`/admin/reset-password${state.email ? `?email=${encodeURIComponent(state.email)}` : ''}`}
           className="mt-4 inline-block text-sm font-medium text-brand-600 transition-colors hover:text-brand-700 hover:underline"
         >
-          Retour à la connexion
+          J&apos;ai mon code →
         </Link>
       </div>
     )
@@ -40,7 +40,7 @@ export function AdminForgotPasswordForm() {
       {state.error && <ErrorText>{state.error}</ErrorText>}
 
       <SubmitButton className="w-full" pendingLabel="Envoi…">
-        Envoyer le lien de réinitialisation
+        Envoyer le code de réinitialisation
       </SubmitButton>
 
       <p className="text-center text-sm text-slate-600">

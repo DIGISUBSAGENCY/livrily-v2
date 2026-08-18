@@ -9,11 +9,40 @@ import { SubmitButton } from '@/components/ui/SubmitButton'
 
 const initialState: ResetPasswordFormState = { error: null }
 
-export function AdminResetPasswordForm() {
+export function AdminResetPasswordForm({ defaultEmail = '' }: { defaultEmail?: string }) {
   const [state, formAction] = useFormState(adminResetPassword, initialState)
 
   return (
     <form action={formAction} className="space-y-4">
+      <div>
+        <Label htmlFor="email">Email</Label>
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          defaultValue={defaultEmail}
+          required
+          hasError={!!state.error}
+        />
+      </div>
+
+      <div>
+        <Label htmlFor="token">Code reçu par email</Label>
+        <Input
+          id="token"
+          name="token"
+          type="text"
+          inputMode="numeric"
+          pattern="\d{6}"
+          maxLength={6}
+          placeholder="123456"
+          autoComplete="one-time-code"
+          required
+          hasError={!!state.error}
+        />
+      </div>
+
       <div>
         <Label htmlFor="password">Nouveau mot de passe</Label>
         <Input

@@ -6,12 +6,16 @@ import { forgotPasswordSchema } from '@/lib/validations/auth'
 export interface ForgotPasswordFormState {
   error: string | null
   success: boolean
+  email?: string
 }
 
 // Toujours le même message de succès, que l'email corresponde ou non à un
 // compte existant — resetPasswordForEmail() de Supabase ne renvoie de toute
 // façon pas d'erreur dans ce cas (comportement anti-énumération intégré),
 // on ne fait donc que refléter fidèlement ce que fait déjà GoTrue.
+// redirectTo conservé par défense en profondeur (cf. app/(auth)/forgot-
+// password/actions.ts) mais /admin/reset-password se vérifie désormais par
+// code OTP, pas par ce lien.
 export async function adminForgotPassword(
   _prevState: ForgotPasswordFormState,
   formData: FormData
@@ -43,5 +47,5 @@ export async function adminForgotPassword(
     return { error: "Impossible d'envoyer l'email pour le moment, réessaie.", success: false }
   }
 
-  return { error: null, success: true }
+  return { error: null, success: true, email: parsed.data.email }
 }

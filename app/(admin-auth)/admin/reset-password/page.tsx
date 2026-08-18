@@ -9,12 +9,18 @@ export const metadata: Metadata = pageMetadata({
   noIndex: true,
 })
 
-// Atteinte uniquement via le lien reçu par email (/admin/forgot-password →
-// /auth/callback?next=/admin/reset-password), qui établit une session de
-// récupération. Le middleware protège déjà cette route comme le reste de
-// /admin/* : sans session admin valide, on n'y arrive jamais (redirection
-// vers /admin/login).
-export default function AdminResetPasswordPage() {
+interface AdminResetPasswordPageProps {
+  searchParams: Promise<{ email?: string }>
+}
+
+// Vérification par CODE OTP (pas par lien) — cf. lib/validations/auth.ts::
+// resetPasswordSchema. Accessible sans session préalable (lib/supabase/
+// middleware.ts l'exclut désormais du garde-fou admin) : verifyOtp() dans
+// l'action établit la session elle-même, qui vérifie ensuite explicitement
+// role === 'admin' avant d'autoriser le changement de mot de passe.
+export default async function AdminResetPasswordPage({ searchParams }: AdminResetPasswordPageProps) {
+  const { email } = await searchParams
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4 py-12">
       <div className="w-full max-w-sm">
@@ -26,10 +32,12 @@ export default function AdminResetPasswordPage() {
             </span>
           </p>
           <h1 className="mt-3 text-2xl font-bold tracking-tight text-white">Nouveau mot de passe</h1>
-          <p className="mt-1 text-sm text-slate-400">Choisis un nouveau mot de passe pour ton compte admin.</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Entre le code à 6 chiffres reçu par email et choisis un nouveau mot de passe.
+          </p>
         </div>
         <Card>
-          <AdminResetPasswordForm />
+          <AdminResetPasswordForm defaultEmail={email ?? ''} />
         </Card>
       </div>
     </div>
