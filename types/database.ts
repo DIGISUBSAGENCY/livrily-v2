@@ -550,9 +550,16 @@ export interface Database {
         Relationships: []
       }
     }
-    // Requis par le typage générique de @supabase/postgrest-js même si on
-    // n'utilise pas de vues.
-    Views: Record<string, never>
+    Views: {
+      admin_client_stats: {
+        Row: {
+          profile_id: string
+          orders_count: number
+          last_order_at: string | null
+        }
+        Relationships: []
+      }
+    }
     Functions: {
       accept_travel_proposal: {
         Args: {
@@ -599,6 +606,7 @@ export type DeliveryTracking = Database['public']['Tables']['delivery_tracking']
 export type Rating = Database['public']['Tables']['ratings']['Row']
 export type BankTransferInfo = Database['public']['Tables']['bank_transfer_info']['Row']
 export type PlatformSettings = Database['public']['Tables']['platform_settings']['Row']
+export type AdminClientStats = Database['public']['Views']['admin_client_stats']['Row']
 export type TravelRequest = Database['public']['Tables']['travel_requests']['Row']
 export type TravelProposal = Database['public']['Tables']['travel_proposals']['Row']
 export type TravelProposalOffer = Database['public']['Tables']['travel_proposal_offers']['Row']

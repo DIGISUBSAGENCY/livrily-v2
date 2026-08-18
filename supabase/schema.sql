@@ -2390,6 +2390,27 @@ create policy "travel_photos_delete_own_folder"
   );
 
 -- ============================================================================
+-- Vue: admin_client_stats
+-- Utilisée par /admin/utilisateurs (liste) pour afficher un nombre de
+-- commandes par compte sans requête N+1 ni agrégation côté client.
+-- security_invoker = true : la vue s'exécute avec les droits RLS de
+-- l'utilisateur qui la consulte (donc soumise à orders_select_involved_or_
+-- admin, qui n'autorise que le client concerné, le commerce concerné ou un
+-- admin) plutôt qu'avec ceux du créateur de la vue — sans ça, un compte non
+-- admin pourrait potentiellement lire les stats de n'importe qui.
+-- ============================================================================
+create or replace view public.admin_client_stats
+with (security_invoker = true) as
+select
+  p.id as profile_id,
+  count(distinct o.id) as orders_count,
+  max(o.created_at) as last_order_at
+from public.profiles p
+left join public.orders o on o.client_id = p.id
+where p.role = 'client'
+group by p.id;
+
+-- ============================================================================
 -- Fin du schéma Phase 0/1/2/3 + Crowd-shipping.
 --
 -- À faire manuellement dans le dashboard Supabase (non scriptable en SQL) :
