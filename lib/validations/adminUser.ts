@@ -23,6 +23,15 @@ export const adminUserEditSchema = z.object({
     .transform((v) => (v ? v : null)),
 })
 
+// Création d'un compte par l'admin (/admin/utilisateurs/nouveau) — mêmes
+// règles que adminUserEditSchema (téléphone tunisien, pays, profession
+// optionnelle), plus un mot de passe initial. Même contrainte de longueur
+// que signUpSchema (lib/validations/auth.ts) pour rester cohérent avec le
+// flow d'inscription self-service.
+export const adminUserCreateSchema = adminUserEditSchema.extend({
+  password: z.string().min(6, 'Le mot de passe doit contenir au moins 6 caractères.'),
+})
+
 // Ajustement manuel du solde. amount signé (positif = crédit, négatif =
 // débit) plutôt que deux champs "montant" + "sens" — plus simple à saisir
 // et à transmettre tel quel à adjust_wallet_balance() (schema.sql).
