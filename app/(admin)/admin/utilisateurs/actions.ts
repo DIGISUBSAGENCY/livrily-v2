@@ -1,8 +1,9 @@
 'use server'
 
+import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { adminUserEditSchema, walletAdjustmentSchema } from '@/lib/validations/adminUser'
+import { adminUserCreateSchema, adminUserEditSchema, walletAdjustmentSchema } from '@/lib/validations/adminUser'
 
 export interface ActionResult {
   error: string | null
@@ -31,6 +32,79 @@ export async function toggleUserActive(userId: string, isActive: boolean): Promi
   revalidatePath('/admin/utilisateurs')
   revalidatePath(`/admin/utilisateurs/${userId}`)
   return { error: null }
+}
+
+// Création d'un compte directement par l'admin, sans passer par le flow
+// d'inscription self-service (/signup). Mot de passe initial défini par
+// l'admin plutôt qu'email d'invitation — cf. discussion : plus simple,
+// aucune dépendance à la délivrabilité email (déjà source de plusieurs bugs
+// ce mois-ci avec Resend/OTP), le compte est utilisable immédiatement.
+//
+// createUser() déclenche handle_new_user() (schema.sql) exactement comme un
+// signup normal : role='client' par défaut, referral_code généré, full_name
+// posé automatiquement depuis user_metadata. phone/address/country/
+// profession ne sont PAS gérés par ce trigger (il ne gère que full_name) —
+// posés ici par une seconde requête, une fois la ligne profiles garantie
+// exister (le trigger AFTER INSERT s'exécute dans la même transaction que
+// createUser(), donc déjà commité au moment où l'appel API retourne).
+export async function createUserByAdmin(_prevState: ActionResult, formData: FormData): Promise<ActionResult> {
+  const parsed = adminUserCreateSchema.safeParse({
+    full_name: formData.get('full_name'),
+    email: formData.get('email'),
+    phone: formData.get('phone'),
+    address: formData.get('address'),
+    country: formData.get('country'),
+    profession: formData.get('profession'),
+    password: formData.get('password'),
+  })
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Formulaire invalide.' }
+  }
+
+  const adminClient = createAdminClient()
+  const { data: created, error: createError } = await adminClient.auth.admin.createUser({
+    email: parsed.data.email,
+    password: parsed.data.password,
+    email_confirm: true,
+    user_metadata: { full_name: parsed.data.full_name },
+  })
+
+  if (createError || !created.user) {
+    console.error('[admin/utilisateurs] createUser a échoué', { message: createError?.message })
+    const message =
+      createError?.code === 'email_exists'
+        ? 'Un compte existe déjà avec cet email.'
+        : 'Impossible de créer le compte, réessaie.'
+    return { error: message }
+  }
+
+  const supabase = await createClient()
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({
+      phone: parsed.data.phone,
+      address: parsed.data.address,
+      country: parsed.data.country,
+      profession: parsed.data.profession,
+    })
+    .eq('id', created.user.id)
+
+  revalidatePath('/admin/utilisateurs')
+
+  if (updateError) {
+    // Le compte auth existe déjà à ce stade (pas de rollback possible côté
+    // app, et retourner une "erreur" laisserait l'admin bloqué sur un
+    // formulaire de création qui échouerait au prochain essai — l'email est
+    // désormais pris). On redirige quand même vers le compte créé, avec un
+    // avertissement affiché là-bas plutôt qu'ici.
+    console.error('[admin/utilisateurs] createUserByAdmin (update profil) a échoué', {
+      message: updateError.message,
+      code: updateError.code,
+    })
+    redirect(`/admin/utilisateurs/${created.user.id}?warning=profil_incomplet`)
+  }
+
+  redirect(`/admin/utilisateurs/${created.user.id}`)
 }
 
 // Ajustement manuel du solde — passe exclusivement par le RPC
