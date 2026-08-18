@@ -29,6 +29,17 @@ export async function adminForgotPassword(
   })
 
   if (error) {
+    // Ce n'est PAS le cas "email inconnu" (GoTrue ne renvoie jamais d'erreur
+    // pour ça, cf. commentaire au-dessus) — si on arrive ici, c'est un vrai
+    // échec serveur (rate limit, redirectTo hors liste blanche, SMTP mal
+    // configuré...). Logué en entier côté serveur pour diagnostiquer, sans
+    // jamais exposer error.message au client (fuite d'infos internes).
+    console.error('[admin/forgot-password] resetPasswordForEmail a échoué', {
+      message: error.message,
+      status: error.status,
+      code: (error as { code?: string }).code,
+      name: error.name,
+    })
     return { error: "Impossible d'envoyer l'email pour le moment, réessaie.", success: false }
   }
 
