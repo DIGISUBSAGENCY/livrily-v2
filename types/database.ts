@@ -391,6 +391,21 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['bank_transfer_info']['Insert']>
         Relationships: []
       }
+      platform_settings: {
+        Row: {
+          id: boolean
+          travel_commission_rate: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: boolean
+          travel_commission_rate?: number
+          updated_by?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['platform_settings']['Insert']>
+        Relationships: []
+      }
       travel_requests: {
         Row: {
           id: string
@@ -583,6 +598,7 @@ export type OrderItem = Database['public']['Tables']['order_items']['Row']
 export type DeliveryTracking = Database['public']['Tables']['delivery_tracking']['Row']
 export type Rating = Database['public']['Tables']['ratings']['Row']
 export type BankTransferInfo = Database['public']['Tables']['bank_transfer_info']['Row']
+export type PlatformSettings = Database['public']['Tables']['platform_settings']['Row']
 export type TravelRequest = Database['public']['Tables']['travel_requests']['Row']
 export type TravelProposal = Database['public']['Tables']['travel_proposals']['Row']
 export type TravelProposalOffer = Database['public']['Tables']['travel_proposal_offers']['Row']

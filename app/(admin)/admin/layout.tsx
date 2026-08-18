@@ -11,6 +11,7 @@ const links = [
   { href: '/admin/jibli-paiements', label: 'Paiements Jibli' },
   { href: '/admin/retraits', label: 'Retraits' },
   { href: '/admin/parametres/virement', label: 'Virement' },
+  { href: '/admin/parametres/commission', label: 'Commission' },
 ]
 
 // Dédié à /admin : sa propre barre (logo + utilisateur + déconnexion), sans

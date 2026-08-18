@@ -1917,6 +1917,44 @@ grant execute on function public.agree_to_current_offer(uuid) to authenticated;
 --     après confirmation du paiement par l'API Flouci (lib/flouci.ts).
 --     travel_payments démarre directement à 'escrowed' — aucune vérification
 --     admin nécessaire, l'API Flouci a déjà fait office de tiers de confiance.
+-- ============================================================================
+-- Table: platform_settings
+-- Ligne unique (singleton) de paramètres plateforme configurables depuis
+-- /admin/parametres/commission — jusqu'ici accept_travel_proposal() avait un
+-- taux de commission Jibli (affiché "Livrily" côté admin, cf. cette page)
+-- câblé en dur à 0%. "id boolean primary key default true check (id)" est
+-- un pattern Postgres standard pour forcer une table à ne jamais contenir
+-- plus d'une ligne (seule la valeur `true` est autorisée comme clé).
+-- ============================================================================
+create table if not exists public.platform_settings (
+  id boolean primary key default true,
+  travel_commission_rate numeric(5,4) not null default 0.10 check (travel_commission_rate >= 0 and travel_commission_rate <= 1),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references public.profiles(id),
+  constraint platform_settings_singleton check (id)
+);
+
+insert into public.platform_settings (id, travel_commission_rate)
+values (true, 0.10)
+on conflict (id) do nothing;
+
+drop trigger if exists trg_platform_settings_updated_at on public.platform_settings;
+create trigger trg_platform_settings_updated_at
+  before update on public.platform_settings
+  for each row execute function public.set_updated_at();
+
+alter table public.platform_settings enable row level security;
+
+drop policy if exists "platform_settings_select_admin_only" on public.platform_settings;
+create policy "platform_settings_select_admin_only"
+  on public.platform_settings for select
+  using (public.is_admin());
+
+drop policy if exists "platform_settings_update_admin_only" on public.platform_settings;
+create policy "platform_settings_update_admin_only"
+  on public.platform_settings for update
+  using (public.is_admin());
+
 drop function if exists public.accept_travel_proposal(uuid);
 create or replace function public.accept_travel_proposal(
   p_proposal_id uuid,
@@ -1938,6 +1976,7 @@ declare
   v_delivery_fee numeric(10,3);
   v_amount numeric(10,3);
   v_commission numeric(10,3);
+  v_commission_rate numeric(5,4);
   v_payment_status public.travel_payment_status;
 begin
   if p_payment_method not in ('virement', 'flouci') then
@@ -1976,8 +2015,14 @@ begin
     v_payment_status := 'escrowed';
   end if;
 
+  -- Taux configurable depuis /admin/parametres/commission (platform_settings,
+  -- singleton) — auparavant câblé en dur à 0%. coalesce en garde-fou si la
+  -- ligne singleton venait à manquer (ne devrait jamais arriver, seedée
+  -- ci-dessus), pour ne jamais faire échouer une acceptation de proposition
+  -- à cause d'un paramètre de facturation manquant.
+  select travel_commission_rate into v_commission_rate from public.platform_settings where id = true;
   v_amount := v_item_price + v_delivery_fee;
-  v_commission := v_delivery_fee * 0; -- taux de commission non configuré (phase admin future) : 0% pour l'instant
+  v_commission := v_delivery_fee * coalesce(v_commission_rate, 0);
 
   perform set_config('jibli.bypass_transition_checks', 'true', true);
 
