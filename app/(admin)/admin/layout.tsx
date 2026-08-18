@@ -9,6 +9,7 @@ const links = [
   { href: '/admin/comptes-commerce', label: 'Comptes commerce' },
   { href: '/admin/paiements', label: 'Paiements commandes' },
   { href: '/admin/jibli-paiements', label: 'Paiements Jibli' },
+  { href: '/admin/retraits', label: 'Retraits' },
   { href: '/admin/parametres/virement', label: 'Virement' },
 ]
 

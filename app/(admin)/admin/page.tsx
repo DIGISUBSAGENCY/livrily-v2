@@ -31,6 +31,7 @@ export default async function AdminDashboardPage() {
     { count: ordersAwaiting },
     { count: travelAwaiting },
     { count: travelOpen },
+    { count: withdrawalsAwaiting },
   ] = await Promise.all([
     supabase.from('orders').select('id', { count: 'exact', head: true }).gte('created_at', todayIso),
     supabase.from('orders').select('total').eq('status', 'delivered').gte('created_at', todayIso),
@@ -47,6 +48,7 @@ export default async function AdminDashboardPage() {
     supabase.from('orders').select('id', { count: 'exact', head: true }).eq('payment_status', 'awaiting_verification'),
     supabase.from('travel_payments').select('id', { count: 'exact', head: true }).eq('status', 'awaiting_verification'),
     supabase.from('travel_requests').select('id', { count: 'exact', head: true }).eq('status', 'open'),
+    supabase.from('withdrawal_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
   ])
 
   const caToday = (deliveredToday ?? []).reduce((sum, o) => sum + o.total, 0)
@@ -61,7 +63,7 @@ export default async function AdminDashboardPage() {
     return Math.round(totalMinutes / rows.length)
   })()
 
-  const paymentsPending = (ordersAwaiting ?? 0) + (travelAwaiting ?? 0)
+  const paymentsPending = (ordersAwaiting ?? 0) + (travelAwaiting ?? 0) + (withdrawalsAwaiting ?? 0)
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
@@ -144,6 +146,16 @@ export default async function AdminDashboardPage() {
               </p>
             </div>
             {(travelAwaiting ?? 0) > 0 && <Badge tone="warning">{travelAwaiting}</Badge>}
+          </Card>
+        </Link>
+
+        <Link href="/admin/retraits">
+          <Card interactive className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-slate-900">Retraits voyageurs</p>
+              <p className="text-sm text-slate-500">Demandes de retrait en attente de traitement</p>
+            </div>
+            {(withdrawalsAwaiting ?? 0) > 0 && <Badge tone="warning">{withdrawalsAwaiting}</Badge>}
           </Card>
         </Link>
       </div>
