@@ -1,11 +1,17 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { Plane, Package } from 'lucide-react'
+import { Plane, Package, ClipboardList, Inbox, Luggage } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { RequestCard } from '@/components/travel/RequestCard'
 import { RequestFilters } from '@/components/travel/RequestFilters'
+import { DashboardStatCard } from '@/components/travel/DashboardStatCard'
+import { MyRequestsPreview } from '@/components/travel/MyRequestsPreview'
+import { MyProposalsPreview } from '@/components/travel/MyProposalsPreview'
 import { Button } from '@/components/ui/Button'
+import { IdentityBanner } from '@/components/account/IdentityBanner'
+import { getIdentityStatus } from '@/lib/identity'
 import { pageMetadata } from '@/lib/seo'
+import type { TravelRequest, TravelProposal, TravelRequestStatus } from '@/types/database'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Jibli chay men l’a5er — Crowd-shipping',
@@ -52,8 +58,79 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
     )
   }
 
+  // Bloc dashboard (bandeau KYC, stats, aperçus) : uniquement pour un
+  // compte client connecté — enrichit /jibli sans toucher au reste de la
+  // page (marketplace publique ci-dessous, inchangée pour tout le monde,
+  // y compris les visiteurs non connectés).
+  let role: string | null = null
+  let identityStatus: Awaited<ReturnType<typeof getIdentityStatus>> = 'unverified'
+  let identityRejectionReason: string | null = null
+  let myRequests: TravelRequest[] = []
+  let myRequestsTotal = 0
+  let proposalsReceivedCount = 0
+  let myProposals: TravelProposal[] = []
+  let myProposalsTotal = 0
+  let myProposalsRequestById = new Map<string, { item_description: string; status: TravelRequestStatus }>()
+
+  if (user) {
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    role = profile?.role ?? null
+
+    if (role === 'client') {
+      const [{ data: verification }, { data: allMyRequests }, { data: allMyProposals }] = await Promise.all([
+        supabase.from('identity_verifications').select('status, rejection_reason').eq('profile_id', user.id).maybeSingle(),
+        supabase.from('travel_requests').select('*').eq('client_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('travel_proposals').select('*').eq('voyageur_id', user.id).order('created_at', { ascending: false }),
+      ])
+
+      identityStatus = verification?.status ?? 'unverified'
+      identityRejectionReason = verification?.rejection_reason ?? null
+
+      myRequestsTotal = allMyRequests?.length ?? 0
+      myRequests = (allMyRequests ?? []).filter((r) => r.status !== 'completed' && r.status !== 'cancelled').slice(0, 3)
+
+      myProposalsTotal = allMyProposals?.length ?? 0
+      myProposals = (allMyProposals ?? []).slice(0, 3)
+
+      const myRequestIds = (allMyRequests ?? []).map((r) => r.id)
+      if (myRequestIds.length > 0) {
+        const { count } = await supabase
+          .from('travel_proposals')
+          .select('id', { count: 'exact', head: true })
+          .in('request_id', myRequestIds)
+        proposalsReceivedCount = count ?? 0
+      }
+
+      const previewRequestIds = Array.from(new Set(myProposals.map((p) => p.request_id)))
+      if (previewRequestIds.length > 0) {
+        const { data: previewRequests } = await supabase
+          .from('travel_requests')
+          .select('id, item_description, status')
+          .in('id', previewRequestIds)
+        myProposalsRequestById = new Map((previewRequests ?? []).map((r) => [r.id, r]))
+      }
+    }
+  }
+
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
+      {role === 'client' && (
+        <div className="mb-8 space-y-6">
+          <IdentityBanner status={identityStatus} rejectionReason={identityRejectionReason} />
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <DashboardStatCard icon={ClipboardList} value={myRequestsTotal} label="Mes demandes" />
+            <DashboardStatCard icon={Inbox} value={proposalsReceivedCount} label="Propositions reçues" />
+            <DashboardStatCard icon={Luggage} value={myProposalsTotal} label="Mes propositions envoyées" />
+          </div>
+
+          <div className="grid gap-6 sm:grid-cols-2">
+            <MyRequestsPreview requests={myRequests} totalCount={myRequestsTotal} />
+            <MyProposalsPreview proposals={myProposals} requestById={myProposalsRequestById} totalCount={myProposalsTotal} />
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
