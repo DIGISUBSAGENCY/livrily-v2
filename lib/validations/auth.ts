@@ -21,8 +21,21 @@ export const forgotPasswordSchema = z.object({
   email: z.string().trim().toLowerCase().email('Adresse email invalide.'),
 })
 
+// Vérification par CODE (OTP à 6 chiffres) plutôt que par lien cliquable —
+// un lien envoyé par email est systématiquement récupéré et pré-consommé
+// par le click-tracking automatique de la chaîne d'envoi (Resend → AWS SES,
+// domaine awstrack.me), rendant le token à usage unique déjà expiré au
+// moment du vrai clic humain. Un code en texte brut dans l'email n'a rien
+// qu'un service de tracking puisse pré-charger : immunisé structurellement,
+// pas juste "moins probable de poser problème". email répété ici (requis
+// par supabase.auth.verifyOtp({ email, token, type: 'recovery' })).
 export const resetPasswordSchema = z
   .object({
+    email: z.string().trim().toLowerCase().email('Adresse email invalide.'),
+    token: z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/, 'Le code doit contenir exactement 6 chiffres.'),
     password: z.string().min(6, 'Le mot de passe doit contenir au moins 6 caractères.'),
     confirmPassword: z.string(),
   })
