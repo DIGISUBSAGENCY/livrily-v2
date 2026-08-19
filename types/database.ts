@@ -656,6 +656,10 @@ export interface Database {
         Args: { p_profile_id: string }
         Returns: boolean
       }
+      get_travel_request_engagement: {
+        Args: { p_request_ids: string[] }
+        Returns: { request_id: string; total_proposals: number; recent_proposals: number }[]
+      }
     }
   }
 }

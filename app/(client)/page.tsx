@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { TravelRequestCarousel } from '@/components/home/TravelRequestCarousel'
+import { getTravelTrend, type TravelTrend } from '@/lib/travel/getTravelTrend'
 
 // Badges de confiance : uniquement des affirmations vraies sur la
 // plateforme telle qu'elle existe aujourd'hui (pas de vérification
@@ -62,6 +63,24 @@ export default async function HomePage() {
 
     for (const p of ownProposals ?? []) {
       ownProposalsByRequest[p.request_id] = { item_price: p.item_price, delivery_fee: p.delivery_fee }
+    }
+  }
+
+  // Indicateur tendance 🔥/❄️ : un visiteur public ne peut pas lire
+  // travel_proposals directement (RLS, propositions privées) — passe par
+  // un RPC agrégat (compteurs uniquement, cf. schema.sql) plutôt que
+  // d'exposer les lignes individuelles.
+  const trendByRequest: Record<string, TravelTrend> = {}
+  if (latestRequests && latestRequests.length > 0) {
+    const { data: engagement } = await supabase.rpc('get_travel_request_engagement', {
+      p_request_ids: latestRequests.map((r) => r.id),
+    })
+    const engagementByRequest = new Map(
+      (engagement ?? []).map((e) => [e.request_id, { total: e.total_proposals, recent: e.recent_proposals }])
+    )
+    for (const request of latestRequests) {
+      const stats = engagementByRequest.get(request.id) ?? { total: 0, recent: 0 }
+      trendByRequest[request.id] = getTravelTrend(request.created_at, stats.total, stats.recent)
     }
   }
 
@@ -125,7 +144,11 @@ export default async function HomePage() {
           </div>
 
           <div className="mt-6">
-            <TravelRequestCarousel requests={latestRequests ?? []} ownProposalsByRequest={ownProposalsByRequest} />
+            <TravelRequestCarousel
+              requests={latestRequests ?? []}
+              ownProposalsByRequest={ownProposalsByRequest}
+              trendByRequest={trendByRequest}
+            />
           </div>
         </div>
       </section>

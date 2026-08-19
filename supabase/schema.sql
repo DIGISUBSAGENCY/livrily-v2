@@ -2332,6 +2332,27 @@ create policy "travel_proposals_update_own"
   -- Seul le retrait (trigger enforce_travel_proposal_update) est permis en
   -- écriture directe ; l'acceptation passe exclusivement par la RPC.
 
+-- Agrégat public (compteurs uniquement, aucun montant/identité individuel)
+-- pour l'indicateur tendance 🔥/❄️ du carrousel home (TravelRequestCarousel)
+-- — la policy select ci-dessus reste stricte, un visiteur anonyme ne peut
+-- toujours pas lire une ligne travel_proposals individuelle.
+create or replace function public.get_travel_request_engagement(p_request_ids uuid[])
+returns table (request_id uuid, total_proposals bigint, recent_proposals bigint)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select tp.request_id,
+         count(*) as total_proposals,
+         count(*) filter (where tp.created_at >= now() - interval '48 hours') as recent_proposals
+  from public.travel_proposals tp
+  where tp.request_id = any(p_request_ids)
+  group by tp.request_id;
+$$;
+
+grant execute on function public.get_travel_request_engagement(uuid[]) to anon, authenticated;
+
 -- travel_proposal_offers -------------------------------------------------
 -- Lecture réservée aux deux parties du fil (comme travel_proposals) ;
 -- aucune policy d'insert pour un rôle authentifié — toutes les écritures
