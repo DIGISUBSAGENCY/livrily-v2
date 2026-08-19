@@ -453,6 +453,8 @@ export interface Database {
           delivery_fee: number
           travel_date: string | null
           message: string | null
+          pickup_city: string | null
+          expires_at: string | null
           status: TravelProposalStatus
           last_offer_by: 'client' | 'voyageur'
           terms_confirmed_by: string | null
@@ -468,6 +470,8 @@ export interface Database {
           delivery_fee: number
           travel_date?: string | null
           message?: string | null
+          pickup_city?: string | null
+          expires_at?: string | null
           status?: TravelProposalStatus
           last_offer_by?: 'client' | 'voyageur'
           terms_confirmed_by?: string | null

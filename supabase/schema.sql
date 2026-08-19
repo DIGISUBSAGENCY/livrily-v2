@@ -1575,6 +1575,8 @@ create table if not exists public.travel_proposals (
   delivery_fee numeric(10,3) not null check (delivery_fee >= 0), -- seul montant sur lequel une commission plateforme sera prélevée (taux à définir, phase admin future)
   travel_date date,
   message text,
+  pickup_city text, -- ville de départ du voyageur pour ce trajet (ex: Lyon), pas la ville de remise au client
+  expires_at timestamptz, -- validité affichée de l'offre ("Valable jusqu'au...") — purement informatif, aucune expiration automatique pour l'instant
   status public.travel_proposal_status not null default 'pending',
   -- Phase 5 — négociation : item_price/delivery_fee/message représentent
   -- désormais l'OFFRE COURANTE du fil (historique complet dans
@@ -1597,6 +1599,8 @@ alter table public.travel_proposals add column if not exists last_offer_by text 
 alter table public.travel_proposals add column if not exists terms_confirmed_by uuid references public.profiles(id);
 alter table public.travel_proposals add column if not exists terms_confirmed_at timestamptz;
 alter table public.travel_proposals add column if not exists updated_at timestamptz not null default now();
+alter table public.travel_proposals add column if not exists pickup_city text;
+alter table public.travel_proposals add column if not exists expires_at timestamptz;
 
 create index if not exists travel_proposals_request_idx on public.travel_proposals(request_id);
 create index if not exists travel_proposals_voyageur_idx on public.travel_proposals(voyageur_id);

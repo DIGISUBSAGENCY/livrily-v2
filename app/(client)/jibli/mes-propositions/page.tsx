@@ -3,10 +3,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Luggage } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { TravelRequestStatusBadge } from '@/components/travel/TravelRequestStatusBadge'
-import { TravelProposalStatusBadge } from '@/components/travel/TravelProposalStatusBadge'
-import { ProposalAmounts } from '@/components/travel/ProposalAmounts'
-import { Card } from '@/components/ui/Card'
+import { ProposalsTabs } from '@/components/travel/ProposalsTabs'
 import { pageMetadata } from '@/lib/seo'
 
 export const metadata: Metadata = pageMetadata({
@@ -54,29 +51,7 @@ export default async function MyProposalsPage() {
         </div>
       )}
 
-      {!error && proposals && proposals.length > 0 && (
-        <div className="mt-6 space-y-3">
-          {proposals.map((proposal) => {
-            const request = requestById.get(proposal.request_id)
-            return (
-              <Link key={proposal.id} href={`/jibli/${proposal.request_id}`}>
-                <Card className="transition-shadow hover:shadow-md">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="font-medium text-slate-900">{request?.item_description ?? 'Demande'}</p>
-                    <div className="flex flex-shrink-0 flex-col items-end gap-1">
-                      <TravelProposalStatusBadge status={proposal.status} />
-                      {request && <TravelRequestStatusBadge status={request.status} />}
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <ProposalAmounts itemPrice={proposal.item_price} deliveryFee={proposal.delivery_fee} />
-                  </div>
-                </Card>
-              </Link>
-            )
-          })}
-        </div>
-      )}
+      {!error && proposals && proposals.length > 0 && <ProposalsTabs proposals={proposals} requestById={requestById} />}
     </main>
   )
 }

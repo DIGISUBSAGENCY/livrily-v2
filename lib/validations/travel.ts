@@ -18,6 +18,12 @@ export const travelRequestSchema = z.object({
     .or(z.literal('').transform(() => undefined)),
 })
 
+// Durées de validité proposées côté formulaire (dropdown) — converties en
+// expires_at (timestamp absolu) côté serveur. Purement informatif pour
+// l'instant : rien ne retire automatiquement la proposition à l'échéance.
+export const proposalValiditySchema = z.enum(['24h', '48h', '7d'])
+export type ProposalValidity = z.infer<typeof proposalValiditySchema>
+
 export const travelProposalSchema = z.object({
   item_price: z.coerce.number().min(0, "Le prix de l'objet doit être positif."),
   delivery_fee: z.coerce.number().min(0, 'Les frais de service doivent être positifs.'),
@@ -26,6 +32,13 @@ export const travelProposalSchema = z.object({
     .trim()
     .optional()
     .or(z.literal('').transform(() => undefined)),
+  pickup_city: z
+    .string()
+    .trim()
+    .max(100)
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  validity: proposalValiditySchema.optional().or(z.literal('').transform(() => undefined)),
   message: z
     .string()
     .trim()

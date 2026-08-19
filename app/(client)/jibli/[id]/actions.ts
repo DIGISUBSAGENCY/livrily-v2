@@ -3,7 +3,13 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { travelProposalSchema, counterOfferSchema } from '@/lib/validations/travel'
+import { travelProposalSchema, counterOfferSchema, type ProposalValidity } from '@/lib/validations/travel'
+
+const VALIDITY_DURATIONS_MS: Record<ProposalValidity, number> = {
+  '24h': 24 * 60 * 60 * 1000,
+  '48h': 48 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+}
 import { generateFlouciPayment, isFlouciConfigured, tndToMillimes, FlouciConfigError, FlouciApiError } from '@/lib/flouci'
 import { getIdentityStatus, isIdentityVerified } from '@/lib/identity'
 
@@ -32,6 +38,8 @@ export async function createProposal(
     item_price: formData.get('item_price'),
     delivery_fee: formData.get('delivery_fee'),
     travel_date: formData.get('travel_date') || undefined,
+    pickup_city: formData.get('pickup_city') || undefined,
+    validity: formData.get('validity') || undefined,
     message: formData.get('message') || undefined,
   })
 
@@ -39,12 +47,18 @@ export async function createProposal(
     return { error: parsed.error.issues[0]?.message ?? 'Formulaire invalide.' }
   }
 
+  const expiresAt = parsed.data.validity
+    ? new Date(Date.now() + VALIDITY_DURATIONS_MS[parsed.data.validity]).toISOString()
+    : null
+
   const { error } = await supabase.from('travel_proposals').insert({
     request_id: requestId,
     voyageur_id: user.id,
     item_price: parsed.data.item_price,
     delivery_fee: parsed.data.delivery_fee,
     travel_date: parsed.data.travel_date ?? null,
+    pickup_city: parsed.data.pickup_city ?? null,
+    expires_at: expiresAt,
     message: parsed.data.message ?? null,
   })
 
