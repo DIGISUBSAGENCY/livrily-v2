@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { LoginForm } from '@/components/auth/LoginForm'
 import { Card } from '@/components/ui/Card'
+import { Alert } from '@/components/ui/Alert'
 import { pageMetadata } from '@/lib/seo'
 
 interface LoginPageProps {
@@ -29,14 +30,14 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <p className="mt-1 text-sm text-slate-500">Accède à ton compte Livrily.</p>
         </div>
         {error && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <Alert tone="danger" className="mb-4">
             La connexion a échoué : {decodeURIComponent(error)}
-          </div>
+          </Alert>
         )}
         {reset === 'success' && (
-          <div className="mb-4 rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm text-brand-700">
+          <Alert tone="success" className="mb-4">
             Mot de passe mis à jour. Connecte-toi avec ton nouveau mot de passe.
-          </div>
+          </Alert>
         )}
         <Card>
           <LoginForm />

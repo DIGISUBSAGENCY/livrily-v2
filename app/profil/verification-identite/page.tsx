@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { VerificationForm } from '@/components/account/VerificationForm'
 import { IdentityStatusBadge } from '@/components/account/IdentityStatusBadge'
 import { Card } from '@/components/ui/Card'
+import { Alert } from '@/components/ui/Alert'
 import { pageMetadata } from '@/lib/seo'
 import type { IdentityGateStatus } from '@/lib/identity'
 
@@ -63,9 +64,9 @@ export default async function VerificationIdentitePage() {
         ) : (
           <>
             {status === 'rejected' && verification?.rejection_reason && (
-              <p className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              <Alert tone="danger" className="mb-4">
                 Raison du refus : {verification.rejection_reason}
-              </p>
+              </Alert>
             )}
             {status === 'pending' && (
               <p className="mb-4 text-sm text-slate-600">

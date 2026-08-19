@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/Label'
 import { ErrorText } from '@/components/ui/ErrorText'
 import { SubmitButton } from '@/components/ui/SubmitButton'
 import { Card } from '@/components/ui/Card'
+import { Alert } from '@/components/ui/Alert'
 import { formatTND } from '@/lib/format'
 import type { BankTransferInfo, PaymentMethod } from '@/types/database'
 
@@ -140,9 +141,8 @@ export function CheckoutForm({ defaultAddress, defaultLat, defaultLng, bankInfo,
         </Card>
 
         {needsPrescription && (
-          <Card className="border-amber-200 bg-amber-50">
-            <h2 className="mb-2 font-semibold text-amber-900">Ordonnance requise</h2>
-            <p className="mb-3 text-sm text-amber-800">
+          <Alert tone="warning" title="Ordonnance requise">
+            <p className="mb-3">
               Ton panier contient un produit sur ordonnance. Joins une photo lisible de
               l&apos;ordonnance — le pharmacien la vérifie avant d&apos;accepter ta commande.
             </p>
@@ -155,7 +155,7 @@ export function CheckoutForm({ defaultAddress, defaultLat, defaultLng, bankInfo,
               required
               className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-amber-700 hover:file:bg-amber-100"
             />
-          </Card>
+          </Alert>
         )}
 
         <Card>

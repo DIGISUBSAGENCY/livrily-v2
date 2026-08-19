@@ -5,7 +5,7 @@ import { resubmitPaymentProof, type ActionResult } from '@/app/(client)/commande
 import { Label } from '@/components/ui/Label'
 import { ErrorText } from '@/components/ui/ErrorText'
 import { SubmitButton } from '@/components/ui/SubmitButton'
-import { Card } from '@/components/ui/Card'
+import { Alert } from '@/components/ui/Alert'
 
 const initialState: ActionResult = { error: null }
 
@@ -16,9 +16,8 @@ export function ResubmitPaymentProof({ orderId }: { orderId: string }) {
   const [state, formAction] = useFormState(action, initialState)
 
   return (
-    <Card className="border-red-200 bg-red-50">
-      <h2 className="font-semibold text-red-900">Paiement rejeté</h2>
-      <p className="mt-1 text-sm text-red-800">
+    <Alert tone="danger" title="Paiement rejeté">
+      <p>
         La preuve envoyée n&apos;a pas été validée. Renvoie une nouvelle capture d&apos;écran du
         virement.
       </p>
@@ -39,6 +38,6 @@ export function ResubmitPaymentProof({ orderId }: { orderId: string }) {
           Renvoyer la preuve
         </SubmitButton>
       </form>
-    </Card>
+    </Alert>
   )
 }

@@ -1,4 +1,5 @@
 import { Smartphone } from 'lucide-react'
+import { Alert } from '@/components/ui/Alert'
 
 // Composant isolé et facilement branchable : quand l'intégration Flouci
 // (FLOUCI_APP_TOKEN/FLOUCI_APP_SECRET, cf. .env.local.example) sera prête,
@@ -8,15 +9,9 @@ import { Smartphone } from 'lucide-react'
 // aucune confirmation de paiement fictive.
 export function PaymentFlouci() {
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-      <Smartphone className="h-5 w-5 flex-shrink-0" aria-hidden />
-      <div>
-        <p className="font-medium">Paiement en ligne Flouci</p>
-        <p className="mt-1">
-          L&apos;intégration du paiement en ligne arrive bientôt. Ta commande sera enregistrée en
-          attente de paiement — tu pourras payer en espèces à la livraison en attendant.
-        </p>
-      </div>
-    </div>
+    <Alert tone="info" icon={Smartphone} title="Paiement en ligne Flouci">
+      L&apos;intégration du paiement en ligne arrive bientôt. Ta commande sera enregistrée en
+      attente de paiement — tu pourras payer en espèces à la livraison en attendant.
+    </Alert>
   )
 }

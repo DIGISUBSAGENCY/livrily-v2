@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { MapPin } from 'lucide-react'
 import { sendDeliveryPosition } from '@/app/(commerce)/commerce/commandes/actions'
+import { Alert } from '@/components/ui/Alert'
 
 const SEND_INTERVAL_MS = 15000
 
@@ -41,8 +42,7 @@ export function DeliveryPositionSender({ orderId }: { orderId: string }) {
   }, [orderId])
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-      <MapPin className="h-4 w-4 flex-shrink-0" aria-hidden />
+    <Alert tone="info" icon={MapPin}>
       {status === 'sharing' && 'Ta position est partagée avec le client en direct.'}
       {status === 'idle' && 'Activation du partage de position…'}
       {status === 'error' && (
@@ -51,6 +51,6 @@ export function DeliveryPositionSender({ orderId }: { orderId: string }) {
           ton navigateur/téléphone.
         </span>
       )}
-    </div>
+    </Alert>
   )
 }

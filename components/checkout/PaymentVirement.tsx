@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Label } from '@/components/ui/Label'
+import { Alert } from '@/components/ui/Alert'
 import type { BankTransferInfo } from '@/types/database'
 
 interface PaymentVirementProps {
@@ -13,10 +14,10 @@ export function PaymentVirement({ bankInfo }: PaymentVirementProps) {
 
   if (!bankInfo) {
     return (
-      <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+      <Alert tone="warning">
         Les coordonnées bancaires ne sont pas encore configurées. Choisis un autre mode de
         paiement ou réessaie plus tard.
-      </p>
+      </Alert>
     )
   }
 

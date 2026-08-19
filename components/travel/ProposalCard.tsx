@@ -11,6 +11,7 @@ import { CounterOfferForm } from '@/components/travel/CounterOfferForm'
 import { AgreeToOfferButton } from '@/components/travel/AgreeToOfferButton'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { Alert } from '@/components/ui/Alert'
 import { ErrorText } from '@/components/ui/ErrorText'
 import type { BankTransferInfo, TravelProposal, TravelProposalOffer, TravelRequestStatus } from '@/types/database'
 
@@ -95,14 +96,14 @@ export function ProposalCard({
       {error && <ErrorText>{error}</ErrorText>}
 
       {voyageurAgreedAwaitingPayment && viewerRole === 'owner' && (
-        <div className="mt-3 rounded-lg border border-brand-200 bg-brand-50 p-3">
-          <p className="text-sm font-medium text-brand-800">
+        <Alert tone="success" className="mt-3">
+          <p className="font-medium">
             Le voyageur a accepté cette offre — finalise en payant pour conclure.
           </p>
           <div className="mt-2">
             <AcceptProposalPayment requestId={requestId} proposalId={proposal.id} bankInfo={bankInfo} />
           </div>
-        </div>
+        </Alert>
       )}
 
       {voyageurAgreedAwaitingPayment && viewerRole === 'voyageur' && (

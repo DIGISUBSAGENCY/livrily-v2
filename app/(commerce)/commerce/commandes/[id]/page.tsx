@@ -8,6 +8,7 @@ import { DeliveryPositionSender } from '@/components/commerce-dashboard/Delivery
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { Alert } from '@/components/ui/Alert'
 import { formatTND } from '@/lib/format'
 
 interface CommerceOrderPageProps {
@@ -75,15 +76,14 @@ export default async function CommerceOrderDetailPage({ params }: CommerceOrderP
       )}
 
       {prescriptionUrl && (
-        <Card className="mt-4 border-amber-200 bg-amber-50">
-          <h2 className="mb-2 font-semibold text-amber-900">Ordonnance à vérifier</h2>
-          <p className="mb-2 text-sm text-amber-800">
+        <Alert tone="warning" title="Ordonnance à vérifier" className="mt-4">
+          <p className="mb-2">
             Vérifie l&apos;ordonnance avant d&apos;accepter la commande — refuse-la si elle n&apos;est
             pas valide ou lisible.
           </p>
           {/* eslint-disable-next-line @next/next/no-img-element -- URL signée temporaire */}
           <img src={prescriptionUrl} alt="Ordonnance" className="max-h-80 w-full rounded-lg object-contain" />
-        </Card>
+        </Alert>
       )}
 
       <Card className="mt-4">

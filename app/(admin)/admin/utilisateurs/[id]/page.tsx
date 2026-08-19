@@ -10,6 +10,7 @@ import { TravelRequestStatusBadge } from '@/components/travel/TravelRequestStatu
 import { TravelProposalStatusBadge } from '@/components/travel/TravelProposalStatusBadge'
 import { WithdrawalStatusBadge } from '@/components/travel/WithdrawalStatusBadge'
 import { Card } from '@/components/ui/Card'
+import { Alert } from '@/components/ui/Alert'
 import { formatTND } from '@/lib/format'
 import { COUNTRIES } from '@/lib/constants/countries'
 
@@ -159,10 +160,10 @@ export default async function AdminUserDetailPage({ params, searchParams }: User
       </div>
 
       {warning === 'profil_incomplet' && (
-        <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <Alert tone="warning" className="mt-4">
           Compte créé, mais téléphone/adresse/pays n&apos;ont pas pu être enregistrés — complète-les
           ci-dessous.
-        </p>
+        </Alert>
       )}
 
       <Card className="mt-6">
