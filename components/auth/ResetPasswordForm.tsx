@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState } from 'react'
 import { useFormState } from 'react-dom'
 import { resetPassword, type ResetPasswordFormState } from '@/app/(auth)/reset-password/actions'
 import { resendPasswordResetCode } from '@/app/(auth)/forgot-password/actions'
+import { useResendCooldown } from '@/components/auth/useResendCooldown'
 import { Label } from '@/components/ui/Label'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
@@ -18,18 +19,7 @@ export function ResetPasswordForm({ defaultEmail = '' }: { defaultEmail?: string
   // courante du champ, y compris si l'utilisateur la corrige avant de
   // redemander un code.
   const [email, setEmail] = useState(defaultEmail)
-  const [isResending, startResend] = useTransition()
-  const [resendMessage, setResendMessage] = useState<{ text: string; isError: boolean } | null>(null)
-
-  function handleResend() {
-    setResendMessage(null)
-    startResend(async () => {
-      const result = await resendPasswordResetCode(email)
-      setResendMessage(
-        result.error ? { text: result.error, isError: true } : { text: 'Nouveau code envoyé.', isError: false }
-      )
-    })
-  }
+  const resend = useResendCooldown(() => resendPasswordResetCode(email))
 
   return (
     <form action={formAction} className="space-y-4">
@@ -63,18 +53,13 @@ export function ResetPasswordForm({ defaultEmail = '' }: { defaultEmail?: string
             hasError={!!state.error}
             className="flex-1"
           />
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={handleResend}
-            disabled={isResending || !email}
-          >
-            {isResending ? 'Envoi…' : 'Envoyer'}
+          <Button type="button" variant="secondary" onClick={resend.trigger} disabled={resend.disabled || !email}>
+            {resend.label}
           </Button>
         </div>
-        {resendMessage && (
-          <p className={`mt-1.5 text-xs ${resendMessage.isError ? 'text-red-600' : 'text-brand-600'}`}>
-            {resendMessage.text}
+        {resend.message && (
+          <p className={`mt-1.5 text-xs ${resend.message.isError ? 'text-red-600' : 'text-brand-600'}`}>
+            {resend.message.text}
           </p>
         )}
       </div>
