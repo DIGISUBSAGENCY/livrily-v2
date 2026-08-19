@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 
 export const metadata: Metadata = { title: 'Design system — Ledger', robots: { index: false, follow: false } }
 
@@ -30,6 +31,33 @@ export default function DesignSystemPreviewPage() {
             <p className="mt-1 text-sm text-ledger-muted">survole pour voir l&apos;état hover</p>
           </Card>
         </div>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Button</h2>
+        <Card variant="ledger" className="mt-3 space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="ledger-primary">Valider</Button>
+            <Button variant="ledger-secondary">Annuler</Button>
+            <Button variant="ledger-primary" disabled>
+              Valider
+            </Button>
+            <Button variant="ledger-secondary" disabled>
+              Annuler
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="ledger-primary" size="sm">
+              Petit
+            </Button>
+            <Button variant="ledger-primary" size="md">
+              Moyen
+            </Button>
+            <Button variant="ledger-primary" size="lg">
+              Grand
+            </Button>
+          </div>
+        </Card>
       </section>
     </main>
   )
