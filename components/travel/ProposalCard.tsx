@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { ShieldCheck } from 'lucide-react'
 import { withdrawProposal } from '@/app/(client)/jibli/[id]/actions'
 import { TravelProposalStatusBadge } from '@/components/travel/TravelProposalStatusBadge'
@@ -10,6 +11,7 @@ import { AcceptProposalPayment } from '@/components/travel/AcceptProposalPayment
 import { NegotiationThread } from '@/components/travel/NegotiationThread'
 import { CounterOfferForm } from '@/components/travel/CounterOfferForm'
 import { AgreeToOfferButton } from '@/components/travel/AgreeToOfferButton'
+import { IdentityProgressBar } from '@/components/account/IdentityProgressBar'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Alert } from '@/components/ui/Alert'
@@ -17,6 +19,7 @@ import { ErrorText } from '@/components/ui/ErrorText'
 import { formatTND } from '@/lib/format'
 import { formatDeadline } from '@/lib/travel/formatDeadline'
 import { actualGainFromProposal } from '@/lib/travel/estimateGain'
+import type { IdentityGateStatus } from '@/lib/identity'
 import type { BankTransferInfo, TravelProposal, TravelProposalOffer, TravelRequestStatus } from '@/types/database'
 
 type PlatformPaymentInfo = Pick<BankTransferInfo, 'bank_name' | 'account_holder' | 'rib' | 'flouci_phone'>
@@ -35,6 +38,11 @@ interface ProposalCardProps {
   // le voyageur qui a proposé) — cf. RPC is_identity_verified, la ligne
   // identity_verifications elle-même reste privée.
   voyageurVerified?: boolean
+  // Statut KYC du CLIENT (owner) — acceptProposalVirement/
+  // initiateFlouciPayment sont gatées côté serveur (cf. [id]/actions.ts) ;
+  // affiché ici pour ne pas laisser le client échouer une soumission avant
+  // de découvrir qu'il doit d'abord se vérifier.
+  identityStatus?: IdentityGateStatus | null
 }
 
 export function ProposalCard({
@@ -46,6 +54,7 @@ export function ProposalCard({
   viewerRole,
   bankInfo = null,
   voyageurVerified = false,
+  identityStatus = null,
 }: ProposalCardProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -79,6 +88,25 @@ export function ProposalCard({
   const total = proposal.item_price + proposal.delivery_fee
   const gain = actualGainFromProposal(proposal.item_price, proposal.delivery_fee)
   const expiry = proposal.expires_at ? formatDeadline(proposal.expires_at) : null
+
+  const needsIdentityToPay = viewerRole === 'owner' && identityStatus !== null && identityStatus !== 'approved'
+
+  function renderPaymentStep() {
+    if (needsIdentityToPay && identityStatus) {
+      return (
+        <div className="rounded-lg border border-slate-200 p-3">
+          <IdentityProgressBar status={identityStatus} />
+          <p className="mt-3 text-sm text-slate-600">
+            Ton identité doit être vérifiée avant de pouvoir payer et conclure.
+          </p>
+          <Link href="/profil/verification-identite" className="mt-2 inline-block text-sm font-medium text-brand-600 hover:underline">
+            {identityStatus === 'pending' ? 'Voir ma vérification' : 'Vérifier mon identité'}
+          </Link>
+        </div>
+      )
+    }
+    return <AcceptProposalPayment requestId={requestId} proposalId={proposal.id} bankInfo={bankInfo} />
+  }
 
   return (
     <Card className="p-4">
@@ -166,9 +194,7 @@ export function ProposalCard({
           <p className="font-medium">
             Le voyageur a accepté cette offre — finalise en payant pour conclure.
           </p>
-          <div className="mt-2">
-            <AcceptProposalPayment requestId={requestId} proposalId={proposal.id} bankInfo={bankInfo} />
-          </div>
+          <div className="mt-2">{renderPaymentStep()}</div>
         </Alert>
       )}
 
@@ -185,7 +211,7 @@ export function ProposalCard({
       {isMyTurn && (
         <div className="mt-3 space-y-3">
           {viewerRole === 'owner' ? (
-            <AcceptProposalPayment requestId={requestId} proposalId={proposal.id} bankInfo={bankInfo} />
+            renderPaymentStep()
           ) : (
             <AgreeToOfferButton requestId={requestId} proposalId={proposal.id} />
           )}

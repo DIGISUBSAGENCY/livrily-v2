@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/Button'
 import { getPublicStorageUrl } from '@/lib/storage'
 import { pageMetadata } from '@/lib/seo'
 import { estimateSuggestedGain, actualGainFromProposal } from '@/lib/travel/estimateGain'
+import { getIdentityStatus, type IdentityGateStatus } from '@/lib/identity'
 import type { BankTransferInfo, TravelPayment, TravelProposal, TravelProposalOffer } from '@/types/database'
 
 interface TravelRequestPageProps {
@@ -84,12 +85,18 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
   let bankInfo: PlatformPaymentInfo | null = null
   const offersByProposal = new Map<string, TravelProposalOffer[]>()
   let clientName: string | null = null
+  let ownerIdentityStatus: IdentityGateStatus | null = null
 
   if (user) {
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
     profileRole = profile?.role ?? null
 
     if (isOwner) {
+      // Barre de progression KYC affichée avant/à la place du paiement
+      // (acceptProposalVirement/initiateFlouciPayment sont gatées — cf.
+      // [id]/actions.ts) plutôt que de laisser le client échouer une
+      // soumission pour découvrir qu'il doit d'abord se vérifier.
+      ownerIdentityStatus = await getIdentityStatus(supabase, user.id)
       const { data } = await supabase
         .from('travel_proposals')
         .select('*')
@@ -304,6 +311,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
                 viewerRole="owner"
                 bankInfo={bankInfo}
                 voyageurVerified={voyageurVerified.get(proposal.voyageur_id) ?? false}
+                identityStatus={ownerIdentityStatus}
               />
             ))}
           </div>

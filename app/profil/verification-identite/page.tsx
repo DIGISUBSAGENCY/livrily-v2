@@ -4,6 +4,7 @@ import { ShieldCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { VerificationForm } from '@/components/account/VerificationForm'
 import { IdentityStatusBadge } from '@/components/account/IdentityStatusBadge'
+import { IdentityProgressBar } from '@/components/account/IdentityProgressBar'
 import { Card } from '@/components/ui/Card'
 import { Alert } from '@/components/ui/Alert'
 import { pageMetadata } from '@/lib/seo'
@@ -55,6 +56,8 @@ export default async function VerificationIdentitePage() {
           <span className="text-sm font-medium text-slate-700">Statut actuel</span>
           <IdentityStatusBadge status={status} />
         </div>
+
+        <IdentityProgressBar status={status} className="mb-4" />
 
         {status === 'approved' ? (
           <p className="text-sm text-slate-600">
