@@ -12,6 +12,7 @@ import { ConfirmReceiptButton } from '@/components/travel/ConfirmReceiptButton'
 import { CancelRequestButton } from '@/components/travel/CancelRequestButton'
 import { MissionInfoGrid } from '@/components/travel/MissionInfoGrid'
 import { VoyageurGainCard } from '@/components/travel/VoyageurGainCard'
+import { RequestPhotoPlaceholder } from '@/components/travel/RequestPhotoPlaceholder'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { getPublicStorageUrl } from '@/lib/storage'
@@ -229,13 +230,15 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
         </div>
       )}
 
-      {request.item_photo_url && (
+      {request.item_photo_url ? (
         // eslint-disable-next-line @next/next/no-img-element -- photo utilisateur, provenance variable
         <img
           src={getPublicStorageUrl('travel-request-photos', request.item_photo_url)}
           alt={request.item_description}
           className="mt-4 max-h-72 w-full rounded-lg object-cover"
         />
+      ) : (
+        <RequestPhotoPlaceholder className="mt-4 h-48 w-full rounded-lg" iconClassName="h-12 w-12" />
       )}
 
       {request.item_url && (

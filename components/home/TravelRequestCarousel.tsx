@@ -2,8 +2,9 @@
 
 import { useRef, useState } from 'react'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, Package, TrendingUp, Flame, Snowflake } from 'lucide-react'
+import { ChevronLeft, ChevronRight, TrendingUp, Flame, Snowflake } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
+import { RequestPhotoPlaceholder } from '@/components/travel/RequestPhotoPlaceholder'
 import { cn } from '@/lib/utils'
 import { getPublicStorageUrl } from '@/lib/storage'
 import { formatTND } from '@/lib/format'
@@ -79,7 +80,7 @@ export function TravelRequestCarousel({
               className="group w-64 flex-shrink-0 snap-start"
             >
               <Card interactive className="flex h-full flex-col">
-                <div className="relative flex h-32 w-full items-center justify-center overflow-hidden rounded-lg bg-slate-100">
+                <div className="relative h-32 w-full overflow-hidden rounded-lg">
                   {request.item_photo_url ? (
                     // eslint-disable-next-line @next/next/no-img-element -- photos utilisateur, pas d'optimisation next/image nécessaire pour l'instant
                     <img
@@ -88,7 +89,7 @@ export function TravelRequestCarousel({
                       className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
                     />
                   ) : (
-                    <Package className="h-8 w-8 text-slate-400" aria-hidden />
+                    <RequestPhotoPlaceholder className="h-full w-full" iconClassName="h-8 w-8" />
                   )}
                   {trend && (
                     <div

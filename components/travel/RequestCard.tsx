@@ -1,6 +1,7 @@
 import Link from 'next/link'
-import { Package, TrendingUp } from 'lucide-react'
+import { TrendingUp } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
+import { RequestPhotoPlaceholder } from '@/components/travel/RequestPhotoPlaceholder'
 import { getPublicStorageUrl } from '@/lib/storage'
 import { formatTND } from '@/lib/format'
 import { estimateSuggestedGain, actualGainFromProposal } from '@/lib/travel/estimateGain'
@@ -22,7 +23,7 @@ export function RequestCard({ request, ownProposal }: RequestCardProps) {
   return (
     <Link href={`/jibli/${request.id}`} className="group block h-full">
       <Card interactive className="flex h-full items-start gap-4">
-        <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
+        <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg">
           {request.item_photo_url ? (
             // eslint-disable-next-line @next/next/no-img-element -- photos utilisateur, pas d'optimisation next/image nécessaire pour l'instant
             <img
@@ -31,7 +32,7 @@ export function RequestCard({ request, ownProposal }: RequestCardProps) {
               className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
             />
           ) : (
-            <Package className="h-6 w-6 text-slate-400" aria-hidden />
+            <RequestPhotoPlaceholder className="h-full w-full" iconClassName="h-6 w-6" />
           )}
         </div>
         <div className="min-w-0 flex-1">
