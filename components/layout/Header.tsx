@@ -1,10 +1,9 @@
 import Link from 'next/link'
-import { LogOut } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { signOut } from '@/app/(auth)/actions'
 import { Button } from '@/components/ui/Button'
 import { CartLink } from '@/components/cart/CartLink'
 import { MobileNav } from '@/components/layout/MobileNav'
+import { UserMenu } from '@/components/layout/UserMenu'
 
 // Server Component : lit la session une fois par requête et affiche la nav
 // adaptée au rôle. La déconnexion passe par une Server Action (formulaire),
@@ -15,6 +14,7 @@ export async function Header() {
     data: { user },
   } = await supabase.auth.getUser()
 
+  let fullName: string | null = null
   let displayName: string | null = null
   let role: string | null = null
   if (user) {
@@ -23,7 +23,8 @@ export async function Header() {
       .select('full_name, role')
       .eq('id', user.id)
       .single()
-    displayName = profile?.full_name ?? user.email ?? null
+    fullName = profile?.full_name ?? null
+    displayName = fullName ?? user.email ?? null
     role = profile?.role ?? null
   }
 
@@ -66,14 +67,8 @@ export async function Header() {
           {showCart && <CartLink />}
 
           {user ? (
-            <div className="flex items-center gap-3">
-              <span className="hidden text-sm text-slate-600 sm:inline">{displayName}</span>
-              <form action={signOut}>
-                <Button type="submit" variant="ghost" size="sm">
-                  <LogOut className="h-4 w-4" aria-hidden />
-                  <span className="hidden sm:inline">Déconnexion</span>
-                </Button>
-              </form>
+            <div className="hidden sm:block">
+              <UserMenu fullName={fullName} email={user.email ?? null} />
             </div>
           ) : (
             <div className="flex items-center gap-2">

@@ -6,8 +6,8 @@ import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
 
 export const metadata: Metadata = pageMetadata({
-  title: 'Complète ton profil',
-  description: 'Termine la configuration de ton compte Livrily.',
+  title: 'Mon profil',
+  description: 'Consulte et modifie les informations de ton compte Livrily.',
   noIndex: true,
 })
 
@@ -37,9 +37,9 @@ export default async function CompleterProfilPage() {
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-gradient-to-b from-brand-50/50 to-white px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Complète ton profil</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Mon profil</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Ces informations servent à te livrer au bon endroit.
+            Ces informations servent à te livrer au bon endroit — modifie-les à tout moment.
           </p>
         </div>
         <Card>
