@@ -8,27 +8,13 @@ import { Input } from '@/components/ui/Input'
 import { ErrorText } from '@/components/ui/ErrorText'
 import { SubmitButton } from '@/components/ui/SubmitButton'
 
-const initialState: ForgotPasswordFormState = { error: null, success: false }
+const initialState: ForgotPasswordFormState = { error: null }
 
+// Pas d'état de confirmation intermédiaire : en cas de succès, l'action
+// redirige elle-même directement vers /admin/reset-password (email
+// pré-rempli).
 export function AdminForgotPasswordForm() {
   const [state, formAction] = useFormState(adminForgotPassword, initialState)
-
-  if (state.success) {
-    return (
-      <div className="text-center">
-        <p className="text-sm text-slate-700">
-          Un email vient de t&apos;être envoyé avec un code à 8 chiffres. Entre-le sur la page
-          suivante avec ton nouveau mot de passe.
-        </p>
-        <Link
-          href={`/admin/reset-password${state.email ? `?email=${encodeURIComponent(state.email)}` : ''}`}
-          className="mt-4 inline-block text-sm font-medium text-brand-600 transition-colors hover:text-brand-700 hover:underline"
-        >
-          J&apos;ai mon code →
-        </Link>
-      </div>
-    )
-  }
 
   return (
     <form action={formAction} className="space-y-4">

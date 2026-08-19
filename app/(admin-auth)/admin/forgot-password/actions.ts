@@ -1,34 +1,34 @@
 'use server'
 
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { forgotPasswordSchema } from '@/lib/validations/auth'
 
 export interface ForgotPasswordFormState {
   error: string | null
-  success: boolean
-  email?: string
 }
 
-// Toujours le même message de succès, que l'email corresponde ou non à un
-// compte existant — resetPasswordForEmail() de Supabase ne renvoie de toute
-// façon pas d'erreur dans ce cas (comportement anti-énumération intégré),
-// on ne fait donc que refléter fidèlement ce que fait déjà GoTrue.
+export interface ResendCodeResult {
+  error: string | null
+  success: boolean
+}
+
+// Toujours le même comportement de succès, que l'email corresponde ou non
+// à un compte existant — resetPasswordForEmail() de Supabase ne renvoie de
+// toute façon pas d'erreur dans ce cas (comportement anti-énumération
+// intégré), on ne fait que refléter fidèlement ce que fait déjà GoTrue.
 // redirectTo conservé par défense en profondeur (cf. app/(auth)/forgot-
 // password/actions.ts) mais /admin/reset-password se vérifie désormais par
 // code OTP, pas par ce lien.
-export async function adminForgotPassword(
-  _prevState: ForgotPasswordFormState,
-  formData: FormData
-): Promise<ForgotPasswordFormState> {
-  const parsed = forgotPasswordSchema.safeParse({ email: formData.get('email') })
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? 'Adresse email invalide.', success: false }
-  }
-
+//
+// Factorisé (appelé par adminForgotPassword ET resendAdminPasswordResetCode)
+// — même envoi Supabase, seul le comportement après (redirection vs. rester
+// sur place) diffère.
+async function sendAdminPasswordResetEmail(email: string): Promise<{ error: string | null }> {
   const supabase = await createClient()
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
 
-  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${siteUrl}/auth/callback?next=/admin/reset-password`,
   })
 
@@ -44,8 +44,37 @@ export async function adminForgotPassword(
       code: (error as { code?: string }).code,
       name: error.name,
     })
-    return { error: "Impossible d'envoyer l'email pour le moment, réessaie.", success: false }
+    return { error: "Impossible d'envoyer l'email pour le moment, réessaie." }
   }
 
-  return { error: null, success: true, email: parsed.data.email }
+  return { error: null }
+}
+
+// Redirige directement vers /admin/reset-password (email pré-rempli) au
+// lieu d'une page de confirmation intermédiaire.
+export async function adminForgotPassword(
+  _prevState: ForgotPasswordFormState,
+  formData: FormData
+): Promise<ForgotPasswordFormState> {
+  const parsed = forgotPasswordSchema.safeParse({ email: formData.get('email') })
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Adresse email invalide.' }
+  }
+
+  const { error } = await sendAdminPasswordResetEmail(parsed.data.email)
+  if (error) return { error }
+
+  redirect(`/admin/reset-password?email=${encodeURIComponent(parsed.data.email)}`)
+}
+
+// Renvoi du code depuis /admin/reset-password (bouton "Envoyer" à côté du
+// champ code) — même envoi que ci-dessus, sans redirection.
+export async function resendAdminPasswordResetCode(email: string): Promise<ResendCodeResult> {
+  const parsed = forgotPasswordSchema.safeParse({ email })
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Adresse email invalide.', success: false }
+  }
+
+  const { error } = await sendAdminPasswordResetEmail(parsed.data.email)
+  return { error, success: !error }
 }
