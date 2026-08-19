@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import { ExternalLink } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { TravelRequestStatusBadge } from '@/components/travel/TravelRequestStatusBadge'
 import { TravelPaymentStatusBadge } from '@/components/travel/TravelPaymentStatusBadge'
@@ -9,11 +10,13 @@ import { ProposalForm } from '@/components/travel/ProposalForm'
 import { VoyageurStatusActions } from '@/components/travel/VoyageurStatusActions'
 import { ConfirmReceiptButton } from '@/components/travel/ConfirmReceiptButton'
 import { CancelRequestButton } from '@/components/travel/CancelRequestButton'
+import { MissionInfoGrid } from '@/components/travel/MissionInfoGrid'
+import { VoyageurGainCard } from '@/components/travel/VoyageurGainCard'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { formatTND } from '@/lib/format'
 import { getPublicStorageUrl } from '@/lib/storage'
 import { pageMetadata } from '@/lib/seo'
+import { estimateSuggestedGain, actualGainFromProposal } from '@/lib/travel/estimateGain'
 import type { BankTransferInfo, TravelPayment, TravelProposal, TravelProposalOffer } from '@/types/database'
 
 interface TravelRequestPageProps {
@@ -168,6 +171,25 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
   const canConfirmReceipt = isOwner && request.status === 'completed' && !request.client_confirmed_at
   const flouciBanner = flouci ? flouciBannerMessages[flouci] : null
 
+  // Montants réels dès qu'une proposition concrète existe (celle acceptée
+  // pour le client propriétaire, la sienne pour un voyageur) — sinon
+  // estimation dérivée du budget, jamais un montant fixé par la
+  // plateforme : la récompense est proposée par le voyageur puis acceptée
+  // par le client (cf. ProposalForm/createProposal).
+  const acceptedProposal = isOwner ? (proposals.find((p) => p.id === request.accepted_proposal_id) ?? null) : null
+  const rewardBasis =
+    isOwner && acceptedProposal
+      ? { itemPrice: acceptedProposal.item_price, deliveryFee: acceptedProposal.delivery_fee }
+      : !isOwner && myProposal
+        ? { itemPrice: myProposal.item_price, deliveryFee: myProposal.delivery_fee }
+        : null
+  const gain = rewardBasis
+    ? actualGainFromProposal(rewardBasis.itemPrice, rewardBasis.deliveryFee)
+    : estimateSuggestedGain(request.budget_max)
+  // Carte détaillée réservée au voyageur (prospectif ou avec proposition) —
+  // le client voit déjà le détail de chaque proposition via ProposalCard.
+  const showVoyageurGainCard = !isOwner
+
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
       <Link href="/jibli" className="text-sm text-brand-600 transition-colors hover:text-brand-700 hover:underline">
@@ -198,35 +220,34 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
         />
       )}
 
-      <Card className="mt-4 space-y-2 text-sm text-slate-600">
-        <p>
-          <span className="text-slate-500">Trajet : </span>
-          {request.origin_country} → {request.destination_city}
-        </p>
-        <p>
-          <span className="text-slate-500">Budget max : </span>
-          {formatTND(request.budget_max)}
-        </p>
-        {request.needed_by && (
-          <p>
-            <span className="text-slate-500">Date limite : </span>
-            {new Date(request.needed_by).toLocaleDateString('fr-TN')}
-          </p>
-        )}
-        {request.item_url && (
-          <p>
-            <span className="text-slate-500">Lien : </span>
-            <a
-              href={request.item_url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-brand-600 hover:underline"
-            >
-              Voir l&apos;objet
-            </a>
-          </p>
-        )}
-      </Card>
+      {request.item_url && (
+        <a
+          href={request.item_url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:underline"
+        >
+          Voir la fiche produit
+          <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+        </a>
+      )}
+
+      <div className="mt-4">
+        <MissionInfoGrid
+          originCountry={request.origin_country}
+          destinationCity={request.destination_city}
+          neededBy={request.needed_by}
+          budgetMax={request.budget_max}
+          rewardBasis={rewardBasis}
+          gain={gain}
+        />
+      </div>
+
+      {showVoyageurGainCard && (
+        <div className="mt-4">
+          <VoyageurGainCard rewardBasis={rewardBasis} gain={gain} />
+        </div>
+      )}
 
       {isOwner && request.status === 'open' && (
         <div className="mt-4">
@@ -247,7 +268,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
 
       {isAcceptedVoyageur && (
         <Card className="mt-4">
-          <h2 className="mb-3 font-semibold text-slate-900">Ta livraison</h2>
+          <h2 className="mb-3 font-semibold text-slate-900">Suivi de la mission</h2>
           <VoyageurStatusActions requestId={request.id} status={request.status} />
         </Card>
       )}
