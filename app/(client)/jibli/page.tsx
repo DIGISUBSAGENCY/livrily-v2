@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Plane, Package, ClipboardList, Inbox, Luggage } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { RequestCard } from '@/components/travel/RequestCard'
-import { RequestFilters } from '@/components/travel/RequestFilters'
+import { RequestFilters, type RequestSort } from '@/components/travel/RequestFilters'
 import { DashboardStatCard } from '@/components/travel/DashboardStatCard'
 import { MyRequestsPreview } from '@/components/travel/MyRequestsPreview'
 import { MyProposalsPreview } from '@/components/travel/MyProposalsPreview'
@@ -21,24 +21,70 @@ export const metadata: Metadata = pageMetadata({
     "Demande à un voyageur de te ramener un objet de l'étranger, ou rentabilise ton prochain voyage en le ramenant toi-même. Paiement sécurisé, en séquestre jusqu'à réception.",
 })
 
+// Seuil du chip "Bon prix" — faute de volume réel pour calibrer un seuil
+// dynamique, constante documentée simple (même approche que
+// SUGGESTED_FEE_RATE dans lib/travel/estimateGain.ts), à ajuster une fois
+// qu'on a des données de distribution des budgets.
+const GOOD_PRICE_THRESHOLD_TND = 100
+// Fenêtre du chip "Départ bientôt" : demandes dont la date limite tombe
+// dans les 14 prochains jours.
+const SOON_WINDOW_DAYS = 14
+
 interface JibliPageProps {
-  searchParams: Promise<{ origin?: string; destination?: string }>
+  searchParams: Promise<{
+    origin?: string
+    destination?: string
+    soon?: string
+    good_price?: string
+    budget_min?: string
+    budget_max?: string
+    needed_before?: string
+    sort?: string
+  }>
 }
 
 export default async function JibliHomePage({ searchParams }: JibliPageProps) {
-  const { origin, destination } = await searchParams
+  const {
+    origin,
+    destination,
+    soon,
+    good_price: goodPrice,
+    budget_min: budgetMin,
+    budget_max: budgetMax,
+    needed_before: neededBefore,
+    sort: sortParam,
+  } = await searchParams
+  const sort: RequestSort = sortParam === 'price_desc' || sortParam === 'deadline_asc' ? sortParam : 'recent'
   const supabase = await createClient()
 
-  let query = supabase
-    .from('travel_requests')
-    .select('*')
-    .eq('status', 'open')
-    .order('created_at', { ascending: false })
+  let query = supabase.from('travel_requests').select('*').eq('status', 'open')
 
   if (origin) query = query.ilike('origin_country', `%${origin}%`)
   if (destination) query = query.ilike('destination_city', `%${destination}%`)
+  if (soon === '1') {
+    const soonThreshold = new Date(Date.now() + SOON_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    query = query.not('needed_by', 'is', null).lte('needed_by', soonThreshold)
+  }
+  if (goodPrice === '1') query = query.gte('budget_max', GOOD_PRICE_THRESHOLD_TND)
+  if (budgetMin) query = query.gte('budget_max', Number(budgetMin))
+  if (budgetMax) query = query.lte('budget_max', Number(budgetMax))
+  if (neededBefore) query = query.not('needed_by', 'is', null).lte('needed_by', neededBefore)
+
+  if (sort === 'price_desc') query = query.order('budget_max', { ascending: false })
+  else if (sort === 'deadline_asc') query = query.order('needed_by', { ascending: true, nullsFirst: false })
+  else query = query.order('created_at', { ascending: false })
 
   const { data: requests, error } = await query
+
+  const hasActiveFilters = Boolean(
+    origin || destination || soon === '1' || goodPrice === '1' || budgetMin || budgetMax || neededBefore
+  )
+
+  // Pays d'origine des demandes ouvertes, pour les chips de route rapides
+  // (RequestFilters) — requête séparée, non filtrée par les filtres
+  // courants, pour que la liste de chips reste stable pendant qu'on filtre.
+  const { data: openRequestsOrigins } = await supabase.from('travel_requests').select('origin_country').eq('status', 'open')
+  const availableCountries = Array.from(new Set((openRequestsOrigins ?? []).map((r) => r.origin_country))).sort()
 
   // Propositions du voyageur courant sur les demandes affichées, pour
   // remplacer l'estimation par le gain réel sur sa propre carte (cf. RLS :
@@ -200,20 +246,45 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
       </div>
 
       <div id="demandes-ouvertes" className="mt-6 scroll-mt-20">
-        <RequestFilters defaultOrigin={origin ?? ''} defaultDestination={destination ?? ''} />
+        <RequestFilters
+          defaultOrigin={origin ?? ''}
+          defaultDestination={destination ?? ''}
+          defaultSoon={soon === '1'}
+          defaultGoodPrice={goodPrice === '1'}
+          defaultBudgetMin={budgetMin ?? ''}
+          defaultBudgetMax={budgetMax ?? ''}
+          defaultNeededBefore={neededBefore ?? ''}
+          defaultSort={sort}
+          availableCountries={availableCountries}
+        />
       </div>
 
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger les demandes.</p>}
 
+      {!error && requests && (
+        <p className="mt-6 text-sm text-slate-500">
+          {requests.length} demande{requests.length !== 1 ? 's' : ''} trouvée{requests.length !== 1 ? 's' : ''}
+        </p>
+      )}
+
       {!error && requests && requests.length === 0 && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
+        <div className="mt-10 flex flex-col items-center text-center text-slate-500">
           <Package className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
-          <p>Aucune demande ouverte pour l&apos;instant.</p>
+          {hasActiveFilters ? (
+            <>
+              <p>Aucune demande ne correspond à ces filtres.</p>
+              <Link href="/jibli" className="mt-3 text-sm font-medium text-brand-600 hover:underline">
+                Réinitialiser les filtres
+              </Link>
+            </>
+          ) : (
+            <p>Aucune demande ouverte pour l&apos;instant.</p>
+          )}
         </div>
       )}
 
       {!error && requests && requests.length > 0 && (
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {requests.map((request) => (
             <RequestCard
               key={request.id}
