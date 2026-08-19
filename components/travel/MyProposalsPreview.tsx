@@ -30,7 +30,10 @@ export function MyProposalsPreview({ proposals, requestById, totalCount }: MyPro
         <Card className="flex flex-col items-center py-10 text-center text-slate-500">
           <Luggage className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
           <p>Tu n&apos;as encore fait aucune proposition.</p>
-          <p className="mt-1 text-sm">Parcours les demandes ouvertes ci-dessous pour en faire une.</p>
+          <p className="mt-1 text-sm">Parcours les demandes ouvertes pour en faire une.</p>
+          <a href="#demandes-ouvertes" className="mt-3 text-sm font-medium text-brand-600 hover:underline">
+            Voir les demandes ouvertes
+          </a>
         </Card>
       )}
 

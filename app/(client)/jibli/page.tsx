@@ -7,6 +7,7 @@ import { RequestFilters } from '@/components/travel/RequestFilters'
 import { DashboardStatCard } from '@/components/travel/DashboardStatCard'
 import { MyRequestsPreview } from '@/components/travel/MyRequestsPreview'
 import { MyProposalsPreview } from '@/components/travel/MyProposalsPreview'
+import { ReceivedProposalsPreview } from '@/components/travel/ReceivedProposalsPreview'
 import { Button } from '@/components/ui/Button'
 import { IdentityBanner } from '@/components/account/IdentityBanner'
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour'
@@ -73,6 +74,9 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
   let myProposals: TravelProposal[] = []
   let myProposalsTotal = 0
   let myProposalsRequestById = new Map<string, { item_description: string; status: TravelRequestStatus }>()
+  let receivedProposals: TravelProposal[] = []
+  let receivedVoyageurNames = new Map<string, string>()
+  let receivedRequestItemById = new Map<string, string>()
 
   if (user) {
     const { data: profile } = await supabase
@@ -102,11 +106,26 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
 
       const myRequestIds = (allMyRequests ?? []).map((r) => r.id)
       if (myRequestIds.length > 0) {
-        const { count } = await supabase
+        const { data: allReceivedProposals, count } = await supabase
           .from('travel_proposals')
-          .select('id', { count: 'exact', head: true })
+          .select('*', { count: 'exact' })
           .in('request_id', myRequestIds)
+          .order('created_at', { ascending: false })
         proposalsReceivedCount = count ?? 0
+        receivedProposals = (allReceivedProposals ?? []).slice(0, 3)
+
+        receivedRequestItemById = new Map(
+          (allMyRequests ?? []).map((r) => [r.id, r.item_description])
+        )
+
+        const voyageurIds = Array.from(new Set(receivedProposals.map((p) => p.voyageur_id)))
+        if (voyageurIds.length > 0) {
+          const { data: voyageurProfiles } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', voyageurIds)
+          receivedVoyageurNames = new Map((voyageurProfiles ?? []).map((p) => [p.id, p.full_name ?? 'Voyageur']))
+        }
       }
 
       const previewRequestIds = Array.from(new Set(myProposals.map((p) => p.request_id)))
@@ -134,8 +153,15 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
             <DashboardStatCard icon={Luggage} value={myProposalsTotal} label="Mes propositions envoyées" />
           </div>
 
-          <div className="grid gap-6 sm:grid-cols-2">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             <MyRequestsPreview requests={myRequests} totalCount={myRequestsTotal} />
+            <ReceivedProposalsPreview
+              proposals={receivedProposals}
+              voyageurNames={receivedVoyageurNames}
+              requestItemById={receivedRequestItemById}
+              totalCount={proposalsReceivedCount}
+              hasAnyRequest={myRequestsTotal > 0}
+            />
             <MyProposalsPreview proposals={myProposals} requestById={myProposalsRequestById} totalCount={myProposalsTotal} />
           </div>
         </div>
@@ -173,7 +199,7 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
         </div>
       </div>
 
-      <div className="mt-6">
+      <div id="demandes-ouvertes" className="mt-6 scroll-mt-20">
         <RequestFilters defaultOrigin={origin ?? ''} defaultDestination={destination ?? ''} />
       </div>
 
