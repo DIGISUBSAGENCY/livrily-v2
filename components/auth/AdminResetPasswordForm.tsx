@@ -50,7 +50,7 @@ export function AdminResetPasswordForm({ defaultEmail = '' }: { defaultEmail?: s
             hasError={!!state.error}
             className="flex-1"
           />
-          <Button type="button" variant="secondary" onClick={resend.trigger} disabled={resend.disabled || !email}>
+          <Button type="button" onClick={resend.trigger} disabled={resend.disabled || !email}>
             {resend.label}
           </Button>
         </div>
