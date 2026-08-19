@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
 
 export const metadata: Metadata = { title: 'Design system — Ledger', robots: { index: false, follow: false } }
 
@@ -57,6 +58,27 @@ export default function DesignSystemPreviewPage() {
               Grand
             </Button>
           </div>
+        </Card>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Badge</h2>
+        <Card variant="ledger" className="mt-3 flex flex-wrap items-center gap-2">
+          <Badge variant="ledger" tone="neutral">
+            En attente
+          </Badge>
+          <Badge variant="ledger" tone="success">
+            Livrée
+          </Badge>
+          <Badge variant="ledger" tone="warning">
+            À vérifier
+          </Badge>
+          <Badge variant="ledger" tone="danger">
+            Rejetée
+          </Badge>
+          <Badge variant="ledger" tone="info">
+            En cours
+          </Badge>
         </Card>
       </section>
     </main>
