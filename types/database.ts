@@ -652,6 +652,10 @@ export interface Database {
         Args: { p_proposal_id: string }
         Returns: undefined
       }
+      is_identity_verified: {
+        Args: { p_profile_id: string }
+        Returns: boolean
+      }
     }
   }
 }

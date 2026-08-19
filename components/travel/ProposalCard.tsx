@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { ShieldCheck } from 'lucide-react'
 import { withdrawProposal } from '@/app/(client)/jibli/[id]/actions'
 import { TravelProposalStatusBadge } from '@/components/travel/TravelProposalStatusBadge'
 import { ProposalAmounts } from '@/components/travel/ProposalAmounts'
@@ -13,6 +14,9 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Alert } from '@/components/ui/Alert'
 import { ErrorText } from '@/components/ui/ErrorText'
+import { formatTND } from '@/lib/format'
+import { formatDeadline } from '@/lib/travel/formatDeadline'
+import { actualGainFromProposal } from '@/lib/travel/estimateGain'
 import type { BankTransferInfo, TravelProposal, TravelProposalOffer, TravelRequestStatus } from '@/types/database'
 
 type PlatformPaymentInfo = Pick<BankTransferInfo, 'bank_name' | 'account_holder' | 'rib' | 'flouci_phone'>
@@ -27,6 +31,10 @@ interface ProposalCardProps {
   otherPartyName: string
   viewerRole: 'owner' | 'voyageur'
   bankInfo?: PlatformPaymentInfo | null
+  // Uniquement pertinent pour viewerRole="owner" (badge de confiance sur
+  // le voyageur qui a proposé) — cf. RPC is_identity_verified, la ligne
+  // identity_verifications elle-même reste privée.
+  voyageurVerified?: boolean
 }
 
 export function ProposalCard({
@@ -37,6 +45,7 @@ export function ProposalCard({
   otherPartyName,
   viewerRole,
   bankInfo = null,
+  voyageurVerified = false,
 }: ProposalCardProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -64,23 +73,80 @@ export function ProposalCard({
   const voyageurAgreedAwaitingPayment =
     negotiationActive && proposal.last_offer_by === 'client' && Boolean(proposal.terms_confirmed_by)
 
+  // "Total payé" seulement une fois réellement accepté (accept_travel_proposal
+  // crée le paiement séquestre dans la même transaction) — sinon "proposé",
+  // pour ne jamais laisser croire qu'un paiement a eu lieu.
+  const total = proposal.item_price + proposal.delivery_fee
+  const gain = actualGainFromProposal(proposal.item_price, proposal.delivery_fee)
+  const expiry = proposal.expires_at ? formatDeadline(proposal.expires_at) : null
+
   return (
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
-        {viewerRole === 'owner' ? <p className="font-medium text-slate-900">{otherPartyName}</p> : <span />}
+        {viewerRole === 'owner' ? (
+          <div className="flex items-center gap-1.5">
+            <p className="font-medium text-slate-900">{otherPartyName}</p>
+            {voyageurVerified && (
+              <span
+                title="Identité vérifiée"
+                className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700"
+              >
+                <ShieldCheck className="h-3 w-3" aria-hidden />
+                Voyageur vérifié
+              </span>
+            )}
+          </div>
+        ) : (
+          <span />
+        )}
         <TravelProposalStatusBadge status={proposal.status} />
       </div>
 
-      {proposal.travel_date && (
-        <p className="mt-1 text-sm text-slate-500">
-          Retour prévu le {new Date(proposal.travel_date).toLocaleDateString('fr-TN')}
-        </p>
-      )}
+      <div className="mt-3 grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-3">
+        <div>
+          <p className="text-xs text-slate-500">{proposal.status === 'accepted' ? 'Total payé' : 'Total proposé'}</p>
+          <p className="font-semibold text-slate-900">{formatTND(total)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500">Gain voyageur</p>
+          <p className="font-semibold text-brand-700">
+            {formatTND(gain.amount)} <span className="text-xs font-normal text-slate-400">(+{gain.percentOfItemPrice}%)</span>
+          </p>
+        </div>
+      </div>
 
       <div className="mt-3">
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Offre actuelle</p>
         <ProposalAmounts itemPrice={proposal.item_price} deliveryFee={proposal.delivery_fee} />
       </div>
+
+      <details className="mt-3">
+        <summary className="cursor-pointer text-sm text-brand-600 hover:underline">Détails</summary>
+        <div className="mt-2 space-y-1 text-sm text-slate-600">
+          {proposal.pickup_city && (
+            <p>
+              <span className="text-slate-400">Ville de départ : </span>
+              {proposal.pickup_city}
+            </p>
+          )}
+          {proposal.travel_date && (
+            <p>
+              <span className="text-slate-400">Date de livraison : </span>
+              {new Date(proposal.travel_date).toLocaleDateString('fr-TN')}
+            </p>
+          )}
+          <p>
+            <span className="text-slate-400">Envoyée le : </span>
+            {new Date(proposal.created_at).toLocaleDateString('fr-TN')}
+          </p>
+          {expiry && (
+            <p>
+              <span className="text-slate-400">Expire dans : </span>
+              {expiry.countdown}
+            </p>
+          )}
+        </div>
+      </details>
 
       {offers.length > 1 && (
         <details className="mt-3">

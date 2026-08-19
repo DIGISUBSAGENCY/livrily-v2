@@ -2531,6 +2531,28 @@ create policy "identity_verifications_update_admin_only"
   on public.identity_verifications for update
   using (public.is_admin());
 
+-- Expose un simple booléen ("Voyageur vérifié" sur ProposalCard) sans
+-- donner accès à la ligne identity_verifications elle-même (documents,
+-- raison de refus...) — la policy select ci-dessus reste stricte
+-- (profile_id = auth.uid() or admin), ce RPC est la seule fuite volontaire
+-- et minimale vers les autres utilisateurs.
+create or replace function public.is_identity_verified(p_profile_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+stable
+as $$
+begin
+  return exists (
+    select 1 from public.identity_verifications
+    where profile_id = p_profile_id and status = 'approved'
+  );
+end;
+$$;
+
+grant execute on function public.is_identity_verified(uuid) to authenticated;
+
 -- Upsert la vérification du compte appelant : toujours remise à 'pending',
 -- champs de revue vidés (une resoumission après rejet doit repasser par un
 -- examen complet, pas garder l'ancien statut/raison affichés par erreur).

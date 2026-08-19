@@ -1,6 +1,7 @@
 import { MapPin, CalendarClock, Wallet, Receipt } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
+import { formatDeadline } from '@/lib/travel/formatDeadline'
 import type { GainEstimate } from '@/lib/travel/estimateGain'
 
 interface MissionInfoGridProps {
@@ -16,18 +17,6 @@ interface MissionInfoGridProps {
   // client, jamais un montant fixé par la plateforme.
   rewardBasis: { itemPrice: number; deliveryFee: number } | null
   gain: GainEstimate
-}
-
-function formatDeadline(neededBy: string) {
-  const target = new Date(neededBy)
-  const diffDays = Math.ceil((target.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-  const dateLabel = target.toLocaleDateString('fr-TN')
-  let countdown: string
-  if (diffDays < 0) countdown = 'Dépassée'
-  else if (diffDays === 0) countdown = "Aujourd'hui"
-  else if (diffDays === 1) countdown = 'Demain'
-  else countdown = `Dans ${diffDays} jours`
-  return { dateLabel, countdown }
 }
 
 function InfoTile({

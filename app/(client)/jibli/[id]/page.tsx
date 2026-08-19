@@ -78,6 +78,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
   let profileRole: string | null = null
   let proposals: TravelProposal[] = []
   let voyageurNames = new Map<string, string>()
+  let voyageurVerified = new Map<string, boolean>()
   let myProposal: TravelProposal | null = null
   let payment: TravelPayment | null = null
   let bankInfo: PlatformPaymentInfo | null = null
@@ -103,6 +104,16 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
           .select('id, full_name')
           .in('id', voyageurIds)
         voyageurNames = new Map((voyageurProfiles ?? []).map((p) => [p.id, p.full_name ?? 'Voyageur']))
+
+        // Badge "Voyageur vérifié" — la ligne identity_verifications reste
+        // privée (RLS), ce RPC n'expose qu'un booléen par voyageur.
+        const verifiedEntries = await Promise.all(
+          voyageurIds.map(async (voyageurId) => {
+            const { data } = await supabase.rpc('is_identity_verified', { p_profile_id: voyageurId })
+            return [voyageurId, data === true] as const
+          })
+        )
+        voyageurVerified = new Map(verifiedEntries)
       }
 
       // Historique de négociation de chaque fil (une seule requête groupée,
@@ -292,6 +303,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
                 otherPartyName={voyageurNames.get(proposal.voyageur_id) ?? 'Voyageur'}
                 viewerRole="owner"
                 bankInfo={bankInfo}
+                voyageurVerified={voyageurVerified.get(proposal.voyageur_id) ?? false}
               />
             ))}
           </div>
