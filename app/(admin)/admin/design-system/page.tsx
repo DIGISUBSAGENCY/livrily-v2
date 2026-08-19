@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
+import { Package, Truck, Wallet } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { StatCard } from '@/components/ui/StatCard'
 
 export const metadata: Metadata = { title: 'Design system — Ledger', robots: { index: false, follow: false } }
 
@@ -80,6 +82,15 @@ export default function DesignSystemPreviewPage() {
             En cours
           </Badge>
         </Card>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">StatCard</h2>
+        <div className="mt-3 grid gap-4 sm:grid-cols-3">
+          <StatCard variant="ledger" icon={Package} value={128} label="Commandes ce mois" />
+          <StatCard variant="ledger" icon={Truck} value={7} label="En cours de livraison" />
+          <StatCard variant="ledger" icon={Wallet} value="4 280 TND" label="Chiffre d'affaires" accent />
+        </div>
       </section>
     </main>
   )
