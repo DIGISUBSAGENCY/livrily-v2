@@ -53,7 +53,12 @@ export function ResetPasswordForm({ defaultEmail = '' }: { defaultEmail?: string
             hasError={!!state.error}
             className="flex-1"
           />
-          <Button type="button" onClick={resend.trigger} disabled={resend.disabled || !email}>
+          <Button
+            type="button"
+            onClick={resend.trigger}
+            disabled={resend.disabled || !email}
+            className="disabled:bg-brand-600 disabled:shadow-soft"
+          >
             {resend.label}
           </Button>
         </div>
