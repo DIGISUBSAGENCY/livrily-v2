@@ -11,7 +11,7 @@ interface UserMenuProps {
 }
 
 const menuItems = [
-  { href: '/profil/completer', label: 'Mon profil', icon: User },
+  { href: '/profil', label: 'Mon profil', icon: User },
   { href: '/profil/parametres', label: 'Paramètres du compte', icon: Settings },
   { href: '/commandes', label: 'Mon activité', icon: ClipboardList },
   { href: '/profil/litiges', label: 'Mes litiges', icon: AlertTriangle },

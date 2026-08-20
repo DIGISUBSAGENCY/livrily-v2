@@ -51,6 +51,9 @@ export interface Database {
           profession: string | null
           address_lat: number | null
           address_lng: number | null
+          avatar_url: string | null
+          cover_url: string | null
+          bio: string | null
           is_active: boolean
           referral_code: string | null
           referred_by: string | null
@@ -72,6 +75,9 @@ export interface Database {
           profession?: string | null
           address_lat?: number | null
           address_lng?: number | null
+          avatar_url?: string | null
+          cover_url?: string | null
+          bio?: string | null
           is_active?: boolean
           referral_code?: string | null
           referred_by?: string | null

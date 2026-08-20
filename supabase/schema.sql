@@ -173,6 +173,11 @@ alter table public.profiles add column if not exists onesignal_player_id text;
 alter table public.profiles add column if not exists country text;
 alter table public.profiles add column if not exists profession text;
 alter table public.profiles add column if not exists onboarding_seen_at timestamptz;
+-- Page /profil (bandeau + avatar + présentation) — cf. bucket profile-photos
+-- plus bas dans ce fichier pour le stockage des images elles-mêmes.
+alter table public.profiles add column if not exists avatar_url text;
+alter table public.profiles add column if not exists cover_url text;
+alter table public.profiles add column if not exists bio text;
 
 create index if not exists profiles_role_idx on public.profiles(role);
 
@@ -2415,6 +2420,39 @@ create policy "travel_photos_delete_own_folder"
   on storage.objects for delete
   using (
     bucket_id = 'travel-request-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- ============================================================================
+-- Storage : bucket profile-photos (avatar + cover, publics)
+-- ============================================================================
+-- Public comme travel-request-photos : avatar/cover sont affichés à tout
+-- visiteur consultant un profil. Un seul bucket pour les deux types de
+-- photo, différenciés par le nom de fichier (ex: {user_id}/avatar.jpg,
+-- {user_id}/cover.jpg) — le 1er segment du chemin reste l'user_id, donc les
+-- policies "dossier perso" ci-dessous s'appliquent aux deux sans distinction.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('profile-photos', 'profile-photos', true, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do nothing;
+
+drop policy if exists "profile_photos_insert_own_folder" on storage.objects;
+create policy "profile_photos_insert_own_folder"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'profile-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "profile_photos_select_public" on storage.objects;
+create policy "profile_photos_select_public"
+  on storage.objects for select
+  using (bucket_id = 'profile-photos');
+
+drop policy if exists "profile_photos_delete_own_folder" on storage.objects;
+create policy "profile_photos_delete_own_folder"
+  on storage.objects for delete
+  using (
+    bucket_id = 'profile-photos'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
 

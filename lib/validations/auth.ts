@@ -98,3 +98,15 @@ export const profileSchema = z.object({
   address_lat: optionalCoordinate(-90, 90),
   address_lng: optionalCoordinate(-180, 180),
 })
+
+// Édité en ligne sur /profil (pas dans ProfileForm) : contrairement au
+// reste du profil, la bio n'a pas de valeur "requise" ni de redirection
+// après sauvegarde — juste un texte libre, court, optionnel.
+export const bioSchema = z.object({
+  bio: z
+    .string()
+    .trim()
+    .max(280, 'La présentation est limitée à 280 caractères.')
+    .optional()
+    .transform((v) => (v ? v : null)),
+})
