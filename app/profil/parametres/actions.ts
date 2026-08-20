@@ -1,5 +1,6 @@
 'use server'
 
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { changePasswordSchema } from '@/lib/validations/auth'
 
@@ -77,4 +78,38 @@ export async function resendEmailConfirmation(): Promise<ResendResult> {
   }
 
   return { error: null, success: true }
+}
+
+export interface DeactivateAccountResult {
+  error: string | null
+}
+
+// Sans champ de formulaire à lire (juste un bouton de confirmation), donc
+// pas de useFormState ici — même forme que resendEmailConfirmation
+// ci-dessus, appelée directement via useTransition côté client
+// (DangerZone.tsx). Désactivation réversible (is_active=false), pas une
+// suppression réelle — décision explicite (destructif + irréversible mis
+// de côté pour un chantier séparé si voulu). Même garde-fou déjà en place
+// côté signIn() (cf. app/(auth)/actions.ts : un compte is_active=false est
+// déconnecté et rejeté à la prochaine tentative de connexion) — un admin
+// peut réactiver depuis /admin/utilisateurs/[id] (UserStatusToggle), rien
+// n'est perdu.
+export async function deactivateAccount(): Promise<DeactivateAccountResult> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: 'Session expirée, reconnecte-toi.' }
+  }
+
+  const { error } = await supabase.from('profiles').update({ is_active: false }).eq('id', user.id)
+  if (error) {
+    return { error: 'Impossible de désactiver le compte, réessaie.' }
+  }
+
+  await supabase.auth.signOut()
+  redirect('/')
 }
