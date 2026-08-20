@@ -17,9 +17,12 @@ export const metadata: Metadata = pageMetadata({
 })
 
 // Pourquoi cette vérification (texte repris de l'étape 2 de l'onboarding,
-// même explication partout) : elle sert à générer un contrat entre le
-// client, le voyageur et Livrily, qui protège les deux parties en cas de
-// litige — pas une formalité administrative gratuite.
+// même explication partout) : sur Livrily la livraison se fait
+// directement entre client et voyageur, sans intermédiaire — le paiement
+// reste séquestré jusqu'à confirmation de réception. Vérifier l'identité
+// des deux parties avant qu'un paiement réel soit engagé protège autant
+// le client que le voyageur contre la fraude — pas une formalité
+// administrative gratuite.
 export default async function VerificationIdentitePage() {
   const supabase = await createClient()
 
@@ -45,9 +48,9 @@ export default async function VerificationIdentitePage() {
         </div>
         <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900">Vérification d&apos;identité</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Cette vérification (~2 min) sert à générer un contrat entre toi, le voyageur et Livrily,
-          qui protège les deux parties en cas de litige. Obligatoire avant de publier une demande
-          ou d&apos;accepter une offre.
+          Cette vérification (~2 min) sécurise l&apos;échange direct entre client et voyageur — ton
+          paiement reste séquestré jusqu&apos;à la confirmation de réception. Obligatoire avant de
+          publier une demande ou d&apos;accepter une offre.
         </p>
       </div>
 

@@ -73,8 +73,9 @@ export default function CommentCaMarchePage() {
         </div>
         <p className="mt-4 text-center text-sm text-slate-500">
           Une vérification d&apos;identité (~2 min) est requise avant de publier une demande ou
-          d&apos;accepter une offre — elle sert à générer un contrat entre toi, le voyageur et
-          Livrily, qui protège les deux parties.
+          d&apos;accepter une offre — la livraison se fait directement entre client et voyageur,
+          sans intermédiaire, et vérifier l&apos;identité des deux parties protège tout le monde
+          avant qu&apos;un paiement réel soit engagé.
         </p>
         <div className="mt-5 text-center">
           <Link href="/jibli">

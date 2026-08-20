@@ -18,7 +18,7 @@ const steps = [
     icon: ShieldCheck,
     title: 'Vérifie ton identité',
     description:
-      "Avant ta première transaction, on te demande ta pièce d'identité et un selfie (~2 min). Ça sert à générer un contrat entre toi, le voyageur et Livrily, qui protège les deux parties en cas de litige.",
+      "Avant ta première transaction, on te demande ta pièce d'identité et un selfie (~2 min). Sur Livrily, la livraison se fait directement entre client et voyageur, sans intermédiaire — vérifier l'identité des deux parties avant qu'un paiement réel soit engagé protège tout le monde.",
   },
   {
     // Reformulé pour rester honnête : pas de cloche en app pour l'instant,
