@@ -40,6 +40,14 @@ export async function createProposal(
 
   if (!user) redirect(`/login?next=/jibli/${requestId}`)
 
+  // Nouveau gate (n'existait pas avant) : faire une proposition engage
+  // autant le voyageur que publier une demande engage le client — même
+  // exigence KYC que createTravelRequest/acceptProposalVirement.
+  const identityStatus = await getIdentityStatus(supabase, user.id)
+  if (!isIdentityVerified(identityStatus)) {
+    return { error: "Vérifie ton identité avant de faire une proposition (page Profil)." }
+  }
+
   const parsed = travelProposalSchema.safeParse({
     item_price: formData.get('item_price'),
     delivery_fee: formData.get('delivery_fee'),

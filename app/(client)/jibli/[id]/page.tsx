@@ -14,6 +14,7 @@ import { MissionInfoGrid } from '@/components/travel/MissionInfoGrid'
 import { VoyageurGainCard } from '@/components/travel/VoyageurGainCard'
 import { RequestPhotoPlaceholder } from '@/components/travel/RequestPhotoPlaceholder'
 import { DisputeForm } from '@/components/travel/DisputeForm'
+import { IdentityRequiredModal } from '@/components/account/IdentityRequiredModal'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { getPublicStorageUrl } from '@/lib/storage'
@@ -88,6 +89,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
   const offersByProposal = new Map<string, TravelProposalOffer[]>()
   let clientName: string | null = null
   let ownerIdentityStatus: IdentityGateStatus | null = null
+  let voyageurIdentityStatus: IdentityGateStatus | null = null
 
   if (user) {
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
@@ -150,6 +152,12 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
         bankInfo = activeBankInfo
       }
     } else {
+      // Même barre/modal KYC que côté client (createProposal est
+      // désormais gatée, cf. actions.ts) — récupéré même si canPropose
+      // s'avère faux plus bas (myProposal déjà posée, etc.), coût
+      // négligeable, évite un second aller-retour conditionnel.
+      voyageurIdentityStatus = await getIdentityStatus(supabase, user.id)
+
       const { data } = await supabase
         .from('travel_proposals')
         .select('*')
@@ -346,10 +354,15 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
       )}
 
       {canPropose && (
-        <Card className="mt-6">
-          <h2 className="mb-3 font-semibold text-slate-900">Faire une proposition</h2>
-          <ProposalForm requestId={request.id} />
-        </Card>
+        <>
+          <IdentityRequiredModal
+            defaultOpen={voyageurIdentityStatus === 'unverified' || voyageurIdentityStatus === 'rejected'}
+          />
+          <Card className="mt-6">
+            <h2 className="mb-3 font-semibold text-slate-900">Faire une proposition</h2>
+            <ProposalForm requestId={request.id} />
+          </Card>
+        </>
       )}
 
       {mustLoginToPropose && (

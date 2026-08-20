@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { RequestForm } from '@/components/travel/RequestForm'
 import { IdentityProgressBar } from '@/components/account/IdentityProgressBar'
+import { IdentityRequiredModal } from '@/components/account/IdentityRequiredModal'
 import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
 import { createClient } from '@/lib/supabase/server'
@@ -26,6 +27,8 @@ export default async function NewTravelRequestPage() {
 
   return (
     <main className="mx-auto max-w-lg px-4 py-8">
+      <IdentityRequiredModal defaultOpen={identityStatus === 'unverified' || identityStatus === 'rejected'} />
+
       <Link href="/jibli" className="text-sm text-brand-600 transition-colors hover:text-brand-700 hover:underline">
         ← Jibli chay men l&apos;a5er
       </Link>
