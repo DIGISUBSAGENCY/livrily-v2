@@ -12,6 +12,7 @@ const VALIDITY_DURATIONS_MS: Record<ProposalValidity, number> = {
 }
 import { generateFlouciPayment, isFlouciConfigured, tndToMillimes, FlouciConfigError, FlouciApiError } from '@/lib/flouci'
 import { getIdentityStatus, isIdentityVerified } from '@/lib/identity'
+import { disputeSchema } from '@/lib/validations/disputes'
 
 export interface ProposalFormState {
   error: string | null
@@ -19,6 +20,11 @@ export interface ProposalFormState {
 
 export interface ActionResult {
   error: string | null
+}
+
+export interface DisputeFormState {
+  error: string | null
+  success: boolean
 }
 
 export async function createProposal(
@@ -307,4 +313,44 @@ export async function confirmReceipt(requestId: string): Promise<ActionResult> {
   revalidatePath(`/jibli/${requestId}`)
   revalidatePath('/jibli/mes-gains')
   return { error: null }
+}
+
+// Ouvre un litige sur une mission — réservé au client (owner) et au
+// voyageur accepté (RLS disputes_insert_involved, mêmes règles que la
+// visibilité de la page détail). Un seul litige ouvert à la fois par
+// personne et par mission (contrainte unique côté base).
+export async function openDispute(
+  requestId: string,
+  _prev: DisputeFormState,
+  formData: FormData
+): Promise<DisputeFormState> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) redirect(`/login?next=/jibli/${requestId}`)
+
+  const parsed = disputeSchema.safeParse({ reason: formData.get('reason') })
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Formulaire invalide.', success: false }
+  }
+
+  const { error } = await supabase.from('disputes').insert({
+    travel_request_id: requestId,
+    opened_by: user.id,
+    reason: parsed.data.reason,
+  })
+
+  if (error) {
+    if (error.code === '23505') {
+      return { error: 'Tu as déjà un litige ouvert sur cette mission.', success: false }
+    }
+    return { error: "Impossible d'ouvrir le litige, réessaie.", success: false }
+  }
+
+  revalidatePath(`/jibli/${requestId}`)
+  revalidatePath('/profil/litiges')
+  return { error: null, success: true }
 }

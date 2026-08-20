@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { User, ClipboardList, LogOut } from 'lucide-react'
+import { User, ClipboardList, Settings, AlertTriangle, LogOut } from 'lucide-react'
 import { signOut } from '@/app/(auth)/actions'
 
 interface UserMenuProps {
@@ -10,13 +10,11 @@ interface UserMenuProps {
   email: string | null
 }
 
-// Items pointant vers de vraies pages existantes uniquement : "Paramètres
-// du compte" et "Mes litiges" n'ont pas de destination construite pour
-// l'instant (audité avant de coder ce menu) — retirés plutôt que des liens
-// morts, à ajouter quand ces pages existeront.
 const menuItems = [
   { href: '/profil/completer', label: 'Mon profil', icon: User },
+  { href: '/profil/parametres', label: 'Paramètres du compte', icon: Settings },
   { href: '/commandes', label: 'Mon activité', icon: ClipboardList },
+  { href: '/profil/litiges', label: 'Mes litiges', icon: AlertTriangle },
 ]
 
 function getInitial(fullName: string | null, email: string | null): string {

@@ -2646,6 +2646,71 @@ create policy "identity_documents_select_own_or_admin"
   );
 
 -- ============================================================================
+-- Table: disputes
+-- Litiges sur une mission Jibli — n'existait pas avant (les seules traces
+-- du concept étaient deux commentaires "réservé à une phase admin future",
+-- cf. confirm_travel_receipt() et travel_payments.status='refunded').
+-- Scopé aux missions crowd-shipping pour l'instant, pas aux commandes
+-- commerce (domaine séparé). "status" à 2 valeurs suffit pour les 3 filtres
+-- de /profil/litiges (Tous = pas de filtre, Ouverts, Résolus). Résolution
+-- (passage à 'resolved') réservée à l'admin, pas de policy update client.
+-- ============================================================================
+create table if not exists public.disputes (
+  id uuid primary key default gen_random_uuid(),
+  travel_request_id uuid not null references public.travel_requests(id) on delete cascade,
+  opened_by uuid not null references public.profiles(id),
+  reason text not null,
+  status text not null default 'open' check (status in ('open', 'resolved')),
+  resolution_note text,
+  resolved_by uuid references public.profiles(id),
+  resolved_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists disputes_travel_request_idx on public.disputes(travel_request_id);
+create index if not exists disputes_opened_by_idx on public.disputes(opened_by);
+-- Un seul litige OUVERT à la fois par personne et par mission — évite les
+-- doublons accidentels (double-clic, re-soumission) sans empêcher un
+-- second litige une fois le premier résolu.
+create unique index if not exists disputes_one_open_per_opener
+  on public.disputes(travel_request_id, opened_by)
+  where status = 'open';
+
+drop trigger if exists trg_disputes_updated_at on public.disputes;
+create trigger trg_disputes_updated_at
+  before update on public.disputes
+  for each row execute function public.set_updated_at();
+
+alter table public.disputes enable row level security;
+
+-- Réutilise owns_travel_request()/is_accepted_voyageur_for_request(),
+-- déjà écrites pour les policies travel_proposals — même définition de
+-- "partie de la transaction", pas de nouvelle logique à auditer.
+drop policy if exists "disputes_select_involved" on public.disputes;
+create policy "disputes_select_involved"
+  on public.disputes for select
+  using (
+    opened_by = auth.uid()
+    or public.owns_travel_request(travel_request_id)
+    or public.is_accepted_voyageur_for_request(travel_request_id)
+    or public.is_admin()
+  );
+
+drop policy if exists "disputes_insert_involved" on public.disputes;
+create policy "disputes_insert_involved"
+  on public.disputes for insert
+  with check (
+    opened_by = auth.uid()
+    and (public.owns_travel_request(travel_request_id) or public.is_accepted_voyageur_for_request(travel_request_id))
+  );
+
+drop policy if exists "disputes_update_admin_only" on public.disputes;
+create policy "disputes_update_admin_only"
+  on public.disputes for update
+  using (public.is_admin());
+
+-- ============================================================================
 -- Fin du schéma Phase 0/1/2/3 + Crowd-shipping.
 --
 -- À faire manuellement dans le dashboard Supabase (non scriptable en SQL) :

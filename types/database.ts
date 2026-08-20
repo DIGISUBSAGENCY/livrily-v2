@@ -34,6 +34,8 @@ export type WithdrawalStatus = 'pending' | 'paid' | 'rejected'
 
 export type IdentityVerificationStatus = 'pending' | 'approved' | 'rejected'
 
+export type DisputeStatus = 'open' | 'resolved'
+
 export interface Database {
   public: {
     Tables: {
@@ -535,6 +537,32 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['travel_payments']['Insert']>
         Relationships: []
       }
+      disputes: {
+        Row: {
+          id: string
+          travel_request_id: string
+          opened_by: string
+          reason: string
+          status: DisputeStatus
+          resolution_note: string | null
+          resolved_by: string | null
+          resolved_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          travel_request_id: string
+          opened_by: string
+          reason: string
+          status?: DisputeStatus
+          resolution_note?: string | null
+          resolved_by?: string | null
+          resolved_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['disputes']['Insert']>
+        Relationships: []
+      }
       withdrawal_requests: {
         Row: {
           id: string
@@ -684,3 +712,4 @@ export type TravelProposal = Database['public']['Tables']['travel_proposals']['R
 export type TravelProposalOffer = Database['public']['Tables']['travel_proposal_offers']['Row']
 export type TravelPayment = Database['public']['Tables']['travel_payments']['Row']
 export type WithdrawalRequest = Database['public']['Tables']['withdrawal_requests']['Row']
+export type Dispute = Database['public']['Tables']['disputes']['Row']

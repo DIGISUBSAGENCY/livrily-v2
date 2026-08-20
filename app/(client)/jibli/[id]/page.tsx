@@ -13,6 +13,7 @@ import { CancelRequestButton } from '@/components/travel/CancelRequestButton'
 import { MissionInfoGrid } from '@/components/travel/MissionInfoGrid'
 import { VoyageurGainCard } from '@/components/travel/VoyageurGainCard'
 import { RequestPhotoPlaceholder } from '@/components/travel/RequestPhotoPlaceholder'
+import { DisputeForm } from '@/components/travel/DisputeForm'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { getPublicStorageUrl } from '@/lib/storage'
@@ -189,6 +190,9 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
   const mustLoginToPropose = !user && request.status === 'open'
   const canConfirmReceipt = isOwner && request.status === 'completed' && !request.client_confirmed_at
   const flouciBanner = flouci ? flouciBannerMessages[flouci] : null
+  // Un litige n'a de sens qu'une fois une transaction engagée (proposition
+  // acceptée) — pas sur une demande encore 'open' sans personne en face.
+  const canDispute = (isOwner || isAcceptedVoyageur) && request.status !== 'open'
 
   // Montants réels dès qu'une proposition concrète existe (celle acceptée
   // pour le client propriétaire, la sienne pour un voyageur) — sinon
@@ -292,6 +296,12 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
           <h2 className="mb-3 font-semibold text-slate-900">Suivi de la mission</h2>
           <VoyageurStatusActions requestId={request.id} status={request.status} />
         </Card>
+      )}
+
+      {canDispute && (
+        <div className="mt-4">
+          <DisputeForm requestId={request.id} />
+        </div>
       )}
 
       {isOwner && (
