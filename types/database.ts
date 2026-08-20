@@ -10,19 +10,13 @@
 // @supabase/postgrest-js, sans quoi l'inférence de type des `.from(...)`
 // retombe silencieusement sur `never`.
 //
-// Modèle métier : pas de rôle "livreur" indépendant. Un commerce (role
-// 'commerce') gère sa propre livraison ; `commerce_delivery_staff` est un
-// registre interne sans compte utilisateur associé.
+// Modèle métier : 2 rôles seulement, client et admin — le "voyageur" n'est
+// pas un rôle distinct, cf. schema.sql. Le rôle "commerce" a existé puis a
+// été retiré intégralement (aucun compte réel ne l'utilisait en prod).
 
-export type UserRole = 'client' | 'commerce' | 'admin'
-
-export type CommerceCategory = 'supermarche' | 'boulangerie' | 'fruits_legumes' | 'pharmacie'
-
-export type OrderStatus = 'pending' | 'accepted' | 'ready' | 'delivering' | 'delivered' | 'cancelled'
+export type UserRole = 'client' | 'admin'
 
 export type PaymentMethod = 'cash' | 'flouci' | 'virement'
-
-export type PaymentStatus = 'pending' | 'paid' | 'awaiting_verification' | 'rejected' | 'failed'
 
 export type TravelRequestStatus = 'open' | 'matched' | 'in_transit' | 'completed' | 'cancelled'
 
@@ -89,276 +83,10 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['profiles']['Insert']>
         Relationships: []
       }
-      delivery_zones: {
-        Row: {
-          id: string
-          name: string
-          city: string | null
-          center_lat: number
-          center_lng: number
-          radius_meters: number
-          delivery_fee: number
-          fee_per_km: number
-          min_order_amount: number
-          is_active: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          city?: string | null
-          center_lat: number
-          center_lng: number
-          radius_meters: number
-          delivery_fee?: number
-          fee_per_km?: number
-          min_order_amount?: number
-          is_active?: boolean
-        }
-        Update: Partial<Database['public']['Tables']['delivery_zones']['Insert']>
-        Relationships: []
-      }
-      zone_surge_rules: {
-        Row: {
-          id: string
-          zone_id: string
-          label: string
-          days_of_week: number[]
-          start_time: string
-          end_time: string
-          multiplier: number
-          is_active: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          zone_id: string
-          label: string
-          days_of_week?: number[]
-          start_time: string
-          end_time: string
-          multiplier: number
-          is_active?: boolean
-        }
-        Update: Partial<Database['public']['Tables']['zone_surge_rules']['Insert']>
-        Relationships: []
-      }
-      commerces: {
-        Row: {
-          id: string
-          owner_id: string | null
-          name: string
-          category: CommerceCategory
-          description: string | null
-          logo_url: string | null
-          address: string | null
-          lat: number | null
-          lng: number | null
-          zone_id: string | null
-          phone: string | null
-          is_active: boolean
-          is_open: boolean
-          stats_delivered_count: number
-          stats_delivery_minutes_sum: number
-          stats_on_time_count: number
-          stats_decided_count: number
-          stats_accepted_count: number
-          avg_delivery_time_minutes: number | null
-          on_time_rate: number | null
-          acceptance_rate: number | null
-          ratings_sum: number
-          ratings_count: number
-          ratings_avg: number | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          owner_id?: string | null
-          name: string
-          category: CommerceCategory
-          description?: string | null
-          logo_url?: string | null
-          address?: string | null
-          lat?: number | null
-          lng?: number | null
-          zone_id?: string | null
-          phone?: string | null
-          is_active?: boolean
-          is_open?: boolean
-        }
-        Update: Partial<Database['public']['Tables']['commerces']['Insert']>
-        Relationships: []
-      }
-      products: {
-        Row: {
-          id: string
-          commerce_id: string
-          name: string
-          description: string | null
-          price: number
-          image_url: string | null
-          unit: string
-          is_available: boolean
-          requires_prescription: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          commerce_id: string
-          name: string
-          description?: string | null
-          price: number
-          image_url?: string | null
-          unit?: string
-          is_available?: boolean
-          requires_prescription?: boolean
-        }
-        Update: Partial<Database['public']['Tables']['products']['Insert']>
-        Relationships: []
-      }
-      commerce_delivery_staff: {
-        Row: {
-          id: string
-          commerce_id: string
-          full_name: string
-          phone: string | null
-          is_active: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          commerce_id: string
-          full_name: string
-          phone?: string | null
-          is_active?: boolean
-        }
-        Update: Partial<Database['public']['Tables']['commerce_delivery_staff']['Insert']>
-        Relationships: []
-      }
-      orders: {
-        Row: {
-          id: string
-          client_id: string
-          commerce_id: string
-          delivery_staff_id: string | null
-          zone_id: string | null
-          status: OrderStatus
-          delivery_address: string
-          delivery_lat: number | null
-          delivery_lng: number | null
-          subtotal: number
-          delivery_fee: number
-          total: number
-          payment_method: PaymentMethod
-          payment_status: PaymentStatus
-          payment_ref: string | null
-          payment_proof_url: string | null
-          payment_verified_by: string | null
-          payment_verified_at: string | null
-          client_note: string | null
-          cancelled_reason: string | null
-          delivery_proof_url: string | null
-          prescription_url: string | null
-          wallet_credit_applied: number
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          client_id: string
-          commerce_id: string
-          delivery_staff_id?: string | null
-          zone_id?: string | null
-          status?: OrderStatus
-          delivery_address: string
-          delivery_lat?: number | null
-          delivery_lng?: number | null
-          subtotal: number
-          delivery_fee?: number
-          total: number
-          payment_method: PaymentMethod
-          payment_status?: PaymentStatus
-          payment_ref?: string | null
-          payment_proof_url?: string | null
-          payment_verified_by?: string | null
-          payment_verified_at?: string | null
-          client_note?: string | null
-          cancelled_reason?: string | null
-          delivery_proof_url?: string | null
-          prescription_url?: string | null
-          wallet_credit_applied?: number
-        }
-        Update: Partial<Database['public']['Tables']['orders']['Insert']>
-        Relationships: []
-      }
-      order_items: {
-        Row: {
-          id: string
-          order_id: string
-          product_id: string | null
-          product_name_snapshot: string
-          unit_price: number
-          quantity: number
-          subtotal: number
-        }
-        Insert: {
-          id?: string
-          order_id: string
-          product_id?: string | null
-          product_name_snapshot: string
-          unit_price: number
-          quantity: number
-          subtotal: number
-        }
-        Update: Partial<Database['public']['Tables']['order_items']['Insert']>
-        Relationships: []
-      }
-      delivery_tracking: {
-        Row: {
-          id: number
-          order_id: string
-          commerce_id: string
-          lat: number
-          lng: number
-          recorded_at: string
-        }
-        Insert: {
-          id?: number
-          order_id: string
-          commerce_id: string
-          lat: number
-          lng: number
-          recorded_at?: string
-        }
-        Update: Partial<Database['public']['Tables']['delivery_tracking']['Insert']>
-        Relationships: []
-      }
-      ratings: {
-        Row: {
-          id: string
-          order_id: string
-          client_id: string
-          commerce_id: string | null
-          score: number
-          comment: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          order_id: string
-          client_id: string
-          commerce_id?: string | null
-          score: number
-          comment?: string | null
-        }
-        Update: Partial<Database['public']['Tables']['ratings']['Insert']>
-        Relationships: []
-      }
+      // wallet_credits.order_id référençait orders (supprimée avec le rôle
+      // commerce) — la FK a disparu par CASCADE, colonne conservée en
+      // string | null nu. reason: 'checkout_redemption' orpheline (plus
+      // aucun code n'insère avec cette valeur), laissée telle quelle.
       wallet_credits: {
         Row: {
           id: string
@@ -638,16 +366,9 @@ export interface Database {
         Relationships: []
       }
     }
-    Views: {
-      admin_client_stats: {
-        Row: {
-          profile_id: string
-          orders_count: number
-          last_order_at: string | null
-        }
-        Relationships: []
-      }
-    }
+    // admin_client_stats supprimée avec `orders` (dont elle dépendait
+    // entièrement) — cf. supabase/schema.sql.
+    Views: {}
     Functions: {
       adjust_wallet_balance: {
         Args: { p_profile_id: string; p_amount: number; p_reason: string }
@@ -674,10 +395,6 @@ export interface Database {
         Args: { p_voyageur_id: string }
         Returns: number
       }
-      debit_wallet: {
-        Args: { p_profile_id: string; p_amount: number }
-        Returns: undefined
-      }
       submit_counter_offer: {
         Args: { p_proposal_id: string; p_item_price: number; p_delivery_fee: number; p_message?: string | null }
         Returns: undefined
@@ -699,18 +416,8 @@ export interface Database {
 }
 
 export type Profile = Database['public']['Tables']['profiles']['Row']
-export type DeliveryZone = Database['public']['Tables']['delivery_zones']['Row']
-export type ZoneSurgeRule = Database['public']['Tables']['zone_surge_rules']['Row']
-export type Commerce = Database['public']['Tables']['commerces']['Row']
-export type Product = Database['public']['Tables']['products']['Row']
-export type CommerceDeliveryStaff = Database['public']['Tables']['commerce_delivery_staff']['Row']
-export type Order = Database['public']['Tables']['orders']['Row']
-export type OrderItem = Database['public']['Tables']['order_items']['Row']
-export type DeliveryTracking = Database['public']['Tables']['delivery_tracking']['Row']
-export type Rating = Database['public']['Tables']['ratings']['Row']
 export type BankTransferInfo = Database['public']['Tables']['bank_transfer_info']['Row']
 export type PlatformSettings = Database['public']['Tables']['platform_settings']['Row']
-export type AdminClientStats = Database['public']['Views']['admin_client_stats']['Row']
 export type WalletAdjustment = Database['public']['Tables']['wallet_adjustments']['Row']
 export type IdentityVerification = Database['public']['Tables']['identity_verifications']['Row']
 export type TravelRequest = Database['public']['Tables']['travel_requests']['Row']
