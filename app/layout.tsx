@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import localFont from 'next/font/local'
 import { GoogleMapsProvider } from '@/components/maps/GoogleMapsProvider'
-import { CartProvider } from '@/lib/cart/CartContext'
 import { OneSignalInit } from '@/components/notifications/OneSignalInit'
 import { createClient } from '@/lib/supabase/server'
 import './globals.css'
@@ -24,9 +23,9 @@ const geistMono = localFont({
 // doit se voir plutôt que retomber silencieusement sur localhost.
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
 
-const title = 'Livrily — Livraison à la demande en Tunisie'
+const title = 'Livrily — Crowd-shipping en Tunisie'
 const description =
-  'Courses, supermarché, boulangerie et fruits & légumes livrés chez toi. Fais-toi aussi ramener un objet de l\'étranger par un voyageur, paiement sécurisé.'
+  "Fais-toi ramener un objet de l'étranger par un voyageur, ou rentabilise ton prochain voyage en le ramenant toi-même. Paiement sécurisé, en séquestre jusqu'à réception."
 
 export const metadata: Metadata = {
   ...(siteUrl ? { metadataBase: new URL(siteUrl) } : {}),
@@ -57,9 +56,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <body
         className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col bg-slate-50 font-sans text-slate-900 antialiased`}
       >
-        <GoogleMapsProvider>
-          <CartProvider>{children}</CartProvider>
-        </GoogleMapsProvider>
+        <GoogleMapsProvider>{children}</GoogleMapsProvider>
         <OneSignalInit userId={user?.id ?? null} />
       </body>
     </html>

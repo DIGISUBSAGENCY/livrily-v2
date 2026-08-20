@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/Button'
-import { CartLink } from '@/components/cart/CartLink'
 import { MobileNav } from '@/components/layout/MobileNav'
 import { UserMenu } from '@/components/layout/UserMenu'
 
@@ -28,10 +27,8 @@ export async function Header() {
     role = profile?.role ?? null
   }
 
-  // Le panier et le crowd-shipping n'ont de sens que côté client (invité ou
-  // compte "client") : un compte commerce/admin ne fait pas d'achats sur la
-  // plateforme.
-  const showCart = !user || role === 'client'
+  // Le crowd-shipping n'a de sens que côté client (invité ou compte
+  // "client") : un compte admin ne publie/propose pas sur la plateforme.
   const showJibli = !user || role === 'client'
 
   return (
@@ -64,8 +61,6 @@ export async function Header() {
               Parrainage
             </Link>
           )}
-          {showCart && <CartLink />}
-
           {user ? (
             <div className="hidden sm:block">
               <UserMenu fullName={fullName} email={user.email ?? null} />

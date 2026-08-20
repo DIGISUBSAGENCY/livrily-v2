@@ -10,7 +10,7 @@ export interface ActionResult {
 // Écriture directe (pas de RPC) : contrairement à la soumission client
 // (submit_identity_verification, verrouillée côté client), l'admin a déjà
 // un accès complet via la policy identity_verifications_update_admin_only
-// — même pattern que toggleCommerceActive/toggleUserActive.
+// — même pattern que toggleUserActive.
 export async function approveVerification(verificationId: string): Promise<ActionResult> {
   const supabase = await createClient()
 

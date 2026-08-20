@@ -1,11 +1,12 @@
 import Link from 'next/link'
-import { Percent, Landmark, MapPin } from 'lucide-react'
+import { Percent, Landmark } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 
 // Hub qui regroupe les réglages plateforme déjà existants (Commission,
-// Virement, Zones) sous un même point d'entrée — ne remplace ni ne
-// restructure ces pages, se contente d'y renvoyer avec un aperçu chiffré.
+// Virement) sous un même point d'entrée — ne remplace ni ne restructure
+// ces pages, se contente d'y renvoyer avec un aperçu chiffré. Tuile
+// "Zones" retirée avec le rôle commerce (delivery_zones supprimée).
 // Aucun autre paramètre configurable en base n'a été trouvé dans le code
 // (les clés OneSignal/Twilio/Flouci sont des variables d'environnement,
 // pas des lignes admin-éditables — pas de "réglage notifications" à lister
@@ -13,10 +14,9 @@ import { Card } from '@/components/ui/Card'
 export default async function AdminParametresPage() {
   const supabase = await createClient()
 
-  const [{ data: settings }, { count: bankCount }, { count: zonesCount }] = await Promise.all([
+  const [{ data: settings }, { count: bankCount }] = await Promise.all([
     supabase.from('platform_settings').select('travel_commission_rate').eq('id', true).single(),
     supabase.from('bank_transfer_info').select('id', { count: 'exact', head: true }),
-    supabase.from('delivery_zones').select('id', { count: 'exact', head: true }),
   ])
 
   const commissionPercent = settings ? Math.round(settings.travel_commission_rate * 10000) / 100 : null
@@ -48,23 +48,10 @@ export default async function AdminParametresPage() {
               <Landmark className="h-6 w-6 text-brand-600" aria-hidden />
               <div>
                 <p className="font-medium text-slate-900">Virement</p>
-                <p className="text-sm text-slate-500">Coordonnées bancaires/Flouci affichées au checkout</p>
+                <p className="text-sm text-slate-500">Coordonnées bancaires/Flouci affichées au paiement escrow Jibli</p>
               </div>
             </div>
             <p className="text-lg font-bold text-slate-900">{bankCount ?? 0}</p>
-          </Card>
-        </Link>
-
-        <Link href="/admin/zones">
-          <Card interactive className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <MapPin className="h-6 w-6 text-brand-600" aria-hidden />
-              <div>
-                <p className="font-medium text-slate-900">Zones de livraison</p>
-                <p className="text-sm text-slate-500">Zones, frais de livraison et règles de surge tarifaire</p>
-              </div>
-            </div>
-            <p className="text-lg font-bold text-slate-900">{zonesCount ?? 0}</p>
           </Card>
         </Link>
       </div>

@@ -23,8 +23,7 @@ interface UserProfileEditFormProps {
 // Vue (lecture, <dl>) par défaut ; "Modifier" bascule vers le formulaire.
 // Pas de confirmation avant enregistrement ici (contrairement à
 // WalletAdjustmentForm) — l'édition de profil n'est pas irréversible au
-// même titre qu'un mouvement d'argent, cohérent avec le reste du panel
-// admin (CommerceForm, ZoneForm... n'en demandent pas non plus).
+// même titre qu'un mouvement d'argent.
 export function UserProfileEditForm({ user, countryLabel }: UserProfileEditFormProps) {
   const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)

@@ -11,7 +11,6 @@ export interface ProfileFormState {
 }
 
 function roleHome(role: UserRole): string {
-  if (role === 'commerce') return '/commerce'
   if (role === 'admin') return '/admin'
   return '/'
 }

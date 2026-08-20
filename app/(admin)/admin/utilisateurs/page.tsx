@@ -10,9 +10,8 @@ interface AdminUsersPageProps {
   searchParams: Promise<{ q?: string; status?: string; type?: string; sort?: string }>
 }
 
-// Limite pragmatique à 100 lignes, comme /admin/commandes — aucune page
-// admin n'a de pagination pour l'instant, pas de raison d'en introduire une
-// ici en avance de phase.
+// Limite pragmatique à 100 lignes — aucune page admin n'a de pagination
+// pour l'instant, pas de raison d'en introduire une ici en avance de phase.
 const PAGE_LIMIT = 100
 
 export default async function AdminUsersPage({ searchParams }: AdminUsersPageProps) {
@@ -20,7 +19,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
   const supabase = await createClient()
 
   // "Voyageur" n'est pas un rôle (profiles.role ne connaît que client/
-  // commerce/admin) — c'est un compte client ayant déjà fait au moins une
+  // admin) — c'est un compte client ayant déjà fait au moins une
   // proposition Jibli. Filtre dérivé, résolu en amont via une requête sur
   // travel_proposals plutôt qu'une colonne directe.
   let voyageurIds: string[] | null = null
@@ -36,25 +35,12 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
   if (q) query = query.or(`full_name.ilike.%${q}%,phone.ilike.%${q}%,email.ilike.%${q}%`)
   if (voyageurIds) query = query.in('id', voyageurIds.length > 0 ? voyageurIds : ['00000000-0000-0000-0000-000000000000'])
 
-  // orders_desc est trié après coup (nécessite admin_client_stats, une vue
-  // séparée) — les autres tris portent sur une colonne directe de profiles.
   if (sort === 'balance_desc') query = query.order('wallet_balance', { ascending: false })
   else if (sort === 'created_desc') query = query.order('created_at', { ascending: false })
-  else if (sort === 'orders_desc') query = query.order('full_name', { ascending: true })
   else query = query.order('full_name', { ascending: true })
 
   const { data: users, error } = await query.limit(PAGE_LIMIT)
-
-  const userIds = (users ?? []).map((u) => u.id)
-  const { data: stats } = userIds.length
-    ? await supabase.from('admin_client_stats').select('*').in('profile_id', userIds)
-    : { data: [] as { profile_id: string; orders_count: number; last_order_at: string | null }[] }
-  const statsById = new Map((stats ?? []).map((s) => [s.profile_id, s.orders_count]))
-
-  let sortedUsers = users ?? []
-  if (sort === 'orders_desc') {
-    sortedUsers = [...sortedUsers].sort((a, b) => (statsById.get(b.id) ?? 0) - (statsById.get(a.id) ?? 0))
-  }
+  const sortedUsers = users ?? []
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
@@ -89,16 +75,15 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
 
       {!error && sortedUsers.length > 0 && (
         <Card className="mt-6 p-3">
-          <div className="grid grid-cols-[1.5fr_1fr_auto_1fr_auto_1fr] gap-3 border-b border-slate-200 px-1 pb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+          <div className="grid grid-cols-[1.5fr_1fr_auto_1fr_1fr] gap-3 border-b border-slate-200 px-1 pb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
             <span>Nom</span>
             <span>Téléphone</span>
             <span>Statut</span>
             <span>Solde</span>
-            <span>Commandes</span>
             <span>Inscription</span>
           </div>
           {sortedUsers.map((user) => (
-            <UserRow key={user.id} user={user} ordersCount={statsById.get(user.id) ?? 0} />
+            <UserRow key={user.id} user={user} />
           ))}
         </Card>
       )}

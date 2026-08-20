@@ -1,7 +1,7 @@
 // Logique partagée du middleware : rafraîchit la session Supabase sur
 // chaque requête (indispensable avec @supabase/ssr en Server Components,
 // sans quoi les cookies de session expirent silencieusement), puis protège
-// les routes /commerce/* et /admin/* selon le rôle stocké dans `profiles`.
+// les routes /admin/* selon le rôle stocké dans `profiles`.
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import type { Database } from '@/types/database'
@@ -35,10 +35,6 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const { pathname } = request.nextUrl
-  // startsWith('/commerce') matcherait aussi /commerces (la page publique de
-  // liste des commerces) puisque "commerces" contient "commerce" comme
-  // sous-chaîne — d'où la vérification de frontière de segment ci-dessous.
-  const isCommerceRoute = pathname === '/commerce' || pathname.startsWith('/commerce/')
   // /admin/login, /admin/forgot-password et /admin/reset-password sont
   // exclues du garde-fou ci-dessous : elles vivent dans leur propre groupe
   // de routes (app/(admin-auth)/admin/...), sans passer par le dashboard
@@ -53,12 +49,11 @@ export async function updateSession(request: NextRequest) {
   const isPublicAdminAuthRoute =
     pathname === '/admin/login' || pathname === '/admin/forgot-password' || pathname === '/admin/reset-password'
   const isAdminRoute = !isPublicAdminAuthRoute && (pathname === '/admin' || pathname.startsWith('/admin/'))
-  const loginPath = isAdminRoute ? '/admin/login' : '/login'
 
-  if (isCommerceRoute || isAdminRoute) {
+  if (isAdminRoute) {
     if (!user) {
       const url = request.nextUrl.clone()
-      url.pathname = loginPath
+      url.pathname = '/admin/login'
       url.searchParams.set('next', pathname)
       return NextResponse.redirect(url)
     }
@@ -71,17 +66,11 @@ export async function updateSession(request: NextRequest) {
 
     if (error || !profile || !profile.is_active) {
       const url = request.nextUrl.clone()
-      url.pathname = loginPath
+      url.pathname = '/admin/login'
       return NextResponse.redirect(url)
     }
 
-    if (isCommerceRoute && profile.role !== 'commerce') {
-      const url = request.nextUrl.clone()
-      url.pathname = '/'
-      return NextResponse.redirect(url)
-    }
-
-    if (isAdminRoute && profile.role !== 'admin') {
+    if (profile.role !== 'admin') {
       const url = request.nextUrl.clone()
       url.pathname = '/'
       return NextResponse.redirect(url)

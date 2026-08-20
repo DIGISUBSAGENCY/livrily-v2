@@ -6,7 +6,6 @@ import type { Database, UserRole } from '@/types/database'
 const REFERRAL_COOKIE = 'jibli_referral_code'
 
 function roleHome(role: UserRole): string {
-  if (role === 'commerce') return '/commerce'
   if (role === 'admin') return '/admin'
   return '/'
 }
@@ -28,7 +27,7 @@ function roleHome(role: UserRole): string {
 // fonctionne, donc aucune erreur nulle part) mais le navigateur ne recevait
 // aucun cookie `sb-...-auth-token` — la requête suivante (page de
 // destination) se retrouvait donc sans session, et /profil/completer (ou le
-// middleware pour /commerce, /admin) renvoyait vers /login.
+// middleware pour /admin) renvoyait vers /login.
 //
 // Correctif : on construit un client Supabase dédié à CETTE requête, dont
 // setAll() accumule les cookies au lieu de les écrire tout de suite, puis on

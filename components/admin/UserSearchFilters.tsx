@@ -19,7 +19,6 @@ const SORT_OPTIONS = [
   { value: 'name_asc', label: 'Nom (A→Z)' },
   { value: 'balance_desc', label: 'Solde (décroissant)' },
   { value: 'created_desc', label: "Date d'inscription (récent)" },
-  { value: 'orders_desc', label: 'Nombre de commandes (décroissant)' },
 ]
 
 interface UserSearchFiltersProps {
