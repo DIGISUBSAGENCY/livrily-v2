@@ -50,3 +50,31 @@ export async function changePassword(
 
   return { error: null, success: true }
 }
+
+export interface ResendResult {
+  error: string | null
+  success: boolean
+}
+
+// CTA "M'envoyer le lien de vérification" du stepper Email→Identité
+// (components/account/VerificationStepper.tsx) — protégé par le même
+// cooldown 60s que le renvoi de code mot de passe (useResendCooldown),
+// même raison : éviter le spam/abus sur l'endpoint d'envoi.
+export async function resendEmailConfirmation(): Promise<ResendResult> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user || !user.email) {
+    return { error: 'Session expirée, reconnecte-toi.', success: false }
+  }
+
+  const { error } = await supabase.auth.resend({ type: 'signup', email: user.email })
+  if (error) {
+    return { error: "Impossible d'envoyer l'email, réessaie plus tard.", success: false }
+  }
+
+  return { error: null, success: true }
+}
