@@ -6,7 +6,6 @@ import type { Database, UserRole } from '@/types/database'
 const REFERRAL_COOKIE = 'jibli_referral_code'
 
 function roleHome(role: UserRole): string {
-  if (role === 'commerce') return '/commerce'
   if (role === 'admin') return '/admin'
   return '/'
 }
