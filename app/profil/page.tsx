@@ -12,6 +12,8 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { pageMetadata } from '@/lib/seo'
+import { getProfileStats } from '@/lib/profileStats'
+import { getIdentityStatus, isIdentityVerified } from '@/lib/identity'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Mon profil',
@@ -44,6 +46,15 @@ export default async function ProfilPage() {
 
   if (!profile) redirect('/login?next=/profil')
 
+  const [stats, identityStatus] = await Promise.all([
+    getProfileStats(supabase, user.id),
+    getIdentityStatus(supabase, user.id),
+  ])
+
+  const emailVerified = Boolean(user.email_confirmed_at)
+  const kycVerified = isIdentityVerified(identityStatus)
+  const memberSinceLabel = memberSince(profile.created_at)
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
       <Card className="overflow-hidden p-0">
@@ -73,12 +84,22 @@ export default async function ProfilPage() {
 
           <Badge tone="neutral" className="mt-3 gap-1.5">
             <CalendarDays className="h-3 w-3" aria-hidden />
-            Membre depuis {memberSince(profile.created_at)}
+            Membre depuis {memberSinceLabel}
           </Badge>
         </div>
       </Card>
 
-      <ProfileTabs overview={<ProfileOverview />} />
+      <ProfileTabs
+        overview={
+          <ProfileOverview
+            stats={stats}
+            emailVerified={emailVerified}
+            kycVerified={kycVerified}
+            memberSinceLabel={memberSinceLabel}
+            userId={user.id}
+          />
+        }
+      />
     </div>
   )
 }
