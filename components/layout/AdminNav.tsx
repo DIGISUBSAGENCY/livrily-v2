@@ -22,29 +22,18 @@ function isGroup(item: NavItem): item is NavGroup {
   return 'links' in item
 }
 
-// Nav admin dédiée, regroupée en sous-menus — remplace NavTabs UNIQUEMENT
-// dans app/(admin)/admin/layout.tsx. NavTabs.tsx lui-même n'est pas touché
-// et reste utilisé tel quel par /commerce (cf. contrainte "ne restructure
-// pas ce qui marche" : /commerce n'a que 4 onglets, pas besoin de
-// regroupement, un changement du composant partagé aurait été un risque
-// inutile pour un problème qui ne concerne que l'admin).
+// Nav admin dédiée, regroupée en sous-menus — remplace l'ancienne liste
+// plate de 10 liens portée par NavTabs (composant retiré, plus aucun
+// consommateur restant). Section "Commerces" et lien "Commandes" retirés
+// avec le rôle commerce ; "Paiements commandes" retiré du groupe Paiements
+// pour la même raison (ne reste que le volet Jibli).
 const items: NavItem[] = [
   { href: '/admin', label: 'Tableau de bord' },
-  { href: '/admin/commandes', label: 'Commandes' },
   { href: '/admin/utilisateurs', label: 'Utilisateurs' },
   { href: '/admin/verifications', label: 'Vérifications' },
   {
-    label: 'Commerces',
-    links: [
-      { href: '/admin/commerces', label: 'Commerces' },
-      { href: '/admin/zones', label: 'Zones' },
-      { href: '/admin/comptes-commerce', label: 'Comptes commerce' },
-    ],
-  },
-  {
     label: 'Paiements',
     links: [
-      { href: '/admin/paiements', label: 'Paiements commandes' },
       { href: '/admin/jibli-paiements', label: 'Paiements Jibli' },
       { href: '/admin/retraits', label: 'Retraits' },
     ],
@@ -55,7 +44,6 @@ const items: NavItem[] = [
       { href: '/admin/parametres', label: "Vue d'ensemble" },
       { href: '/admin/parametres/commission', label: 'Commission' },
       { href: '/admin/parametres/virement', label: 'Virement' },
-      { href: '/admin/zones', label: 'Zones' },
     ],
   },
 ]
@@ -77,13 +65,13 @@ export function AdminNav() {
 
   return (
     <nav className="relative border-b border-slate-200 bg-white">
-      {/* PAS de overflow-x-auto ici (contrairement à NavTabs) : sur cet axe,
-          le CSS force overflow-y à passer de "visible" à "auto" dès que
-          overflow-x n'est pas "visible" — ça rognait les menus déroulants
-          absolus qui dépassent sous la barre (régression constatée après
-          coup : les dropdowns "s'ouvraient" mais restaient invisibles/
-          incliquables). 6 entrées de premier niveau tiennent sans scroll
-          horizontal, contrairement à l'ancienne liste à plat de 10 liens. */}
+      {/* PAS de overflow-x-auto ici : sur cet axe, le CSS force overflow-y à
+          passer de "visible" à "auto" dès que overflow-x n'est pas
+          "visible" — ça rognait les menus déroulants absolus qui dépassent
+          sous la barre (régression constatée après coup : les dropdowns
+          "s'ouvraient" mais restaient invisibles/incliquables). Les entrées
+          de premier niveau tiennent sans scroll horizontal, contrairement à
+          l'ancienne liste à plat de 10 liens. */}
       <div className="mx-auto flex max-w-4xl flex-wrap gap-1 px-4">
         {items.map((item) => {
           if (!isGroup(item)) {

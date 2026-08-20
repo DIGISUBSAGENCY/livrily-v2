@@ -14,8 +14,8 @@ export interface ResetPasswordFormState {
 // par le middleware (elle doit rester accessible sans session, cf.
 // lib/supabase/middleware.ts), donc la vérification "ce compte est bien un
 // admin" doit se faire ICI, explicitement, après verifyOtp() — sans quoi
-// n'importe quel compte (client/commerce) pourrait techniquement utiliser
-// cette page pour redéfinir son mot de passe via le flux admin.
+// n'importe quel compte client pourrait techniquement utiliser cette page
+// pour redéfinir son mot de passe via le flux admin.
 export async function adminResetPassword(
   _prevState: ResetPasswordFormState,
   formData: FormData

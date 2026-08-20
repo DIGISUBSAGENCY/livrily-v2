@@ -59,9 +59,9 @@ const flouciBannerMessages: Record<string, { text: string; tone: string }> = {
   error: { text: "Une erreur est survenue pendant la vérification du paiement Flouci.", tone: 'bg-red-50 text-red-700 border-red-200' },
 }
 
-// Consultation publique (comme /commerces/[id]) : pas de redirection si
-// non connecté, seules les actions (proposer, accepter, annuler...) sont
-// réservées aux comptes authentifiés, via les Server Actions + RLS.
+// Consultation publique : pas de redirection si non connecté, seules les
+// actions (proposer, accepter, annuler...) sont réservées aux comptes
+// authentifiés, via les Server Actions + RLS.
 export default async function TravelRequestPage({ params, searchParams }: TravelRequestPageProps) {
   const { id } = await params
   const { flouci } = await searchParams

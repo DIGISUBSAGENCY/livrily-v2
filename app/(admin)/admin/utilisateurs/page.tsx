@@ -19,7 +19,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
   const supabase = await createClient()
 
   // "Voyageur" n'est pas un rôle (profiles.role ne connaît que client/
-  // commerce/admin) — c'est un compte client ayant déjà fait au moins une
+  // admin) — c'est un compte client ayant déjà fait au moins une
   // proposition Jibli. Filtre dérivé, résolu en amont via une requête sur
   // travel_proposals plutôt qu'une colonne directe.
   let voyageurIds: string[] | null = null

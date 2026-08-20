@@ -22,9 +22,8 @@ export function ProfileOverview({ stats, emailVerified, kycVerified, memberSince
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <StatCard icon={PackageCheck} value={stats.confirmedDeliveries} label="Livraisons confirmées" />
         <StatCard icon={ClipboardList} value={stats.activeRequests} label="Demandes actives" />
-        {/* Pas de vraie note pour l'instant : ratings est scopé aux
-            commerces, pas aux utilisateurs (aucune notation entre
-            particuliers dans le schéma). Card statique en attendant. */}
+        {/* Pas de vraie note pour l'instant : aucune notation entre
+            particuliers n'existe dans le schéma. Card statique en attendant. */}
         <StatCard icon={Star} value="Bientôt" label="Note moyenne" />
         <StatCard icon={ShieldCheck} value={`${verificationsCompleted}/2`} label="Vérifications" />
       </div>
