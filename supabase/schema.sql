@@ -5,15 +5,13 @@
 -- projet neuf. Idempotent autant que possible (IF NOT EXISTS) pour pouvoir
 -- être ré-appliqué sans tout casser pendant le développement.
 --
--- Modèle métier : il n'y a PAS de rôle "livreur" indépendant sur la
--- plateforme. C'est le commerce partenaire lui-même qui livre ses
--- commandes (gérant, employé, ou livreur qu'il emploie en interne — sans
--- compte utilisateur sur Livrily). Le compte "commerce" (un seul par
--- commerce, via commerces.owner_id) gère catalogue + commandes reçues +
--- passage au statut "delivering"/"delivered", et c'est son téléphone qui
--- envoie la position GPS pendant la livraison. `commerce_delivery_staff`
--- n'est qu'un registre interne (nom/téléphone) permettant d'indiquer qui,
--- physiquement, a pris la commande — il ne donne aucun accès à la plateforme.
+-- Modèle métier : 2 rôles seulement, client et admin — le "voyageur" n'est
+-- pas un rôle distinct, c'est n'importe quel compte client qui propose sur
+-- une demande de crowd-shipping (Jibli). Le rôle "commerce" (courses/
+-- livraison type supermarché) a existé puis a été retiré intégralement :
+-- aucun compte réel ne l'utilisait en prod au moment du retrait (vérifié
+-- avant migration). Pas de rôle "livreur" indépendant non plus : côté Jibli,
+-- c'est le voyageur lui-même qui livre directement au client.
 --
 -- Convention monétaire : le dinar tunisien a 3 décimales (millimes), tous
 -- les montants utilisent donc numeric(10,3).
@@ -34,37 +32,16 @@ create extension if not exists postgis;
 -- --------------------------------------------------------------------------
 -- Enums
 -- --------------------------------------------------------------------------
+-- Retrait de 'commerce' (2 rôles restants : client, admin — le voyageur
+-- n'est pas un rôle distinct, cf. plus bas) : appliqué en prod par
+-- recréation du type (Postgres ne permet pas de retirer une valeur d'un
+-- enum existant), migration exécutée et vérifiée séparément de ce script.
 do $$ begin
-  create type public.user_role as enum ('client', 'commerce', 'admin');
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  create type public.commerce_category as enum ('supermarche', 'boulangerie', 'fruits_legumes');
-exception when duplicate_object then null; end $$;
-
--- Phase 5 — Module 7 : catégorie pharmacie (produits sur ordonnance).
--- ADD VALUE IF NOT EXISTS ne peut pas être utilisée dans la même transaction
--- qu'un usage de la valeur — sans effet ici car schema.sql ne l'utilise pas
--- plus loin dans le même script.
-alter type public.commerce_category add value if not exists 'pharmacie';
-
-do $$ begin
-  create type public.order_status as enum (
-    'pending',    -- commande passée par le client, en attente de prise en charge par le commerce
-    'accepted',   -- acceptée par le commerce, en préparation
-    'ready',      -- prête, en attente de départ en livraison
-    'delivering', -- le commerce (ou son livreur interne) est en route vers le client
-    'delivered',  -- livrée
-    'cancelled'   -- annulée (client, commerce ou admin)
-  );
+  create type public.user_role as enum ('client', 'admin');
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   create type public.payment_method as enum ('cash', 'flouci', 'virement');
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  create type public.payment_status as enum ('pending', 'paid', 'awaiting_verification', 'rejected', 'failed');
 exception when duplicate_object then null; end $$;
 
 -- --------------------------------------------------------------------------
@@ -90,8 +67,8 @@ $$;
 -- language plpgsql (et non sql) volontairement : une fonction "language sql"
 -- est analysée et résolue à la CRÉATION (les tables référencées doivent déjà
 -- exister), alors que plpgsql ne résout ses requêtes qu'à l'EXÉCUTION. Cette
--- fonction est définie avant que `profiles`/`commerces` n'existent plus bas
--- dans ce script — plpgsql est donc nécessaire ici, pas juste un style.
+-- fonction est définie avant que `profiles` n'existe plus bas dans ce
+-- script — plpgsql est donc nécessaire ici, pas juste un style.
 create or replace function public.is_admin()
 returns boolean
 language plpgsql
@@ -103,24 +80,6 @@ begin
   return exists (
     select 1 from public.profiles
     where id = auth.uid() and role = 'admin'
-  );
-end;
-$$;
-
--- Vérifie si l'utilisateur courant est le compte "commerce" propriétaire du
--- commerce donné. Même logique SECURITY DEFINER (et même raison plpgsql)
--- que is_admin() ci-dessus.
-create or replace function public.is_commerce_owner(p_commerce_id uuid)
-returns boolean
-language plpgsql
-security definer
-set search_path = public
-stable
-as $$
-begin
-  return exists (
-    select 1 from public.commerces
-    where id = p_commerce_id and owner_id = auth.uid()
   );
 end;
 $$;
@@ -231,11 +190,11 @@ create trigger trg_profiles_prevent_role_escalation
 -- ci-dessus, appliquée aux champs du parrainage/portefeuille — sans ce
 -- garde-fou, la policy "je peux modifier mon propre profil" laisserait
 -- n'importe quel client s'auto-créditer via une simple requête UPDATE.
--- Les écritures légitimes (grant_referral_reward, débit au checkout via le
--- client admin) contournent ce trigger : la première parce que l'utilisateur
--- affecté n'est jamais l'acteur de la requête (c'est le commerce/l'admin qui
--- fait passer la commande à "delivered"), la seconde parce que le client
--- admin n'a pas de auth.uid() (NULL = old.id est toujours faux).
+-- Les écritures légitimes (via le client admin, service role) contournent
+-- ce trigger : NULL = old.id est toujours faux, auth.uid() n'existe pas pour
+-- une connexion service role. grant_referral_reward() (cf. plus haut,
+-- fonction orpheline en attente d'un déclencheur Jibli) suivait la même
+-- logique côté security definer quand son trigger existait encore.
 create or replace function public.prevent_wallet_self_edit()
 returns trigger
 language plpgsql
@@ -264,9 +223,8 @@ create trigger trg_profiles_prevent_wallet_self_edit
 -- Crée automatiquement le profil (rôle client par défaut) à l'inscription,
 -- avec un code de parrainage unique et, si un code valide a été saisi au
 -- signup (raw_user_meta_data->>'referral_code_used'), le lien vers le
--- parrain. Les rôles commerce/admin sont attribués manuellement par un
--- admin ensuite (le self-service signup ne crée jamais autre chose qu'un
--- compte client).
+-- parrain. Le rôle admin est attribué manuellement ensuite (le self-service
+-- signup ne crée jamais autre chose qu'un compte client).
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -301,631 +259,6 @@ create trigger trg_on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- ============================================================================
--- Table: delivery_zones
--- Zones de livraison. MVP = zone circulaire (centre + rayon), simple à
--- dessiner et à interroger (ST_DWithin). La colonne `polygon` est prévue
--- pour un futur affinage (dessin de polygone précis) mais n'est pas utilisée
--- par la logique MVP.
--- ============================================================================
-create table if not exists public.delivery_zones (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  city text,
-  center_lat double precision not null,
-  center_lng double precision not null,
-  center_location geography(Point, 4326),
-  radius_meters integer not null check (radius_meters > 0),
-  polygon geography(Polygon, 4326), -- réservé à un usage futur, non utilisé en MVP
-  -- Phase 5 — Module 5 : `delivery_fee` sert désormais de frais de BASE
-  -- (fixe), auquel s'ajoute `fee_per_km` × distance réelle commerce→client
-  -- (cf. lib/pricing/deliveryFee.ts). Nom de colonne conservé tel quel pour
-  -- ne pas casser orders.delivery_fee (snapshot du montant final, lui
-  -- inchangé) ni le reste du code déjà écrit dessus.
-  delivery_fee numeric(10,3) not null default 0 check (delivery_fee >= 0),
-  fee_per_km numeric(10,3) not null default 0 check (fee_per_km >= 0),
-  min_order_amount numeric(10,3) not null default 0 check (min_order_amount >= 0),
-  is_active boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-alter table public.delivery_zones add column if not exists fee_per_km numeric(10,3) not null default 0 check (fee_per_km >= 0);
-
-create index if not exists delivery_zones_active_idx on public.delivery_zones(is_active);
-create index if not exists delivery_zones_center_gix on public.delivery_zones using gist(center_location);
-
--- ============================================================================
--- Table: zone_surge_rules
--- ============================================================================
--- Majoration temporaire des frais de livraison sur une zone (heures de
--- pointe). Configuration admin uniquement (cf. RLS plus bas) ; le calcul
--- réel se fait côté serveur via lib/pricing/deliveryFee.ts, jamais exposé
--- tel quel au client.
-create table if not exists public.zone_surge_rules (
-  id uuid primary key default gen_random_uuid(),
-  zone_id uuid not null references public.delivery_zones(id) on delete cascade,
-  label text not null,
-  -- 0=dimanche .. 6=samedi (convention JS Date#getDay()).
-  days_of_week smallint[] not null default '{0,1,2,3,4,5,6}',
-  start_time time not null,
-  end_time time not null,
-  multiplier numeric(4,2) not null check (multiplier > 0),
-  is_active boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  check (start_time < end_time) -- pas de créneau traversant minuit, cf. lib/pricing/deliveryFee.ts
-);
-
-create index if not exists zone_surge_rules_zone_idx on public.zone_surge_rules(zone_id);
-
-drop trigger if exists trg_zone_surge_rules_updated_at on public.zone_surge_rules;
-create trigger trg_zone_surge_rules_updated_at
-  before update on public.zone_surge_rules
-  for each row execute function public.set_updated_at();
-
-create or replace function public.sync_zone_center_location()
-returns trigger
-language plpgsql
-as $$
-begin
-  new.center_location = ST_SetSRID(ST_MakePoint(new.center_lng, new.center_lat), 4326)::geography;
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_zones_sync_location on public.delivery_zones;
-create trigger trg_zones_sync_location
-  before insert or update of center_lat, center_lng on public.delivery_zones
-  for each row execute function public.sync_zone_center_location();
-
-drop trigger if exists trg_zones_updated_at on public.delivery_zones;
-create trigger trg_zones_updated_at
-  before update on public.delivery_zones
-  for each row execute function public.set_updated_at();
-
--- ============================================================================
--- Table: commerces
--- owner_id = le compte utilisateur (role = 'commerce') qui gère ce commerce
--- (catalogue, commandes reçues, livraison). Un seul compte par commerce ;
--- le personnel de livraison interne n'a pas de compte (cf. commerce_delivery_staff).
--- ============================================================================
-create table if not exists public.commerces (
-  id uuid primary key default gen_random_uuid(),
-  owner_id uuid references public.profiles(id) on delete set null,
-  name text not null,
-  category public.commerce_category not null,
-  description text,
-  logo_url text,
-  address text,
-  lat double precision,
-  lng double precision,
-  location geography(Point, 4326),
-  zone_id uuid references public.delivery_zones(id) on delete set null,
-  phone text,
-  is_active boolean not null default true, -- désactivation par l'admin (compte suspendu, faute grave...)
-  is_open boolean not null default true, -- fermeture temporaire pilotée par le commerce lui-même (pause, jour férié...)
-  -- Phase 5 — Module 2 : compteurs bruts entretenus par
-  -- update_commerce_reliability_stats() (trigger sur orders), jamais
-  -- écrits à la main. Les ratios ci-dessous sont des colonnes générées.
-  stats_delivered_count integer not null default 0,
-  stats_delivery_minutes_sum numeric not null default 0,
-  stats_on_time_count integer not null default 0,
-  stats_decided_count integer not null default 0,
-  stats_accepted_count integer not null default 0,
-  avg_delivery_time_minutes numeric generated always as (
-    case when stats_delivered_count > 0 then round(stats_delivery_minutes_sum / stats_delivered_count, 1) else null end
-  ) stored,
-  on_time_rate numeric generated always as (
-    case when stats_delivered_count > 0 then round(100.0 * stats_on_time_count / stats_delivered_count, 1) else null end
-  ) stored,
-  acceptance_rate numeric generated always as (
-    case when stats_decided_count > 0 then round(100.0 * stats_accepted_count / stats_decided_count, 1) else null end
-  ) stored,
-  -- Phase 5 — Module 6 : agrégat des avis clients (table ratings), entretenu
-  -- par update_commerce_ratings_stats() (trigger sur ratings).
-  ratings_sum integer not null default 0,
-  ratings_count integer not null default 0,
-  ratings_avg numeric generated always as (
-    case when ratings_count > 0 then round(ratings_sum::numeric / ratings_count, 1) else null end
-  ) stored,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
--- Migrations douces : ajoutent les colonnes si le schéma a déjà été exécuté
--- avant leur introduction (Phase 5, Modules 2 et 3).
-alter table public.commerces add column if not exists is_open boolean not null default true;
-alter table public.commerces add column if not exists stats_delivered_count integer not null default 0;
-alter table public.commerces add column if not exists stats_delivery_minutes_sum numeric not null default 0;
-alter table public.commerces add column if not exists stats_on_time_count integer not null default 0;
-alter table public.commerces add column if not exists stats_decided_count integer not null default 0;
-alter table public.commerces add column if not exists stats_accepted_count integer not null default 0;
-alter table public.commerces add column if not exists avg_delivery_time_minutes numeric
-  generated always as (
-    case when stats_delivered_count > 0 then round(stats_delivery_minutes_sum / stats_delivered_count, 1) else null end
-  ) stored;
-alter table public.commerces add column if not exists on_time_rate numeric
-  generated always as (
-    case when stats_delivered_count > 0 then round(100.0 * stats_on_time_count / stats_delivered_count, 1) else null end
-  ) stored;
-alter table public.commerces add column if not exists acceptance_rate numeric
-  generated always as (
-    case when stats_decided_count > 0 then round(100.0 * stats_accepted_count / stats_decided_count, 1) else null end
-  ) stored;
-alter table public.commerces add column if not exists ratings_sum integer not null default 0;
-alter table public.commerces add column if not exists ratings_count integer not null default 0;
-alter table public.commerces add column if not exists ratings_avg numeric
-  generated always as (
-    case when ratings_count > 0 then round(ratings_sum::numeric / ratings_count, 1) else null end
-  ) stored;
-
-create unique index if not exists commerces_owner_unique_idx on public.commerces(owner_id) where owner_id is not null;
-create index if not exists commerces_category_idx on public.commerces(category);
-create index if not exists commerces_zone_idx on public.commerces(zone_id);
-create index if not exists commerces_active_idx on public.commerces(is_active);
-create index if not exists commerces_location_gix on public.commerces using gist(location);
-
-create or replace function public.sync_commerce_location()
-returns trigger
-language plpgsql
-as $$
-begin
-  if new.lat is not null and new.lng is not null then
-    new.location = ST_SetSRID(ST_MakePoint(new.lng, new.lat), 4326)::geography;
-  else
-    new.location = null;
-  end if;
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_commerces_sync_location on public.commerces;
-create trigger trg_commerces_sync_location
-  before insert or update of lat, lng on public.commerces
-  for each row execute function public.sync_commerce_location();
-
-drop trigger if exists trg_commerces_updated_at on public.commerces;
-create trigger trg_commerces_updated_at
-  before update on public.commerces
-  for each row execute function public.set_updated_at();
-
--- ============================================================================
--- Table: products
--- ============================================================================
-create table if not exists public.products (
-  id uuid primary key default gen_random_uuid(),
-  commerce_id uuid not null references public.commerces(id) on delete cascade,
-  name text not null,
-  description text,
-  price numeric(10,3) not null check (price >= 0),
-  image_url text,
-  unit text not null default 'pièce', -- ex: pièce, kg, L
-  is_available boolean not null default true,
-  -- Phase 5 — Module 7 : produit de pharmacie nécessitant une ordonnance
-  -- (le commerce a un rôle purement indicatif dans le choix, rien n'empêche
-  -- techniquement de le cocher hors catégorie pharmacie — pas de contrainte
-  -- de cohérence en base, jugé disproportionné pour un MVP).
-  requires_prescription boolean not null default false,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-alter table public.products add column if not exists requires_prescription boolean not null default false;
-
-create index if not exists products_commerce_idx on public.products(commerce_id);
-create index if not exists products_available_idx on public.products(is_available);
-
-drop trigger if exists trg_products_updated_at on public.products;
-create trigger trg_products_updated_at
-  before update on public.products
-  for each row execute function public.set_updated_at();
-
--- ============================================================================
--- Table: commerce_delivery_staff
--- Registre interne du personnel de livraison d'un commerce (nom/téléphone).
--- AUCUN compte utilisateur associé — sert uniquement à tracer qui a pris la
--- commande, référencé en option par orders.delivery_staff_id.
--- ============================================================================
-create table if not exists public.commerce_delivery_staff (
-  id uuid primary key default gen_random_uuid(),
-  commerce_id uuid not null references public.commerces(id) on delete cascade,
-  full_name text not null,
-  phone text,
-  is_active boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index if not exists delivery_staff_commerce_idx on public.commerce_delivery_staff(commerce_id);
-
-drop trigger if exists trg_delivery_staff_updated_at on public.commerce_delivery_staff;
-create trigger trg_delivery_staff_updated_at
-  before update on public.commerce_delivery_staff
-  for each row execute function public.set_updated_at();
-
--- ============================================================================
--- Table: orders
--- ============================================================================
-create table if not exists public.orders (
-  id uuid primary key default gen_random_uuid(),
-  client_id uuid not null references public.profiles(id),
-  commerce_id uuid not null references public.commerces(id),
-  delivery_staff_id uuid references public.commerce_delivery_staff(id) on delete set null, -- optionnel : qui livre, en interne au commerce
-  zone_id uuid references public.delivery_zones(id), -- zone utilisée pour le calcul des frais, figée à la commande
-  status public.order_status not null default 'pending',
-  delivery_address text not null,
-  delivery_lat double precision,
-  delivery_lng double precision,
-  delivery_location geography(Point, 4326),
-  subtotal numeric(10,3) not null check (subtotal >= 0),
-  delivery_fee numeric(10,3) not null default 0 check (delivery_fee >= 0),
-  total numeric(10,3) not null check (total >= 0),
-  payment_method public.payment_method not null,
-  payment_status public.payment_status not null default 'pending',
-  payment_ref text, -- référence transaction Flouci
-  payment_proof_url text, -- chemin storage bucket payment-proofs pour le virement
-  payment_verified_by uuid references public.profiles(id),
-  payment_verified_at timestamptz,
-  client_note text,
-  cancelled_reason text,
-  -- Phase 5 — Module 6 : chemin storage bucket delivery-proofs, renseigné
-  -- par le commerce au moment de marquer la commande "delivered" (photo
-  -- obligatoire, cf. enforce_delivery_proof_required ci-dessous).
-  delivery_proof_url text,
-  -- Phase 5 — Module 7 : chemin storage bucket prescriptions, renseigné au
-  -- checkout si le panier contient au moins un produit requires_prescription.
-  prescription_url text,
-  -- Phase 5 — Module 8 : crédit portefeuille appliqué sur les frais de
-  -- livraison à ce checkout (0 si non utilisé). delivery_fee reste le coût
-  -- de livraison réel non réduit (comptabilité commerce/stats inchangées) ;
-  -- total = subtotal + delivery_fee - wallet_credit_applied.
-  wallet_credit_applied numeric(10,3) not null default 0 check (wallet_credit_applied >= 0),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-alter table public.orders add column if not exists delivery_proof_url text;
-alter table public.orders add column if not exists prescription_url text;
-alter table public.orders add column if not exists wallet_credit_applied numeric(10,3) not null default 0 check (wallet_credit_applied >= 0);
-
-create index if not exists orders_client_idx on public.orders(client_id);
-create index if not exists orders_commerce_idx on public.orders(commerce_id);
-create index if not exists orders_delivery_staff_idx on public.orders(delivery_staff_id);
-create index if not exists orders_status_idx on public.orders(status);
-create index if not exists orders_payment_status_idx on public.orders(payment_status);
-create index if not exists orders_zone_idx on public.orders(zone_id);
-create index if not exists orders_created_at_idx on public.orders(created_at desc);
-
-create or replace function public.sync_order_delivery_location()
-returns trigger
-language plpgsql
-as $$
-begin
-  if new.delivery_lat is not null and new.delivery_lng is not null then
-    new.delivery_location = ST_SetSRID(ST_MakePoint(new.delivery_lng, new.delivery_lat), 4326)::geography;
-  end if;
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_orders_sync_location on public.orders;
-create trigger trg_orders_sync_location
-  before insert or update of delivery_lat, delivery_lng on public.orders
-  for each row execute function public.sync_order_delivery_location();
-
-drop trigger if exists trg_orders_updated_at on public.orders;
-create trigger trg_orders_updated_at
-  before update on public.orders
-  for each row execute function public.set_updated_at();
-
--- Point d'attention métier : une commande payée par virement ne doit jamais
--- passer de pending à accepted (donc jamais être traitée par le commerce)
--- tant que l'admin n'a pas validé le paiement. Ce garde-fou est appliqué en
--- base, en plus du contrôle applicatif côté Server Action, pour qu'aucun
--- chemin d'écriture ne puisse le contourner.
-create or replace function public.enforce_virement_payment_gating()
-returns trigger
-language plpgsql
-as $$
-begin
-  if old.status = 'pending' and new.status = 'accepted'
-     and new.payment_method = 'virement' and new.payment_status is distinct from 'paid' then
-    raise exception 'Commande par virement : passage à "accepted" impossible tant que le paiement n''est pas vérifié (payment_status doit être "paid").';
-  end if;
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_orders_virement_gating on public.orders;
-create trigger trg_orders_virement_gating
-  before update on public.orders
-  for each row execute function public.enforce_virement_payment_gating();
-
--- Phase 5 — Module 6 : photo de preuve de livraison obligatoire pour le
--- commerce. Vérifié en base (en plus du contrôle côté Server Action
--- markOrderDelivered) pour qu'aucun chemin d'écriture commerce ne puisse
--- marquer une commande livrée sans preuve — même logique que
--- enforce_virement_payment_gating ci-dessus. L'admin reste exempté (comme
--- enforce_commerce_order_transitions) : "forcer le statut" doit rester un
--- vrai déblocage de dernier recours, cf. AdminOrderControls.
-create or replace function public.enforce_delivery_proof_required()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if old.status = 'delivering' and new.status = 'delivered'
-     and new.delivery_proof_url is null and not public.is_admin() then
-    raise exception 'Une photo de preuve de livraison est obligatoire pour marquer cette commande comme livrée.';
-  end if;
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_orders_delivery_proof_required on public.orders;
-create trigger trg_orders_delivery_proof_required
-  before update on public.orders
-  for each row execute function public.enforce_delivery_proof_required();
-
--- Phase 3 : le compte commerce peut faire avancer le statut de sa propre
--- commande, mais seulement selon la séquence attendue, et sans pouvoir
--- toucher aux montants/paiement/adresse (ces champs restent sous contrôle
--- du client au checkout et de l'admin côté paiement). L'admin contourne
--- cette fonction (ses outils Phase 4 gèrent l'assignation manuelle, etc.).
-create or replace function public.enforce_commerce_order_transitions()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if public.is_commerce_owner(old.commerce_id) and not public.is_admin() then
-    if new.client_id is distinct from old.client_id
-       or new.commerce_id is distinct from old.commerce_id
-       or new.zone_id is distinct from old.zone_id
-       or new.delivery_address is distinct from old.delivery_address
-       or new.delivery_lat is distinct from old.delivery_lat
-       or new.delivery_lng is distinct from old.delivery_lng
-       or new.subtotal is distinct from old.subtotal
-       or new.delivery_fee is distinct from old.delivery_fee
-       or new.total is distinct from old.total
-       or new.payment_method is distinct from old.payment_method
-       or new.payment_status is distinct from old.payment_status
-       or new.payment_ref is distinct from old.payment_ref
-       or new.payment_proof_url is distinct from old.payment_proof_url
-       or new.payment_verified_by is distinct from old.payment_verified_by
-       or new.payment_verified_at is distinct from old.payment_verified_at
-    then
-      raise exception 'Le compte commerce ne peut modifier que le statut (et le personnel de livraison) de la commande.';
-    end if;
-
-    if new.status is distinct from old.status
-       and not (
-         (old.status = 'pending' and new.status in ('accepted', 'cancelled'))
-         or (old.status = 'accepted' and new.status in ('ready', 'cancelled'))
-         or (old.status = 'ready' and new.status in ('delivering', 'cancelled'))
-         or (old.status = 'delivering' and new.status = 'delivered')
-       )
-    then
-      raise exception 'Transition de statut invalide : % → %', old.status, new.status;
-    end if;
-  end if;
-
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_orders_commerce_transitions on public.orders;
-create trigger trg_orders_commerce_transitions
-  before update on public.orders
-  for each row execute function public.enforce_commerce_order_transitions();
-
--- Phase 5 — Module 2 : fiabilité du commerce, entretenue automatiquement à
--- chaque transition d'intérêt (compteurs incrémentaux, pas de recalcul sur
--- tout l'historique à chaque lecture). "À l'heure" : livrée en moins de
--- on_time_threshold_minutes à compter de la création de la commande — il
--- n'y a pas de délai promis au client pour l'instant, seuil choisi pour ce
--- type de livraison (courses/boulangerie/fruits&légumes, pas de repas chaud).
--- L'acceptation/le refus ne compte que la décision du commerce lui-même
--- (exclut les interventions admin hors séquence, cf. is_commerce_owner ci-
--- dessous) ; le temps de livraison/ponctualité compte toute commande
--- effectivement livrée, quel que soit l'acteur qui a posé le statut final.
-create or replace function public.update_commerce_reliability_stats()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  on_time_threshold_minutes constant numeric := 45;
-  delivery_minutes numeric;
-begin
-  if old.status = 'pending' and public.is_commerce_owner(old.commerce_id) and not public.is_admin() then
-    if new.status = 'accepted' then
-      update public.commerces
-      set stats_decided_count = stats_decided_count + 1,
-          stats_accepted_count = stats_accepted_count + 1
-      where id = new.commerce_id;
-    elsif new.status = 'cancelled' then
-      update public.commerces
-      set stats_decided_count = stats_decided_count + 1
-      where id = new.commerce_id;
-    end if;
-  end if;
-
-  if old.status = 'delivering' and new.status = 'delivered' then
-    delivery_minutes := extract(epoch from (new.updated_at - new.created_at)) / 60;
-    update public.commerces
-    set stats_delivered_count = stats_delivered_count + 1,
-        stats_delivery_minutes_sum = stats_delivery_minutes_sum + delivery_minutes,
-        stats_on_time_count = stats_on_time_count
-          + case when delivery_minutes <= on_time_threshold_minutes then 1 else 0 end
-    where id = new.commerce_id;
-  end if;
-
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_orders_reliability_stats on public.orders;
-create trigger trg_orders_reliability_stats
-  after update on public.orders
-  for each row
-  when (old.status is distinct from new.status)
-  execute function public.update_commerce_reliability_stats();
-
--- Phase 4 admin : quand un virement de commande est rejeté par un admin
--- (payment_status → 'rejected', via /admin/paiements), le client doit
--- pouvoir renvoyer une preuve. Ce trigger restreint strictement ce qu'un
--- client peut changer sur sa propre commande à cette seule transition
--- (payment_proof_url + payment_status: rejected → awaiting_verification,
--- uniquement si payment_method='virement' et status='pending') — même
--- principe que enforce_commerce_order_transitions ci-dessus, pour le client.
-create or replace function public.enforce_client_order_resubmit()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if old.client_id = auth.uid() and not public.is_admin() and not public.is_commerce_owner(old.commerce_id) then
-    if new.commerce_id is distinct from old.commerce_id
-       or new.delivery_staff_id is distinct from old.delivery_staff_id
-       or new.zone_id is distinct from old.zone_id
-       or new.status is distinct from old.status
-       or new.delivery_address is distinct from old.delivery_address
-       or new.delivery_lat is distinct from old.delivery_lat
-       or new.delivery_lng is distinct from old.delivery_lng
-       or new.subtotal is distinct from old.subtotal
-       or new.delivery_fee is distinct from old.delivery_fee
-       or new.total is distinct from old.total
-       or new.payment_method is distinct from old.payment_method
-       or new.payment_ref is distinct from old.payment_ref
-       or new.payment_verified_by is distinct from old.payment_verified_by
-       or new.payment_verified_at is distinct from old.payment_verified_at
-       or new.client_note is distinct from old.client_note
-       or new.cancelled_reason is distinct from old.cancelled_reason
-    then
-      raise exception 'Le client ne peut que renvoyer une preuve de paiement rejetée.';
-    end if;
-
-    if new.payment_status is distinct from old.payment_status
-       and not (
-         old.payment_method = 'virement'
-         and old.payment_status = 'rejected'
-         and old.status = 'pending'
-         and new.payment_status = 'awaiting_verification'
-       )
-    then
-      raise exception 'Transition de paiement invalide pour le client.';
-    end if;
-  end if;
-
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_orders_client_resubmit on public.orders;
-create trigger trg_orders_client_resubmit
-  before update on public.orders
-  for each row execute function public.enforce_client_order_resubmit();
-
--- ============================================================================
--- Table: order_items
--- ============================================================================
-create table if not exists public.order_items (
-  id uuid primary key default gen_random_uuid(),
-  order_id uuid not null references public.orders(id) on delete cascade,
-  product_id uuid references public.products(id),
-  product_name_snapshot text not null, -- copie du nom au moment de la commande (le produit peut changer/disparaître ensuite)
-  unit_price numeric(10,3) not null check (unit_price >= 0),
-  quantity integer not null check (quantity > 0),
-  subtotal numeric(10,3) not null check (subtotal >= 0)
-);
-
-create index if not exists order_items_order_idx on public.order_items(order_id);
-create index if not exists order_items_product_idx on public.order_items(product_id);
-
--- ============================================================================
--- Table: delivery_tracking
--- Journal des positions GPS envoyées par le commerce pendant une livraison
--- (append-only). Il n'y a pas de compte "livreur" distinct : c'est toujours
--- le compte commerce (ou son téléphone) qui émet ces positions.
--- ============================================================================
-create table if not exists public.delivery_tracking (
-  id bigint generated always as identity primary key,
-  order_id uuid not null references public.orders(id) on delete cascade,
-  commerce_id uuid not null references public.commerces(id),
-  lat double precision not null,
-  lng double precision not null,
-  location geography(Point, 4326),
-  recorded_at timestamptz not null default now()
-);
-
-create index if not exists delivery_tracking_order_idx on public.delivery_tracking(order_id, recorded_at desc);
-create index if not exists delivery_tracking_commerce_idx on public.delivery_tracking(commerce_id);
-
-create or replace function public.sync_tracking_location()
-returns trigger
-language plpgsql
-as $$
-begin
-  new.location = ST_SetSRID(ST_MakePoint(new.lng, new.lat), 4326)::geography;
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_tracking_sync_location on public.delivery_tracking;
-create trigger trg_tracking_sync_location
-  before insert on public.delivery_tracking
-  for each row execute function public.sync_tracking_location();
-
--- ============================================================================
--- Table: ratings
--- Note du client sur la prestation du commerce (catalogue + livraison —
--- il n'y a pas de livreur distinct à noter séparément).
--- ============================================================================
-create table if not exists public.ratings (
-  id uuid primary key default gen_random_uuid(),
-  order_id uuid not null unique references public.orders(id) on delete cascade,
-  client_id uuid not null references public.profiles(id),
-  commerce_id uuid references public.commerces(id),
-  score smallint not null check (score between 1 and 5),
-  comment text,
-  created_at timestamptz not null default now()
-);
-
-create index if not exists ratings_commerce_idx on public.ratings(commerce_id);
-
--- Phase 5 — Module 6 : agrège chaque nouvelle note sur commerces.ratings_sum
--- / ratings_count (compteurs incrémentaux, comme update_commerce_reliability_stats
--- ci-dessus) — pas de recalcul depuis tout l'historique à chaque lecture.
--- ratings.order_id est unique et l'insert est la seule opération permise par
--- RLS (pas d'update/delete client), donc pas de cas de double-comptage à gérer.
-create or replace function public.update_commerce_ratings_stats()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if new.commerce_id is not null then
-    update public.commerces
-    set ratings_sum = ratings_sum + new.score,
-        ratings_count = ratings_count + 1
-    where id = new.commerce_id;
-  end if;
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_ratings_update_commerce_stats on public.ratings;
-create trigger trg_ratings_update_commerce_stats
-  after insert on public.ratings
-  for each row execute function public.update_commerce_ratings_stats();
-
--- ============================================================================
 -- Table: wallet_credits
 -- Phase 5 — Module 8 : journal (append-only) des mouvements du portefeuille
 -- de chaque profil — positif = crédit (récompense de parrainage), négatif =
@@ -938,15 +271,30 @@ create table if not exists public.wallet_credits (
   profile_id uuid not null references public.profiles(id),
   amount numeric not null,
   reason text not null check (reason in ('referral_referrer', 'referral_referred', 'checkout_redemption')),
-  order_id uuid references public.orders(id),
+  -- order_id référençait public.orders (supprimée, cf. suppression du rôle
+  -- commerce) : la FK a disparu avec la table (CASCADE), colonne conservée
+  -- telle quelle en attendant une décision sur le parrainage (cf.
+  -- grant_referral_reward ci-dessous, volontairement laissée orpheline pour
+  -- l'instant — discussion séparée, pas traitée dans ce nettoyage). La
+  -- valeur 'checkout_redemption' de `reason` est également orpheline (plus
+  -- aucun code n'insère avec cette raison), laissée telle quelle : coûte
+  -- rien, ne bloque rien.
+  order_id uuid,
   created_at timestamptz not null default now()
 );
 
 create index if not exists wallet_credits_profile_idx on public.wallet_credits(profile_id);
 
--- Aucune règle fixe de parrainage : montant choisi ici, ajustable sans
--- migration. old.status/new.status : la même transition que les autres
--- effets de bord "livraison" (reliability stats, cf. plus haut).
+-- Fonction ORPHELINE, volontairement laissée telle quelle (décision mise de
+-- côté, à traiter séparément — cf. discussion suppression commerce) : c'est
+-- le SEUL mécanisme de versement de récompense de parrainage existant, et
+-- il ne se déclenchait que sur `orders` (transition delivering → delivered),
+-- table supprimée avec le rôle commerce. Son trigger (trg_orders_referral_
+-- reward, sur orders) a disparu par CASCADE en même temps que la table ;
+-- il n'est donc plus recréé ici. Tant qu'aucun déclencheur équivalent n'est
+-- rattaché à une completion Jibli (travel_requests.status = 'completed'),
+-- le parrainage génère/partage toujours des codes mais ne verse plus aucune
+-- récompense. Fonction gardée intacte pour référence/adaptation future.
 create or replace function public.grant_referral_reward()
 returns trigger
 language plpgsql
@@ -979,31 +327,6 @@ begin
 end;
 $$;
 
-drop trigger if exists trg_orders_referral_reward on public.orders;
-create trigger trg_orders_referral_reward
-  after update on public.orders
-  for each row execute function public.grant_referral_reward();
-
--- Débit atomique du portefeuille (utilisation au checkout, cf.
--- checkout/actions.ts) : `wallet_balance = wallet_balance - montant`
--- directement en base plutôt qu'un lire-puis-écrire côté application
--- (évite toute course entre deux commandes concurrentes du même client).
--- Appelée uniquement via le client admin (service role) ; security definer
--- pour contourner prevent_wallet_self_edit comme le reste des écritures
--- système sur ces colonnes.
-create or replace function public.debit_wallet(p_profile_id uuid, p_amount numeric)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  update public.profiles
-  set wallet_balance = greatest(0, wallet_balance - p_amount)
-  where id = p_profile_id;
-end;
-$$;
-
 -- ============================================================================
 -- Table: bank_transfer_info
 -- Coordonnées bancaires affichées au client au checkout pour le virement.
@@ -1028,14 +351,6 @@ create trigger trg_bank_transfer_updated_at
 -- Row Level Security
 -- ============================================================================
 alter table public.profiles enable row level security;
-alter table public.delivery_zones enable row level security;
-alter table public.commerces enable row level security;
-alter table public.products enable row level security;
-alter table public.commerce_delivery_staff enable row level security;
-alter table public.orders enable row level security;
-alter table public.order_items enable row level security;
-alter table public.delivery_tracking enable row level security;
-alter table public.ratings enable row level security;
 alter table public.bank_transfer_info enable row level security;
 alter table public.wallet_credits enable row level security;
 
@@ -1056,224 +371,6 @@ create policy "profiles_update_own_or_admin"
   using (id = auth.uid() or public.is_admin());
   -- Le changement de rôle est bloqué par le trigger prevent_role_self_escalation
   -- même si cette policy autorise la mise à jour de la ligne.
-
--- delivery_zones --------------------------------------------------------------
-drop policy if exists "zones_select_active_or_admin" on public.delivery_zones;
-create policy "zones_select_active_or_admin"
-  on public.delivery_zones for select
-  using (is_active or public.is_admin());
-
-drop policy if exists "zones_write_admin" on public.delivery_zones;
-create policy "zones_write_admin"
-  on public.delivery_zones for insert
-  with check (public.is_admin());
-
-drop policy if exists "zones_update_admin" on public.delivery_zones;
-create policy "zones_update_admin"
-  on public.delivery_zones for update
-  using (public.is_admin());
-
-drop policy if exists "zones_delete_admin" on public.delivery_zones;
-create policy "zones_delete_admin"
-  on public.delivery_zones for delete
-  using (public.is_admin());
-
--- zone_surge_rules --------------------------------------------------------
--- Admin uniquement, y compris en lecture : la configuration des majorations
--- n'a pas besoin d'être exposée telle quelle au client, seul le résultat
--- (frais final) l'est. lib/pricing/deliveryFee.ts lit cette table via le
--- client admin (service role), pas via la session du client connecté.
-alter table public.zone_surge_rules enable row level security;
-
-drop policy if exists "zone_surge_rules_admin_only" on public.zone_surge_rules;
-create policy "zone_surge_rules_admin_only"
-  on public.zone_surge_rules for all
-  using (public.is_admin())
-  with check (public.is_admin());
-
--- commerces -------------------------------------------------------------------
-drop policy if exists "commerces_select_active_or_admin" on public.commerces;
-create policy "commerces_select_active_or_admin"
-  on public.commerces for select
-  using (is_active or owner_id = auth.uid() or public.is_admin());
-
-drop policy if exists "commerces_insert_admin" on public.commerces;
-create policy "commerces_insert_admin"
-  on public.commerces for insert
-  with check (public.is_admin());
-
-drop policy if exists "commerces_update_owner_or_admin" on public.commerces;
-create policy "commerces_update_owner_or_admin"
-  on public.commerces for update
-  using (owner_id = auth.uid() or public.is_admin());
-  -- is_active reste de fait réservé à l'admin : la Server Action du compte
-  -- commerce (Phase 3) ne devra jamais exposer ce champ en écriture.
-
-drop policy if exists "commerces_delete_admin" on public.commerces;
-create policy "commerces_delete_admin"
-  on public.commerces for delete
-  using (public.is_admin());
-
--- products ----------------------------------------------------------------
-drop policy if exists "products_select_available_or_admin" on public.products;
-create policy "products_select_available_or_admin"
-  on public.products for select
-  using (
-    public.is_admin()
-    or public.is_commerce_owner(commerce_id)
-    or (
-      is_available
-      and exists (select 1 from public.commerces c where c.id = products.commerce_id and c.is_active)
-    )
-  );
-
-drop policy if exists "products_insert_owner_or_admin" on public.products;
-create policy "products_insert_owner_or_admin"
-  on public.products for insert
-  with check (public.is_commerce_owner(commerce_id) or public.is_admin());
-
-drop policy if exists "products_update_owner_or_admin" on public.products;
-create policy "products_update_owner_or_admin"
-  on public.products for update
-  using (public.is_commerce_owner(commerce_id) or public.is_admin());
-
-drop policy if exists "products_delete_owner_or_admin" on public.products;
-create policy "products_delete_owner_or_admin"
-  on public.products for delete
-  using (public.is_commerce_owner(commerce_id) or public.is_admin());
-
--- commerce_delivery_staff -----------------------------------------------------
--- Registre interne : uniquement visible/gérable par le commerce propriétaire
--- et l'admin. Aucun accès client (ce n'est pas un compte plateforme).
-drop policy if exists "delivery_staff_select_owner_or_admin" on public.commerce_delivery_staff;
-create policy "delivery_staff_select_owner_or_admin"
-  on public.commerce_delivery_staff for select
-  using (public.is_commerce_owner(commerce_id) or public.is_admin());
-
-drop policy if exists "delivery_staff_insert_owner_or_admin" on public.commerce_delivery_staff;
-create policy "delivery_staff_insert_owner_or_admin"
-  on public.commerce_delivery_staff for insert
-  with check (public.is_commerce_owner(commerce_id) or public.is_admin());
-
-drop policy if exists "delivery_staff_update_owner_or_admin" on public.commerce_delivery_staff;
-create policy "delivery_staff_update_owner_or_admin"
-  on public.commerce_delivery_staff for update
-  using (public.is_commerce_owner(commerce_id) or public.is_admin());
-
-drop policy if exists "delivery_staff_delete_owner_or_admin" on public.commerce_delivery_staff;
-create policy "delivery_staff_delete_owner_or_admin"
-  on public.commerce_delivery_staff for delete
-  using (public.is_commerce_owner(commerce_id) or public.is_admin());
-
--- orders ----------------------------------------------------------------------
--- Le client crée sa propre commande (Phase 2 — checkout). Le commerce peut
--- mettre à jour le statut de ses commandes (Phase 3) ; le trigger
--- enforce_commerce_order_transitions ci-dessus restreint ce qu'il peut
--- réellement changer (statut + personnel de livraison, séquence valide).
-drop policy if exists "orders_select_involved_or_admin" on public.orders;
-create policy "orders_select_involved_or_admin"
-  on public.orders for select
-  using (client_id = auth.uid() or public.is_commerce_owner(commerce_id) or public.is_admin());
-
-drop policy if exists "orders_write_admin_only_for_now" on public.orders;
-drop policy if exists "orders_insert_own_or_admin" on public.orders;
-create policy "orders_insert_own_or_admin"
-  on public.orders for insert
-  with check (client_id = auth.uid() or public.is_admin());
-
-drop policy if exists "orders_update_admin_only_for_now" on public.orders;
-drop policy if exists "orders_update_commerce_or_admin" on public.orders;
-create policy "orders_update_commerce_or_admin"
-  on public.orders for update
-  using (public.is_commerce_owner(commerce_id) or public.is_admin());
-
--- Le client peut mettre à jour sa propre commande — en pratique restreint au
--- seul renvoi de preuve de virement rejetée par le trigger
--- enforce_client_order_resubmit ci-dessus (Phase 4 admin).
-drop policy if exists "orders_update_client_resubmit_payment" on public.orders;
-create policy "orders_update_client_resubmit_payment"
-  on public.orders for update
-  using (client_id = auth.uid());
-
--- order_items -------------------------------------------------------------
-drop policy if exists "order_items_select_via_order" on public.order_items;
-create policy "order_items_select_via_order"
-  on public.order_items for select
-  using (
-    exists (
-      select 1 from public.orders o
-      where o.id = order_items.order_id
-        and (o.client_id = auth.uid() or public.is_commerce_owner(o.commerce_id) or public.is_admin())
-    )
-  );
-
-drop policy if exists "order_items_write_admin_only_for_now" on public.order_items;
-drop policy if exists "order_items_insert_via_own_order" on public.order_items;
-create policy "order_items_insert_via_own_order"
-  on public.order_items for insert
-  with check (
-    public.is_admin()
-    or exists (
-      select 1 from public.orders o
-      where o.id = order_items.order_id and o.client_id = auth.uid()
-    )
-  );
-
--- delivery_tracking ---------------------------------------------------------
-drop policy if exists "tracking_select_involved_or_admin" on public.delivery_tracking;
-create policy "tracking_select_involved_or_admin"
-  on public.delivery_tracking for select
-  using (
-    exists (
-      select 1 from public.orders o
-      where o.id = delivery_tracking.order_id
-        and (o.client_id = auth.uid() or public.is_commerce_owner(o.commerce_id) or public.is_admin())
-    )
-  );
-
-drop policy if exists "tracking_insert_commerce_owner" on public.delivery_tracking;
-create policy "tracking_insert_commerce_owner"
-  on public.delivery_tracking for insert
-  with check (
-    public.is_commerce_owner(commerce_id)
-    and exists (
-      select 1 from public.orders o
-      where o.id = delivery_tracking.order_id and o.commerce_id = delivery_tracking.commerce_id
-    )
-  );
--- Pas de policy update/delete : le journal de tracking est append-only.
-
--- ratings ---------------------------------------------------------------------
-drop policy if exists "ratings_select_involved_or_admin" on public.ratings;
-create policy "ratings_select_involved_or_admin"
-  on public.ratings for select
-  using (
-    client_id = auth.uid()
-    or (commerce_id is not null and public.is_commerce_owner(commerce_id))
-    or public.is_admin()
-  );
-
--- Phase 5 — Module 6 : avis visibles publiquement sur la fiche commerce,
--- avant même de commander (policy en plus de la précédente, pas à la
--- place — Postgres les combine en OR pour un même rôle/commande).
-drop policy if exists "ratings_select_public_for_active_commerce" on public.ratings;
-create policy "ratings_select_public_for_active_commerce"
-  on public.ratings for select
-  using (
-    commerce_id is not null
-    and exists (select 1 from public.commerces c where c.id = ratings.commerce_id and c.is_active)
-  );
-
-drop policy if exists "ratings_insert_own_delivered_order" on public.ratings;
-create policy "ratings_insert_own_delivered_order"
-  on public.ratings for insert
-  with check (
-    client_id = auth.uid()
-    and exists (
-      select 1 from public.orders o
-      where o.id = ratings.order_id and o.client_id = auth.uid() and o.status = 'delivered'
-    )
-  );
 
 -- wallet_credits ------------------------------------------------------------
 -- Lecture seule pour le client (historique de son propre portefeuille) :
@@ -1336,108 +433,9 @@ create policy "payment_proofs_select_own_or_admin"
   );
 
 -- ============================================================================
--- Storage : bucket delivery-proofs (photo de preuve de livraison)
--- ============================================================================
--- Privé, comme payment-proofs. Convention de chemin : {order_id}/proof.jpg —
--- contrairement à payment-proofs (dossier {user_id}), il faut ici que TROIS
--- acteurs différents (client, commerce, admin) puissent y accéder, d'où la
--- jointure vers orders dans les policies plutôt qu'une simple comparaison
--- de dossier.
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('delivery-proofs', 'delivery-proofs', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
-on conflict (id) do nothing;
-
-drop policy if exists "delivery_proofs_insert_commerce_owner" on storage.objects;
-create policy "delivery_proofs_insert_commerce_owner"
-  on storage.objects for insert
-  with check (
-    bucket_id = 'delivery-proofs'
-    and exists (
-      select 1 from public.orders o
-      where o.id::text = (storage.foldername(name))[1]
-        and public.is_commerce_owner(o.commerce_id)
-    )
-  );
-
-drop policy if exists "delivery_proofs_select_involved_or_admin" on storage.objects;
-create policy "delivery_proofs_select_involved_or_admin"
-  on storage.objects for select
-  using (
-    bucket_id = 'delivery-proofs'
-    and exists (
-      select 1 from public.orders o
-      where o.id::text = (storage.foldername(name))[1]
-        and (o.client_id = auth.uid() or public.is_commerce_owner(o.commerce_id) or public.is_admin())
-    )
-  );
-
--- ============================================================================
--- Storage : bucket prescriptions (ordonnance, Module 7 — pharmacie)
--- ============================================================================
--- Privé. Convention de chemin : {user_id}/{order_id}/prescription.jpg —
--- préfixé par l'auteur (comme payment-proofs) car l'upload a lieu AU
--- CHECKOUT, avant que la ligne orders existe : la policy d'insert ne peut
--- donc pas s'appuyer sur une jointure vers orders, seulement sur
--- auth.uid(). Le deuxième segment (order_id) permet en revanche à la
--- policy de select d'autoriser aussi le commerce concerné, une fois la
--- commande créée.
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('prescriptions', 'prescriptions', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
-on conflict (id) do nothing;
-
-drop policy if exists "prescriptions_insert_own_folder" on storage.objects;
-create policy "prescriptions_insert_own_folder"
-  on storage.objects for insert
-  with check (
-    bucket_id = 'prescriptions'
-    and (storage.foldername(name))[1] = auth.uid()::text
-  );
-
-drop policy if exists "prescriptions_select_involved_or_admin" on storage.objects;
-create policy "prescriptions_select_involved_or_admin"
-  on storage.objects for select
-  using (
-    bucket_id = 'prescriptions'
-    and (
-      (storage.foldername(name))[1] = auth.uid()::text
-      or public.is_admin()
-      or exists (
-        select 1 from public.orders o
-        where o.id::text = (storage.foldername(name))[2]
-          and public.is_commerce_owner(o.commerce_id)
-      )
-    )
-  );
-
--- ============================================================================
--- Realtime : suivi de commande en direct (Phase 2)
--- ============================================================================
--- Ajoute orders et delivery_tracking à la publication supabase_realtime
--- (déjà créée par défaut sur tout projet Supabase). Les changements ne sont
--- diffusés aux clients abonnés qu'à travers les policies RLS existantes,
--- donc aucune fuite de données au-delà de ce que SELECT autorise déjà.
-do $$
-begin
-  if not exists (
-    select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'orders'
-  ) then
-    alter publication supabase_realtime add table public.orders;
-  end if;
-
-  if not exists (
-    select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'delivery_tracking'
-  ) then
-    alter publication supabase_realtime add table public.delivery_tracking;
-  end if;
-end $$;
-
--- ============================================================================
 -- Crowd-shipping ("Jibli chay men l'a5er")
 -- ============================================================================
--- Marketplace indépendante du système commerces/livraison : un client
--- publie une demande pour qu'on lui ramène un objet de l'étranger, un
+-- Un client publie une demande pour qu'on lui ramène un objet de l'étranger, un
 -- voyageur (n'importe quel autre compte role='client', pas de rôle dédié)
 -- propose de le lui ramener. Le client accepte UNE proposition ; le
 -- voyageur accepté fait ensuite avancer le statut jusqu'à la remise.
@@ -1463,7 +461,7 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 -- Miroir de is_admin() : vérifie que l'utilisateur courant a le rôle client
--- (ce marketplace est réservé aux comptes client, pas commerce/admin).
+-- (ce marketplace est réservé aux comptes client, pas admin).
 create or replace function public.is_client()
 returns boolean
 language plpgsql
@@ -1487,8 +485,8 @@ $$;
 -- `using (...)`, ces vérifications croisées déclenchent chacune la policy
 -- de l'autre table, qui redéclenche la première, etc. (erreur Postgres
 -- 42P17 "infinite recursion detected in policy"). En passant par une
--- fonction SECURITY DEFINER (même principe que is_admin()/is_commerce_owner
--- plus haut), la requête interne s'exécute avec les privilèges du
+-- fonction SECURITY DEFINER (même principe que is_admin() plus haut), la
+-- requête interne s'exécute avec les privilèges du
 -- propriétaire de la table (postgres), qui est exempté de RLS — la boucle
 -- ne se déclenche donc jamais.
 create or replace function public.has_proposal_on_request(p_request_id uuid)
@@ -2456,26 +1454,10 @@ create policy "profile_photos_delete_own_folder"
     and (storage.foldername(name))[1] = auth.uid()::text
   );
 
--- ============================================================================
--- Vue: admin_client_stats
--- Utilisée par /admin/utilisateurs (liste) pour afficher un nombre de
--- commandes par compte sans requête N+1 ni agrégation côté client.
--- security_invoker = true : la vue s'exécute avec les droits RLS de
--- l'utilisateur qui la consulte (donc soumise à orders_select_involved_or_
--- admin, qui n'autorise que le client concerné, le commerce concerné ou un
--- admin) plutôt qu'avec ceux du créateur de la vue — sans ça, un compte non
--- admin pourrait potentiellement lire les stats de n'importe qui.
--- ============================================================================
-create or replace view public.admin_client_stats
-with (security_invoker = true) as
-select
-  p.id as profile_id,
-  count(distinct o.id) as orders_count,
-  max(o.created_at) as last_order_at
-from public.profiles p
-left join public.orders o on o.client_id = p.id
-where p.role = 'client'
-group by p.id;
+-- Vue admin_client_stats supprimée avec `orders` (dont elle dépendait
+-- entièrement — nombre de commandes par client). app/(admin)/admin/
+-- utilisateurs/[id]/page.tsx, seul consommateur, à traiter en étape 3
+-- (retrait de la section commandes de cette page).
 
 -- ============================================================================
 -- Table: wallet_adjustments
@@ -2688,9 +1670,8 @@ create policy "identity_documents_select_own_or_admin"
 -- Litiges sur une mission Jibli — n'existait pas avant (les seules traces
 -- du concept étaient deux commentaires "réservé à une phase admin future",
 -- cf. confirm_travel_receipt() et travel_payments.status='refunded').
--- Scopé aux missions crowd-shipping pour l'instant, pas aux commandes
--- commerce (domaine séparé). "status" à 2 valeurs suffit pour les 3 filtres
--- de /profil/litiges (Tous = pas de filtre, Ouverts, Résolus). Résolution
+-- Scopé aux missions crowd-shipping. "status" à 2 valeurs suffit pour les
+-- 3 filtres de /profil/litiges (Tous = pas de filtre, Ouverts, Résolus). Résolution
 -- (passage à 'resolved') réservée à l'admin, pas de policy update client.
 -- ============================================================================
 create table if not exists public.disputes (
@@ -2749,30 +1730,24 @@ create policy "disputes_update_admin_only"
   using (public.is_admin());
 
 -- ============================================================================
--- Fin du schéma Phase 0/1/2/3 + Crowd-shipping.
+-- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,
+-- catalogue, livraison zone tarifée — a existé puis a été retiré
+-- intégralement, cf. tête de fichier).
 --
 -- À faire manuellement dans le dashboard Supabase (non scriptable en SQL) :
 --   1. Authentication > Providers > Email : confirmation email activée
 --      (comportement par défaut), Site URL + Redirect URLs à renseigner
 --      avec le domaine de l'app (ex: http://localhost:3000 en dev, avec
 --      /auth/callback autorisé).
---   2. Création des comptes "commerce" : le self-service signup ne crée que
---      des comptes role='client'. Pour donner accès à un commerce, un admin
---      doit : (a) faire passer profiles.role à 'commerce' pour le compte
---      concerné, (b) renseigner commerces.owner_id avec son id. Un flux
---      admin dédié sera construit en Phase 4.
---   3. Pour tester le virement en Phase 2, insérer une ligne dans
---      bank_transfer_info (is_active = true) — la gestion depuis /admin
---      arrive en Phase 4. Idem pour au moins un commerce actif avec un
---      zone_id renseigné (delivery_zones), sinon le checkout refusera la
---      commande faute de zone de livraison configurée.
---   4. Crowd-shipping : rien à faire à la main, le bucket
+--   2. Pour tester le virement, insérer une ligne dans bank_transfer_info
+--      (is_active = true) — la gestion depuis /admin/parametres/virement
+--      existe déjà.
+--   3. Crowd-shipping : rien à faire à la main, le bucket
 --      travel-request-photos est créé par ce script comme payment-proofs.
---   5. Escrow : renseigner bank_transfer_info.flouci_phone (numéro Flouci de
---      la plateforme) pour que l'option Flouci soit utilisable au paiement.
---      Renseigner FLOUCI_APP_TOKEN / FLOUCI_APP_SECRET dans .env.local
---      (Flouci dashboard) — sans ça, l'option Flouci reste visible mais
---      désactivée avec un message clair. Le premier compte admin doit être
---      créé manuellement (update profiles set role='admin' where id=...)
---      pour pouvoir accéder à /admin/jibli-paiements (validation virement).
+--   4. Escrow : renseigner FLOUCI_APP_TOKEN / FLOUCI_APP_SECRET dans
+--      .env.local (Flouci dashboard) — sans ça, l'option Flouci reste
+--      visible mais désactivée avec un message clair. Le premier compte
+--      admin doit être créé manuellement (update profiles set role='admin'
+--      where id=...) pour pouvoir accéder à /admin/jibli-paiements
+--      (validation virement).
 -- ==========================================================================
