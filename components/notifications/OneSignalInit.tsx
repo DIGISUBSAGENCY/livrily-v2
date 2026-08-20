@@ -37,9 +37,9 @@ declare global {
 
 // N'affiche/ne charge strictement rien si la clé publique n'est pas
 // configurée — même dégradé que le reste de l'app (Flouci, Google Maps).
-// Rendu inconditionnel dans app/layout.tsx (tous rôles) : commerce ET
-// client ont besoin d'être notifiables (nouvelle commande / changement de
-// statut, cf. lib/notifications/orderNotifications.ts).
+// Rendu inconditionnel dans app/layout.tsx : client et admin ont besoin
+// d'être notifiables (proposition reçue, offre acceptée, livraison à
+// confirmer, paiement crédité — cf. lib/notifications/*).
 export function OneSignalInit({ userId }: { userId: string | null }) {
   const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
 
