@@ -1,16 +1,19 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { LogOut, Trash2 } from 'lucide-react'
+import { LogOut, UserX } from 'lucide-react'
 import { signOut } from '@/app/(auth)/actions'
 import { deactivateAccount } from '@/app/profil/parametres/actions'
 import { Button } from '@/components/ui/Button'
 import { ErrorText } from '@/components/ui/ErrorText'
 
-// Désactivation à 2 temps (clic "Supprimer le compte" révèle une
+// Désactivation à 2 temps (clic "Désactiver mon compte" révèle une
 // confirmation explicite avant le vrai bouton d'action) plutôt qu'un
 // window.confirm() natif — moins facile à valider par réflexe, plus
-// visible que ce qu'on s'apprête à faire.
+// visible que ce qu'on s'apprête à faire. Libellé "Désactiver" et non
+// "Supprimer" : le comportement réel est une désactivation réversible
+// (is_active=false), pas une suppression — cf. deactivateAccount() dans
+// actions.ts. Le texte doit rester honnête sur ce qu'il fait vraiment.
 export function DangerZone() {
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -42,15 +45,16 @@ export function DangerZone() {
       <div className="border-t border-slate-100 pt-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium text-slate-900">Supprimer le compte</p>
+            <p className="text-sm font-medium text-slate-900">Désactiver mon compte</p>
             <p className="text-xs text-slate-500">
-              Désactive ton compte (réversible par le support) et te déconnecte.
+              Désactive ton compte (réversible par le support) et te déconnecte. Tes données ne
+              sont pas supprimées.
             </p>
           </div>
           {!confirming && (
             <Button variant="danger" size="sm" onClick={() => setConfirming(true)}>
-              <Trash2 className="h-3.5 w-3.5" aria-hidden />
-              Supprimer le compte
+              <UserX className="h-3.5 w-3.5" aria-hidden />
+              Désactiver mon compte
             </Button>
           )}
         </div>
