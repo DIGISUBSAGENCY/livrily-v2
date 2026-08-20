@@ -1,11 +1,10 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Wallet, Package, Plane, Luggage, Receipt } from 'lucide-react'
+import { Wallet, Plane, Luggage, Receipt } from 'lucide-react'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { UserStatusToggle } from '@/components/admin/UserStatusToggle'
 import { UserProfileEditForm } from '@/components/admin/UserProfileEditForm'
 import { WalletAdjustmentForm } from '@/components/admin/WalletAdjustmentForm'
-import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge'
 import { TravelRequestStatusBadge } from '@/components/travel/TravelRequestStatusBadge'
 import { TravelProposalStatusBadge } from '@/components/travel/TravelProposalStatusBadge'
 import { WithdrawalStatusBadge } from '@/components/travel/WithdrawalStatusBadge'
@@ -22,7 +21,6 @@ interface UserDetailPageProps {
 const walletReasonLabels: Record<string, string> = {
   referral_referrer: 'Parrainage — filleul livré',
   referral_referred: 'Parrainage — bienvenue',
-  checkout_redemption: 'Utilisé à la commande',
 }
 
 const HISTORY_LIMIT = 20
@@ -39,19 +37,12 @@ export default async function AdminUserDetailPage({ params, searchParams }: User
   }
 
   const [
-    { data: orders },
     { data: travelRequests },
     { data: proposals },
     { data: walletCredits },
     { data: withdrawals },
     { data: adjustments },
   ] = await Promise.all([
-    supabase
-      .from('orders')
-      .select('id, commerce_id, total, status, created_at')
-      .eq('client_id', id)
-      .order('created_at', { ascending: false })
-      .limit(HISTORY_LIMIT),
     supabase
       .from('travel_requests')
       .select('id, item_description, status, created_at')
@@ -83,12 +74,6 @@ export default async function AdminUserDetailPage({ params, searchParams }: User
       .order('created_at', { ascending: false })
       .limit(HISTORY_LIMIT),
   ])
-
-  const commerceIds = Array.from(new Set((orders ?? []).map((o) => o.commerce_id)))
-  const { data: commerces } = commerceIds.length
-    ? await supabase.from('commerces').select('id, name').in('id', commerceIds)
-    : { data: [] as { id: string; name: string }[] }
-  const commerceNameById = new Map((commerces ?? []).map((c) => [c.id, c.name]))
 
   const requestIds = Array.from(new Set((proposals ?? []).map((p) => p.request_id)))
   const { data: requests } = requestIds.length
@@ -185,30 +170,6 @@ export default async function AdminUserDetailPage({ params, searchParams }: User
         </div>
         <WalletAdjustmentForm userId={user.id} />
       </Card>
-
-      <section className="mt-6">
-        <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-900">
-          <Package className="h-5 w-5 text-slate-500" aria-hidden />
-          Commandes ({orders?.length ?? 0})
-        </h2>
-        {(!orders || orders.length === 0) && <p className="text-sm text-slate-500">Aucune commande.</p>}
-        {orders && orders.length > 0 && (
-          <Card className="p-3">
-            {orders.map((order) => (
-              <div key={order.id} className="flex items-center justify-between gap-3 border-b border-slate-100 px-1 py-2 text-sm last:border-0">
-                <div className="min-w-0">
-                  <p className="truncate text-slate-900">{commerceNameById.get(order.commerce_id) ?? 'Commerce'}</p>
-                  <p className="text-xs text-slate-400">{new Date(order.created_at).toLocaleDateString('fr-TN')}</p>
-                </div>
-                <div className="flex flex-shrink-0 items-center gap-2">
-                  <span className="font-medium text-slate-900">{formatTND(order.total)}</span>
-                  <OrderStatusBadge status={order.status} />
-                </div>
-              </div>
-            ))}
-          </Card>
-        )}
-      </section>
 
       <section className="mt-6">
         <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-900">
