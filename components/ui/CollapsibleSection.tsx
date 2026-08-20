@@ -1,12 +1,17 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
-import { ChevronDown, type LucideIcon } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { cn } from '@/lib/utils'
 
 interface CollapsibleSectionProps {
-  icon: LucideIcon
+  // JSX déjà instancié (ex: <Bell className="..." />), pas une référence de
+  // composant (LucideIcon) : ce composant est 'use client', et une fonction
+  // ne peut pas traverser la frontière Server -> Client Component en tant
+  // que prop (seul du JSX/des données sérialisables le peuvent) — bug
+  // reproduit et corrigé après un crash en preview (page /profil/parametres).
+  icon: ReactNode
   title: string
   description?: string
   defaultOpen?: boolean
@@ -16,7 +21,7 @@ interface CollapsibleSectionProps {
 // Card + en-tête cliquable qui replie/déplie son contenu — pattern maison
 // (pas de primitive Radix/headless en dépendance dans ce projet), même
 // esprit que le chevron rotatif d'AdminNav.tsx.
-export function CollapsibleSection({ icon: Icon, title, description, defaultOpen = false, children }: CollapsibleSectionProps) {
+export function CollapsibleSection({ icon, title, description, defaultOpen = false, children }: CollapsibleSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen)
 
   return (
@@ -28,7 +33,7 @@ export function CollapsibleSection({ icon: Icon, title, description, defaultOpen
         className="flex w-full items-center justify-between gap-3 p-6 text-left"
       >
         <div className="flex items-center gap-3">
-          <Icon className="h-5 w-5 flex-shrink-0 text-brand-600" aria-hidden />
+          <div className="flex-shrink-0 text-brand-600">{icon}</div>
           <div>
             <p className="font-semibold text-slate-900">{title}</p>
             {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}

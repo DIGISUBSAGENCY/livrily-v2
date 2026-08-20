@@ -95,19 +95,19 @@ export default async function ParametresPage() {
       </div>
 
       <div className="mt-4">
-        <CollapsibleSection icon={Bell} title="Notifications">
+        <CollapsibleSection icon={<Bell className="h-5 w-5" aria-hidden />} title="Notifications">
           <NotificationToggle />
         </CollapsibleSection>
       </div>
 
       <div className="mt-4">
-        <CollapsibleSection icon={ShieldCheck} title="Sécurité">
+        <CollapsibleSection icon={<ShieldCheck className="h-5 w-5" aria-hidden />} title="Sécurité">
           <SecuritySection email={user.email ?? null} phone={profile.phone} />
         </CollapsibleSection>
       </div>
 
       <div className="mt-4">
-        <CollapsibleSection icon={Laptop2} title="Appareils connectés" description="Bientôt disponible">
+        <CollapsibleSection icon={<Laptop2 className="h-5 w-5" aria-hidden />} title="Appareils connectés" description="Bientôt disponible">
           <p className="text-sm text-slate-500">
             Le suivi des sessions actives par appareil arrive dans une prochaine mise à jour.
           </p>
