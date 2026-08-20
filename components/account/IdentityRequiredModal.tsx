@@ -13,11 +13,12 @@ interface IdentityRequiredModalProps {
   defaultOpen: boolean
 }
 
-// Même texte que VerificationForm/OnboardingTour ("contrat entre toi, le
-// voyageur et Livrily, qui protège les deux parties en cas de litige") —
-// c'est la vraie raison d'être du KYC dans ce modèle (crowd-shipping,
-// pas juste une formalité), reprise telle quelle plutôt que reformulée
-// pour rester cohérente partout dans l'app. Même pattern visuel que
+// Modèle Livrily : le voyageur livre directement l'objet au client, pas
+// d'intermédiaire logistique séparé — donc PAS de "contrat tripartite"
+// (erreur corrigée après coup, cette formulation ne reflète pas notre
+// modèle). La vraie raison d'être du KYC ici : sécuriser un échange direct
+// entre deux particuliers où un vrai paiement est mis en séquestre, pas
+// une formalité administrative gratuite. Même pattern visuel que
 // OnboardingTour.tsx (overlay + Card + croix de fermeture).
 export function IdentityRequiredModal({ defaultOpen }: IdentityRequiredModalProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen)
@@ -42,9 +43,10 @@ export function IdentityRequiredModal({ defaultOpen }: IdentityRequiredModalProp
           </div>
           <h2 className="mt-3 text-lg font-bold tracking-tight text-slate-900">Identité non vérifiée</h2>
           <p className="mt-2 text-sm text-slate-600">
-            Cette vérification sert à générer un contrat entre toi, le voyageur et Livrily, qui
-            protège les deux parties en cas de litige sur la livraison — pas une formalité
-            administrative gratuite.
+            Sur Livrily, la livraison se fait directement entre client et voyageur, sans
+            intermédiaire — le paiement reste séquestré jusqu&apos;à la confirmation de réception.
+            Vérifier l&apos;identité des deux parties avant qu&apos;un paiement réel soit engagé protège
+            autant le client que le voyageur contre la fraude.
           </p>
         </div>
 
