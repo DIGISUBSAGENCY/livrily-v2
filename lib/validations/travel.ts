@@ -1,13 +1,19 @@
 import { z } from 'zod'
 
+// Ajoute https:// devant une URL saisie sans protocole (ex: "google.com")
+// avant de la valider, plutôt que de rejeter — z.string().url() exige un
+// protocole explicite et ce n'est pas ce qu'un utilisateur tape
+// naturellement en collant un lien depuis la barre d'adresse d'un site.
+function normalizeUrlInput(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+}
+
 export const travelRequestSchema = z.object({
   item_description: z.string().trim().min(5, "Décris l'objet (au moins 5 caractères)."),
-  item_url: z
-    .string()
-    .trim()
-    .url('URL invalide.')
-    .optional()
-    .or(z.literal('').transform(() => undefined)),
+  item_url: z.preprocess(normalizeUrlInput, z.string().url('URL invalide.').optional()),
   origin_country: z.string().trim().min(2, "Pays d'origine requis."),
   destination_city: z.string().trim().min(2, 'Ville de destination requise.'),
   budget_max: z.coerce.number().min(0, 'Le budget doit être positif.'),
