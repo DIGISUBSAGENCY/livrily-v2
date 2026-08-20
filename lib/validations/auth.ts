@@ -50,6 +50,22 @@ export const resetPasswordSchema = z
     path: ['confirmPassword'],
   })
 
+// Ancien mot de passe redemandé (pas juste nouveau + confirmation) :
+// updateUser() de Supabase ne l'exige pas techniquement (la session active
+// suffit), mais un appareil laissé connecté/partagé rendrait sinon le
+// changement de mot de passe trivial pour quelqu'un d'autre — re-vérifié
+// via signInWithPassword() côté action avant l'update.
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Mot de passe actuel requis.'),
+    newPassword: z.string().min(6, 'Le nouveau mot de passe doit contenir au moins 6 caractères.'),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'Les mots de passe ne correspondent pas.',
+    path: ['confirmPassword'],
+  })
+
 // Coordonnée optionnelle : le champ hidden envoie '' quand l'adresse a été
 // saisie manuellement (fallback sans clé Google Maps, cf. AddressAutocomplete).
 // On ne bloque jamais la complétion de profil pour une histoire de clé API

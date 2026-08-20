@@ -5,11 +5,19 @@ import Script from 'next/script'
 import { saveOneSignalPlayerId } from '@/lib/notifications/actions'
 
 interface OneSignalPushSubscriptionChangeEvent {
-  current: { id: string | null }
+  current: { id: string | null; optedIn: boolean }
 }
 
 interface OneSignalPushSubscription {
   id: string | null
+  // optedIn/optIn/optOut : ajoutés pour NotificationToggle.tsx (Paramètres
+  // du compte) — pas utilisés par ce fichier lui-même, mais déclarés ici
+  // pour garder une seule définition globale de window.OneSignalDeferred
+  // (deux `declare global` incompatibles sur le même nom entreraient en
+  // conflit).
+  optedIn: boolean
+  optIn: () => Promise<void>
+  optOut: () => Promise<void>
   addEventListener: (
     event: 'change',
     listener: (event: OneSignalPushSubscriptionChangeEvent) => void
