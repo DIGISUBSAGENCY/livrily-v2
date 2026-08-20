@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ShoppingBag, Plane, ShieldCheck, Store, Radar, Wallet } from 'lucide-react'
+import { Plane, ShieldCheck, UserCheck, LifeBuoy, Wallet } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -7,8 +7,10 @@ import { TravelRequestCarousel } from '@/components/home/TravelRequestCarousel'
 import { getTravelTrend, type TravelTrend } from '@/lib/travel/getTravelTrend'
 
 // Badges de confiance : uniquement des affirmations vraies sur la
-// plateforme telle qu'elle existe aujourd'hui (pas de vérification
-// d'identité construite — donc pas de badge "utilisateurs vérifiés").
+// plateforme telle qu'elle existe aujourd'hui. "Commerces vérifiés" et
+// "Suivi en temps réel" (position GPS livreur) ont disparu avec le rôle
+// commerce — remplacés par 2 points réels du modèle Jibli (KYC obligatoire,
+// litiges pris en charge).
 const trustBadges = [
   {
     icon: ShieldCheck,
@@ -16,14 +18,14 @@ const trustBadges = [
     description: "L'argent reste séquestré et n'est versé au voyageur qu'à la réception confirmée.",
   },
   {
-    icon: Store,
-    title: 'Commerces vérifiés',
-    description: 'Chaque commerce partenaire est ajouté et contrôlé par l\'équipe Livrily, pas en libre-service.',
+    icon: UserCheck,
+    title: 'Identité vérifiée',
+    description: 'Client et voyageur confirment leur identité (~2 min) avant toute transaction réelle.',
   },
   {
-    icon: Radar,
-    title: 'Suivi en temps réel',
-    description: 'Position du livreur en direct sur la carte pendant toute la livraison.',
+    icon: LifeBuoy,
+    title: 'Litiges pris en charge',
+    description: "En cas de désaccord, l'équipe Livrily intervient et tranche.",
   },
 ]
 
@@ -33,16 +35,13 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const [{ count: activeCommerces }, { count: openRequests }, { count: membersCount }, { data: latestRequests }] =
-    await Promise.all([
-      supabase.from('commerces').select('id', { count: 'exact', head: true }).eq('is_active', true),
-      supabase.from('travel_requests').select('id', { count: 'exact', head: true }).eq('status', 'open'),
-      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'client'),
-      supabase.from('travel_requests').select('*').eq('status', 'open').order('created_at', { ascending: false }).limit(10),
-    ])
+  const [{ count: openRequests }, { count: membersCount }, { data: latestRequests }] = await Promise.all([
+    supabase.from('travel_requests').select('id', { count: 'exact', head: true }).eq('status', 'open'),
+    supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'client'),
+    supabase.from('travel_requests').select('*').eq('status', 'open').order('created_at', { ascending: false }).limit(10),
+  ])
 
   const stats = [
-    { label: 'Commerces actifs', value: activeCommerces ?? 0 },
     { label: 'Demandes de voyage ouvertes', value: openRequests ?? 0 },
     { label: 'Membres Livrily', value: membersCount ?? 0 },
   ]
@@ -92,23 +91,23 @@ export default async function HomePage() {
       <section className="bg-gradient-to-b from-brand-50 to-white px-4 py-16 sm:py-20">
         <div className="mx-auto max-w-2xl text-center">
           <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-            Tes courses livrées, tes envies ramenées de l&apos;étranger
+            Fais-toi ramener un objet de l&apos;étranger
           </h1>
           <p className="mt-4 text-lg text-slate-600">
-            Commande chez tes commerçants du quotidien, ou fais-toi ramener un objet par un
-            voyageur — paiement sécurisé, suivi en direct.
+            Demande à un voyageur de te le ramener, ou rentabilise ton prochain voyage en le
+            ramenant toi-même — paiement sécurisé, en séquestre jusqu&apos;à réception.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Link href="/commerces">
+            <Link href="/jibli/nouvelle-demande">
               <Button size="lg">
-                <ShoppingBag className="h-4 w-4" aria-hidden />
-                Commander
+                <Plane className="h-4 w-4" aria-hidden />
+                Publier une demande
               </Button>
             </Link>
             <Link href="/jibli">
               <Button variant="secondary" size="lg">
-                <Plane className="h-4 w-4" aria-hidden />
+                <Wallet className="h-4 w-4" aria-hidden />
                 Devenir voyageur
               </Button>
             </Link>
@@ -116,7 +115,7 @@ export default async function HomePage() {
         </div>
 
         {/* Stats ------------------------------------------------------- */}
-        <div className="mx-auto mt-12 grid max-w-3xl gap-4 sm:grid-cols-3">
+        <div className="mx-auto mt-12 grid max-w-xl gap-4 sm:grid-cols-2">
           {stats.map((stat) => (
             <Card key={stat.label} className="text-center">
               <p className="text-3xl font-bold text-slate-900">{stat.value}</p>
