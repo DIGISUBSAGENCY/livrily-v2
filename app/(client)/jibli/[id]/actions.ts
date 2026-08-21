@@ -13,7 +13,9 @@ const VALIDITY_DURATIONS_MS: Record<ProposalValidity, number> = {
 import { generateFlouciPayment, isFlouciConfigured, tndToMillimes, FlouciConfigError, FlouciApiError } from '@/lib/flouci'
 import { getIdentityStatus, isIdentityVerified } from '@/lib/identity'
 import { disputeSchema } from '@/lib/validations/disputes'
+import { reviewSchema } from '@/lib/validations/reviews'
 import { getSiteUrl } from '@/lib/site'
+import type { ReviewDirection } from '@/types/database'
 
 export interface ProposalFormState {
   error: string | null
@@ -362,4 +364,76 @@ export async function openDispute(
   revalidatePath(`/jibli/${requestId}`)
   revalidatePath('/profil/litiges')
   return { error: null, success: true }
+}
+
+export interface ReviewActionResult {
+  error: string | null
+}
+
+// reviewee_id et direction sont CALCULÉS ici, jamais envoyés par le
+// frontend (cf. contrainte générale du projet : ne jamais faire confiance
+// à un user_id envoyé par le client) — dérivés de la mission elle-même
+// (client_id, voyageur de la proposition acceptée) et de qui appelle
+// l'action. Défense en profondeur : la policy travel_reviews_insert_involved
+// revérifie tout ça côté RLS de toute façon (client_confirmed_at, pas de
+// litige ouvert, unique(travel_request_id, reviewer_id)).
+export async function submitReview(requestId: string, rating: number, comment: string): Promise<ReviewActionResult> {
+  const parsed = reviewSchema.safeParse({ rating, comment })
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Formulaire invalide.' }
+  }
+
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Non authentifié.' }
+
+  const { data: request } = await supabase
+    .from('travel_requests')
+    .select('client_id, accepted_proposal_id')
+    .eq('id', requestId)
+    .single()
+
+  if (!request) return { error: 'Mission introuvable.' }
+
+  const { data: proposal } = request.accepted_proposal_id
+    ? await supabase.from('travel_proposals').select('voyageur_id').eq('id', request.accepted_proposal_id).single()
+    : { data: null }
+
+  let revieweeId: string
+  let direction: ReviewDirection
+  if (user.id === request.client_id && proposal) {
+    revieweeId = proposal.voyageur_id
+    direction = 'client_to_voyageur'
+  } else if (proposal && user.id === proposal.voyageur_id) {
+    revieweeId = request.client_id
+    direction = 'voyageur_to_client'
+  } else {
+    return { error: "Tu n'es pas partie prenante de cette mission." }
+  }
+
+  const { error } = await supabase.from('travel_reviews').insert({
+    travel_request_id: requestId,
+    reviewer_id: user.id,
+    reviewee_id: revieweeId,
+    direction,
+    rating: parsed.data.rating,
+    comment: parsed.data.comment ?? null,
+  })
+
+  if (error) {
+    if (error.code === '23505') {
+      return { error: 'Tu as déjà laissé un avis sur cette mission.' }
+    }
+    // RLS bloque si client_confirmed_at n'est pas posé, ou si un litige est
+    // encore ouvert — remonté ici comme un message générique plutôt que
+    // d'exposer error.message (détail RLS interne).
+    return { error: "Impossible de soumettre l'avis pour l'instant." }
+  }
+
+  revalidatePath(`/jibli/${requestId}`)
+  revalidatePath('/profil')
+  return { error: null }
 }

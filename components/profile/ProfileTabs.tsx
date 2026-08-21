@@ -4,12 +4,22 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { PackageSearch, Luggage, Star, Info } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { ReviewCard } from '@/components/travel/ReviewCard'
 import { cn } from '@/lib/utils'
 
 type TabKey = 'apercu' | 'demandes' | 'propositions' | 'avis' | 'a-propos'
 
+interface ReceivedReview {
+  id: string
+  rating: number
+  comment: string | null
+  createdAt: string
+  reviewerName: string
+}
+
 interface ProfileTabsProps {
   overview: React.ReactNode
+  reviews: ReceivedReview[]
 }
 
 const tabs: { key: TabKey; label: string }[] = [
@@ -24,10 +34,11 @@ const tabs: { key: TabKey; label: string }[] = [
 // ne publie pas de voyage à part, il propose directement sur une demande
 // existante, cf. Mes propositions). Demandes/Mes propositions ont déjà des
 // pages dédiées (mes-demandes, mes-propositions) : plutôt que dupliquer
-// leur contenu ici, ce tab affiche une carte de redirection. Avis/À propos
-// n'ont encore aucune donnée réelle derrière (pas de notation entre
-// particuliers dans le schéma actuel) : placeholder "Bientôt disponible".
-export function ProfileTabs({ overview }: ProfileTabsProps) {
+// leur contenu ici, ce tab affiche une carte de redirection. À propos n'a
+// encore aucune donnée réelle derrière : placeholder "Bientôt disponible".
+// Avis : liste réelle désormais (travel_reviews), déjà filtrée par RLS
+// (double aveugle) avant d'arriver ici — cf. app/profil/page.tsx.
+export function ProfileTabs({ overview, reviews }: ProfileTabsProps) {
   const [tab, setTab] = useState<TabKey>('apercu')
 
   return (
@@ -71,12 +82,19 @@ export function ProfileTabs({ overview }: ProfileTabsProps) {
           />
         )}
 
-        {tab === 'avis' && (
-          <EmptyPanel icon={Star} title="Avis" description="Les avis entre utilisateurs arrivent bientôt." />
-        )}
+        {tab === 'avis' &&
+          (reviews.length > 0 ? (
+            <div className="space-y-3">
+              {reviews.map((r) => (
+                <ReviewCard key={r.id} rating={r.rating} comment={r.comment} reviewerName={r.reviewerName} createdAt={r.createdAt} />
+              ))}
+            </div>
+          ) : (
+            <EmptyPanel icon={Star} title="Avis" description="Tu n'as encore reçu aucun avis." />
+          ))}
 
         {tab === 'a-propos' && (
-          <EmptyPanel icon={Info} title="À propos" description="Cette section sera bientôt disponible." />
+          <EmptyPanel icon={Info} title="À propos" description="Bientôt disponible." />
         )}
       </div>
     </div>
@@ -120,7 +138,7 @@ function EmptyPanel({ icon: Icon, title, description }: { icon: typeof Star; tit
       </div>
       <div>
         <p className="font-medium text-slate-900">{title}</p>
-        <p className="mt-1 text-sm text-slate-500">Bientôt disponible — {description}</p>
+        <p className="mt-1 text-sm text-slate-500">{description}</p>
       </div>
     </div>
   )

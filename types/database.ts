@@ -32,6 +32,8 @@ export type DisputeStatus = 'open' | 'resolved'
 
 export type FlouciIncidentStatus = 'unresolved' | 'resolved'
 
+export type ReviewDirection = 'client_to_voyageur' | 'voyageur_to_client'
+
 export interface Database {
   public: {
     Tables: {
@@ -330,6 +332,38 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['flouci_payment_incidents']['Insert']>
         Relationships: []
       }
+      travel_reviews: {
+        Row: {
+          id: string
+          travel_request_id: string
+          reviewer_id: string
+          reviewee_id: string
+          direction: ReviewDirection
+          rating: number
+          comment: string | null
+          hidden_by_admin: boolean
+          hidden_reason: string | null
+          hidden_by: string | null
+          hidden_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          travel_request_id: string
+          reviewer_id: string
+          reviewee_id: string
+          direction: ReviewDirection
+          rating: number
+          comment?: string | null
+          hidden_by_admin?: boolean
+          hidden_reason?: string | null
+          hidden_by?: string | null
+          hidden_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['travel_reviews']['Insert']>
+        Relationships: []
+      }
       withdrawal_requests: {
         Row: {
           id: string
@@ -452,6 +486,10 @@ export interface Database {
         Args: { p_request_ids: string[] }
         Returns: { request_id: string; total_proposals: number; recent_proposals: number }[]
       }
+      get_profile_rating: {
+        Args: { p_profile_id: string }
+        Returns: { avg_rating: number | null; review_count: number }[]
+      }
     }
   }
 }
@@ -468,3 +506,4 @@ export type TravelPayment = Database['public']['Tables']['travel_payments']['Row
 export type WithdrawalRequest = Database['public']['Tables']['withdrawal_requests']['Row']
 export type Dispute = Database['public']['Tables']['disputes']['Row']
 export type FlouciPaymentIncident = Database['public']['Tables']['flouci_payment_incidents']['Row']
+export type TravelReview = Database['public']['Tables']['travel_reviews']['Row']

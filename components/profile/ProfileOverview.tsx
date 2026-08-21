@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { StatCard } from '@/components/ui/StatCard'
 import { TrustPanel } from '@/components/profile/TrustPanel'
 import type { ProfileStats } from '@/lib/profileStats'
+import type { ProfileRating } from '@/lib/reviews'
 
 interface ProfileOverviewProps {
   stats: ProfileStats
@@ -12,9 +13,17 @@ interface ProfileOverviewProps {
   kycVerified: boolean
   memberSinceLabel: string
   userId: string
+  rating: ProfileRating
 }
 
-export function ProfileOverview({ stats, emailVerified, kycVerified, memberSinceLabel, userId }: ProfileOverviewProps) {
+export function ProfileOverview({
+  stats,
+  emailVerified,
+  kycVerified,
+  memberSinceLabel,
+  userId,
+  rating,
+}: ProfileOverviewProps) {
   const verificationsCompleted = (emailVerified ? 1 : 0) + (kycVerified ? 1 : 0)
 
   return (
@@ -22,9 +31,11 @@ export function ProfileOverview({ stats, emailVerified, kycVerified, memberSince
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <StatCard icon={PackageCheck} value={stats.confirmedDeliveries} label="Livraisons confirmées" />
         <StatCard icon={ClipboardList} value={stats.activeRequests} label="Demandes actives" />
-        {/* Pas de vraie note pour l'instant : aucune notation entre
-            particuliers n'existe dans le schéma. Card statique en attendant. */}
-        <StatCard icon={Star} value="Bientôt" label="Note moyenne" />
+        <StatCard
+          icon={Star}
+          value={rating.avgRating !== null ? rating.avgRating.toFixed(1) : '—'}
+          label={rating.reviewCount > 0 ? `Note moyenne (${rating.reviewCount} avis)` : 'Note moyenne (aucun avis)'}
+        />
         <StatCard icon={ShieldCheck} value={`${verificationsCompleted}/2`} label="Vérifications" />
       </div>
 
