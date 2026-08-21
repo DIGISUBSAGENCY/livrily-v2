@@ -1730,6 +1730,70 @@ create policy "disputes_update_admin_only"
   using (public.is_admin());
 
 -- ============================================================================
+-- Appareils connectés : lecture + révocation des sessions actives
+-- ============================================================================
+-- auth.sessions n'est PAS exposée via PostgREST sur ce projet (confirmé en
+-- direct : erreur PGRST106, "Only the following schemas are exposed:
+-- public, graphql_public"). Ces 2 fonctions SECURITY DEFINER contournent
+-- cette restriction depuis L'INTÉRIEUR de Postgres (où elle ne s'applique
+-- pas), tout en ne renvoyant/n'affectant JAMAIS que les sessions de
+-- l'appelant — jamais d'accès direct au schéma auth depuis le client.
+create or replace function public.list_my_sessions()
+returns table (
+  id uuid,
+  created_at timestamptz,
+  updated_at timestamptz,
+  user_agent text,
+  ip text
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select s.id, s.created_at, s.updated_at, s.user_agent, s.ip::text
+  from auth.sessions s
+  where s.user_id = auth.uid();
+$$;
+
+grant execute on function public.list_my_sessions() to authenticated;
+
+-- Révoque (supprime) une session appartenant à l'utilisateur courant.
+-- Vérification explicite de propriété AVANT suppression — sécurité
+-- critique, jamais de révocation cross-user. "is distinct from" plutôt que
+-- "<>" : NULL <> NULL vaut NULL (donc "faux" dans un IF plpgsql), ce qui
+-- laisserait passer une révocation si auth.uid() était NULL (connexion non
+-- authentifiée) — "is distinct from" traite NULL comme une vraie valeur
+-- comparable et bloque correctement ce cas. Vérifié en direct (compte de
+-- test à 2 sessions + compte tiers) : isolation cross-user OK, révocation
+-- légitime OK, refresh token de la session révoquée bien invalidé côté
+-- Supabase Auth.
+create or replace function public.revoke_my_session(p_session_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_owner uuid;
+begin
+  select user_id into v_owner from auth.sessions where id = p_session_id;
+
+  if v_owner is null then
+    raise exception 'Session introuvable.';
+  end if;
+
+  if v_owner is distinct from auth.uid() then
+    raise exception 'Non autorisé.';
+  end if;
+
+  delete from auth.sessions where id = p_session_id;
+end;
+$$;
+
+grant execute on function public.revoke_my_session(uuid) to authenticated;
+
+-- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,
 -- catalogue, livraison zone tarifée — a existé puis a été retiré
 -- intégralement, cf. tête de fichier).

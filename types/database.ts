@@ -370,6 +370,14 @@ export interface Database {
     // entièrement) — cf. supabase/schema.sql.
     Views: {}
     Functions: {
+      list_my_sessions: {
+        Args: Record<string, never>
+        Returns: { id: string; created_at: string; updated_at: string; user_agent: string | null; ip: string | null }[]
+      }
+      revoke_my_session: {
+        Args: { p_session_id: string }
+        Returns: undefined
+      }
       adjust_wallet_balance: {
         Args: { p_profile_id: string; p_amount: number; p_reason: string }
         Returns: undefined
