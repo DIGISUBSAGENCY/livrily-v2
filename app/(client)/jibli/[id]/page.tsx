@@ -14,14 +14,17 @@ import { MissionInfoGrid } from '@/components/travel/MissionInfoGrid'
 import { VoyageurGainCard } from '@/components/travel/VoyageurGainCard'
 import { RequestPhotoPlaceholder } from '@/components/travel/RequestPhotoPlaceholder'
 import { DisputeForm } from '@/components/travel/DisputeForm'
+import { ReviewForm } from '@/components/travel/ReviewForm'
 import { IdentityRequiredModal } from '@/components/account/IdentityRequiredModal'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { StarRating } from '@/components/ui/StarRating'
 import { getPublicStorageUrl } from '@/lib/storage'
 import { pageMetadata } from '@/lib/seo'
 import { estimateSuggestedGain, actualGainFromProposal } from '@/lib/travel/estimateGain'
 import { getIdentityStatus, type IdentityGateStatus } from '@/lib/identity'
-import type { BankTransferInfo, TravelPayment, TravelProposal, TravelProposalOffer } from '@/types/database'
+import { getProfileRating, type ProfileRating } from '@/lib/reviews'
+import type { BankTransferInfo, TravelPayment, TravelProposal, TravelProposalOffer, TravelReview } from '@/types/database'
 
 interface TravelRequestPageProps {
   params: Promise<{ id: string }>
@@ -83,6 +86,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
   let proposals: TravelProposal[] = []
   let voyageurNames = new Map<string, string>()
   let voyageurVerified = new Map<string, boolean>()
+  let voyageurRatings = new Map<string, ProfileRating>()
   let myProposal: TravelProposal | null = null
   let payment: TravelPayment | null = null
   let bankInfo: PlatformPaymentInfo | null = null
@@ -125,6 +129,13 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
           })
         )
         voyageurVerified = new Map(verifiedEntries)
+
+        // Note publique de chaque voyageur (get_profile_rating, jamais le
+        // contenu des avis) — aide le client à comparer ses propositions.
+        const ratingEntries = await Promise.all(
+          voyageurIds.map(async (voyageurId) => [voyageurId, await getProfileRating(supabase, voyageurId)] as const)
+        )
+        voyageurRatings = new Map(ratingEntries)
       }
 
       // Historique de négociation de chaque fil (une seule requête groupée,
@@ -201,6 +212,21 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
   // Un litige n'a de sens qu'une fois une transaction engagée (proposition
   // acceptée) — pas sur une demande encore 'open' sans personne en face.
   const canDispute = (isOwner || isAcceptedVoyageur) && request.status !== 'open'
+  // Même gate que la policy RLS travel_reviews_insert_involved côté
+  // affichage : client_confirmed_at (pas juste status='completed') prouve
+  // que la transaction est réellement allée au bout.
+  const canReview = (isOwner || isAcceptedVoyageur) && request.client_confirmed_at !== null
+
+  let myReview: TravelReview | null = null
+  if (canReview && user) {
+    const { data } = await supabase
+      .from('travel_reviews')
+      .select('*')
+      .eq('travel_request_id', id)
+      .eq('reviewer_id', user.id)
+      .maybeSingle()
+    myReview = data ?? null
+  }
 
   // Montants réels dès qu'une proposition concrète existe (celle acceptée
   // pour le client propriétaire, la sienne pour un voyageur) — sinon
@@ -220,6 +246,9 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
   // Carte détaillée réservée au voyageur (prospectif ou avec proposition) —
   // le client voit déjà le détail de chaque proposition via ProposalCard.
   const showVoyageurGainCard = !isOwner
+  const otherPartyNameForReview = isOwner
+    ? (voyageurNames.get(acceptedProposal?.voyageur_id ?? '') ?? 'le voyageur')
+    : (clientName ?? 'le client')
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
@@ -312,6 +341,21 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
         </div>
       )}
 
+      {canReview && (
+        <Card className="mt-4">
+          <h2 className="mb-3 font-semibold text-slate-900">Avis</h2>
+          {myReview ? (
+            <div>
+              <StarRating value={myReview.rating} size="sm" />
+              {myReview.comment && <p className="mt-2 text-sm text-slate-600">{myReview.comment}</p>}
+              <p className="mt-2 text-xs text-slate-400">Ton avis a été envoyé, merci !</p>
+            </div>
+          ) : (
+            <ReviewForm requestId={request.id} otherPartyName={otherPartyNameForReview} />
+          )}
+        </Card>
+      )}
+
       {isOwner && (
         <div className="mt-6">
           <h2 className="mb-3 font-semibold text-slate-900">
@@ -333,6 +377,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
                 bankInfo={bankInfo}
                 voyageurVerified={voyageurVerified.get(proposal.voyageur_id) ?? false}
                 identityStatus={ownerIdentityStatus}
+                voyageurRating={voyageurRatings.get(proposal.voyageur_id) ?? null}
               />
             ))}
           </div>

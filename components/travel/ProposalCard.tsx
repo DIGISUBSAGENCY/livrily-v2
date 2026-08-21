@@ -12,6 +12,7 @@ import { NegotiationThread } from '@/components/travel/NegotiationThread'
 import { CounterOfferForm } from '@/components/travel/CounterOfferForm'
 import { AgreeToOfferButton } from '@/components/travel/AgreeToOfferButton'
 import { IdentityProgressBar } from '@/components/account/IdentityProgressBar'
+import { StarRating } from '@/components/ui/StarRating'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Alert } from '@/components/ui/Alert'
@@ -20,6 +21,7 @@ import { formatTND } from '@/lib/format'
 import { formatDeadline } from '@/lib/travel/formatDeadline'
 import { actualGainFromProposal } from '@/lib/travel/estimateGain'
 import type { IdentityGateStatus } from '@/lib/identity'
+import type { ProfileRating } from '@/lib/reviews'
 import type { BankTransferInfo, TravelProposal, TravelProposalOffer, TravelRequestStatus } from '@/types/database'
 
 type PlatformPaymentInfo = Pick<BankTransferInfo, 'bank_name' | 'account_holder' | 'rib' | 'flouci_phone'>
@@ -43,6 +45,10 @@ interface ProposalCardProps {
   // affiché ici pour ne pas laisser le client échouer une soumission avant
   // de découvrir qu'il doit d'abord se vérifier.
   identityStatus?: IdentityGateStatus | null
+  // Note publique du voyageur (get_profile_rating, jamais le contenu des
+  // avis) — uniquement pertinent pour viewerRole="owner", même logique que
+  // voyageurVerified : aide le client à comparer plusieurs propositions.
+  voyageurRating?: ProfileRating | null
 }
 
 export function ProposalCard({
@@ -55,6 +61,7 @@ export function ProposalCard({
   bankInfo = null,
   voyageurVerified = false,
   identityStatus = null,
+  voyageurRating = null,
 }: ProposalCardProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -112,8 +119,14 @@ export function ProposalCard({
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
         {viewerRole === 'owner' ? (
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <p className="font-medium text-slate-900">{otherPartyName}</p>
+            {voyageurRating && voyageurRating.reviewCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                <StarRating value={voyageurRating.avgRating ?? 0} size="sm" />
+                {voyageurRating.avgRating?.toFixed(1)} ({voyageurRating.reviewCount})
+              </span>
+            )}
             {voyageurVerified && (
               <span
                 title="Identité vérifiée"
