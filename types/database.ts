@@ -30,6 +30,8 @@ export type IdentityVerificationStatus = 'pending' | 'approved' | 'rejected'
 
 export type DisputeStatus = 'open' | 'resolved'
 
+export type FlouciIncidentStatus = 'unresolved' | 'resolved'
+
 export interface Database {
   public: {
     Tables: {
@@ -297,6 +299,37 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['disputes']['Insert']>
         Relationships: []
       }
+      flouci_payment_incidents: {
+        Row: {
+          id: string
+          travel_request_id: string
+          travel_proposal_id: string
+          client_id: string
+          flouci_payment_id: string
+          amount: number
+          error_message: string
+          status: FlouciIncidentStatus
+          resolution_note: string | null
+          resolved_by: string | null
+          resolved_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          travel_request_id: string
+          travel_proposal_id: string
+          client_id: string
+          flouci_payment_id: string
+          amount: number
+          error_message: string
+          status?: FlouciIncidentStatus
+          resolution_note?: string | null
+          resolved_by?: string | null
+          resolved_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['flouci_payment_incidents']['Insert']>
+        Relationships: []
+      }
       withdrawal_requests: {
         Row: {
           id: string
@@ -434,3 +467,4 @@ export type TravelProposalOffer = Database['public']['Tables']['travel_proposal_
 export type TravelPayment = Database['public']['Tables']['travel_payments']['Row']
 export type WithdrawalRequest = Database['public']['Tables']['withdrawal_requests']['Row']
 export type Dispute = Database['public']['Tables']['disputes']['Row']
+export type FlouciPaymentIncident = Database['public']['Tables']['flouci_payment_incidents']['Row']
