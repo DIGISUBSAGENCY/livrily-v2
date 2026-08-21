@@ -12,6 +12,7 @@ import { PersonalInfoSummary } from '@/components/account/PersonalInfoSummary'
 import { SecuritySection } from '@/components/account/SecuritySection'
 import { DangerZone } from '@/components/account/DangerZone'
 import { NotificationToggle } from '@/components/account/NotificationToggle'
+import { ConnectedSessions } from '@/components/account/ConnectedSessions'
 import { CollapsibleSection } from '@/components/ui/CollapsibleSection'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -23,6 +24,23 @@ export const metadata: Metadata = pageMetadata({
   noIndex: true,
 })
 
+// La session courante n'a pas d'id exposé directement par le SDK côté
+// serveur — mais le JWT (access_token) porte un claim `session_id`
+// (vérifié en direct : présent sur ce projet), qui correspond exactement
+// à auth.sessions.id renvoyé par list_my_sessions(). Décodage local du
+// payload, pas de vérification de signature nécessaire ici : la valeur
+// sert uniquement à savoir laquelle des LIGNES DÉJÀ RENVOYÉES PAR UN RPC
+// AUTHENTIFIÉ est "la mienne" pour l'affichage, jamais à autoriser quoi
+// que ce soit (l'autorisation réelle est entièrement côté RPC).
+function decodeSessionId(accessToken: string): string | null {
+  try {
+    const payload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64').toString())
+    return typeof payload.session_id === 'string' ? payload.session_id : null
+  } catch {
+    return null
+  }
+}
+
 export default async function ParametresPage() {
   const supabase = await createClient()
   const {
@@ -31,16 +49,20 @@ export default async function ParametresPage() {
 
   if (!user) redirect('/login?next=/profil/parametres')
 
-  const [{ data: profile }, identityStatus] = await Promise.all([
+  const [{ data: profile }, identityStatus, { data: sessions }, { data: sessionData }] = await Promise.all([
     supabase
       .from('profiles')
       .select('full_name, phone, country, address, profession, avatar_url, is_active')
       .eq('id', user.id)
       .single(),
     getIdentityStatus(supabase, user.id),
+    supabase.rpc('list_my_sessions'),
+    supabase.auth.getSession(),
   ])
 
   if (!profile) redirect('/login?next=/profil/parametres')
+
+  const currentSessionId = sessionData.session ? decodeSessionId(sessionData.session.access_token) : null
 
   const emailVerified = Boolean(user.email_confirmed_at)
   const kycVerified = isIdentityVerified(identityStatus)
@@ -107,10 +129,8 @@ export default async function ParametresPage() {
       </div>
 
       <div className="mt-4">
-        <CollapsibleSection icon={<Laptop2 className="h-5 w-5" aria-hidden />} title="Appareils connectés" description="Bientôt disponible">
-          <p className="text-sm text-slate-500">
-            Le suivi des sessions actives par appareil arrive dans une prochaine mise à jour.
-          </p>
+        <CollapsibleSection icon={<Laptop2 className="h-5 w-5" aria-hidden />} title="Appareils connectés">
+          <ConnectedSessions initialSessions={sessions ?? []} currentSessionId={currentSessionId} />
         </CollapsibleSection>
       </div>
 
