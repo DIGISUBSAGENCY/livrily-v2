@@ -23,7 +23,7 @@ export function ReferralCodeCard({ code, shareUrl }: { code: string; shareUrl: s
     <Card>
       <h2 className="font-semibold text-slate-900">Ton code de parrainage</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Partage ce lien : 5 DT offerts à ton filleul et à toi dès sa première commande livrée.
+        Fais connaître Livrily à tes proches grâce à ton lien personnel.
       </p>
       <div className="mt-3 flex items-center gap-2">
         <code className="flex-1 truncate rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700">

@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { forgotPasswordSchema } from '@/lib/validations/auth'
+import { getSiteUrl } from '@/lib/site'
 
 export interface ForgotPasswordFormState {
   error: string | null
@@ -26,7 +27,7 @@ export interface ResendCodeResult {
 // (redirection vs. rester sur place) diffère.
 async function sendPasswordResetEmail(email: string): Promise<{ error: string | null }> {
   const supabase = await createClient()
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+  const siteUrl = getSiteUrl()
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${siteUrl}/auth/callback?next=/reset-password`,
