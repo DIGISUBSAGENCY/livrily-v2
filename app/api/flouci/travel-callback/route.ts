@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { verifyFlouciPayment, FlouciApiError, FlouciConfigError } from '@/lib/flouci'
 
 // Flouci redirige ici après la tentative de paiement (success_link). On ne
@@ -43,10 +43,49 @@ export async function GET(request: Request) {
     })
 
     if (error) {
-      // Paiement Flouci confirmé mais l'acceptation a échoué (ex: demande
-      // annulée entre-temps) : le paiement reste orphelin côté Flouci, sans
-      // enregistrement travel_payments — nécessite un remboursement manuel
-      // par l'admin. Pas de logique de remboursement automatique pour l'instant.
+      // Paiement Flouci confirmé (vérifié ci-dessus auprès de la vraie API,
+      // jamais sur la foi des query params) mais l'acceptation a échoué (ex:
+      // demande qui n'est plus 'open', proposition qui n'est plus 'pending'
+      // — race avec un autre voyageur accepté entre-temps, ou demande
+      // annulée pendant le checkout Flouci) : le paiement reste orphelin
+      // côté Flouci, sans enregistrement travel_payments. On capture
+      // l'incident pour qu'un admin puisse le traiter depuis
+      // /admin/flouci-incidents — jusqu'ici rien n'était enregistré, juste
+      // ce paramètre d'URL perdu au refresh.
+      // Client admin car aucune policy INSERT n'existe pour authenticated
+      // sur flouci_payment_incidents (écriture réservée au système).
+      const { data: proposal } = await supabase
+        .from('travel_proposals')
+        .select('item_price, delivery_fee')
+        .eq('id', proposalId)
+        .maybeSingle()
+
+      if (proposal) {
+        const admin = createAdminClient()
+        const { error: insertError } = await admin.from('flouci_payment_incidents').insert({
+          travel_request_id: requestId,
+          travel_proposal_id: proposalId,
+          client_id: user.id,
+          flouci_payment_id: paymentId,
+          amount: proposal.item_price + proposal.delivery_fee,
+          error_message: error.message,
+        })
+        // flouci_payment_id est unique : un doublon (ex. l'utilisateur
+        // rafraîchit la page de callback) déclenche une violation de
+        // contrainte ici, ce qui est le comportement voulu — on ne veut
+        // qu'une seule ligne d'incident par paiement Flouci.
+        if (insertError && insertError.code !== '23505') {
+          console.error('[flouci/travel-callback] échec insertion incident', {
+            message: insertError.message,
+            code: insertError.code,
+          })
+        }
+      } else {
+        console.error('[flouci/travel-callback] proposition introuvable pour capturer l\'incident', {
+          proposalId,
+        })
+      }
+
       return NextResponse.redirect(`${redirectTarget}?flouci=orphaned`)
     }
 

@@ -31,11 +31,13 @@ const items: NavItem[] = [
   { href: '/admin', label: 'Tableau de bord' },
   { href: '/admin/utilisateurs', label: 'Utilisateurs' },
   { href: '/admin/verifications', label: 'Vérifications' },
+  { href: '/admin/litiges', label: 'Litiges' },
   {
     label: 'Paiements',
     links: [
       { href: '/admin/jibli-paiements', label: 'Paiements Jibli' },
       { href: '/admin/retraits', label: 'Retraits' },
+      { href: '/admin/flouci-incidents', label: 'Paiements Flouci orphelins' },
     ],
   },
   {

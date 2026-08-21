@@ -1794,6 +1794,47 @@ $$;
 grant execute on function public.revoke_my_session(uuid) to authenticated;
 
 -- ============================================================================
+-- Table: flouci_payment_incidents
+-- Capture les cas où un paiement Flouci a réellement réussi (vérifié
+-- serveur-à-serveur, jamais fait confiance aux paramètres d'URL) mais où
+-- accept_travel_proposal() a ensuite échoué — rien n'était enregistré nulle
+-- part jusqu'ici pour ces cas (juste une redirection ?flouci=orphaned,
+-- perdue au refresh). Écrite uniquement par le client admin (service role,
+-- dans le callback) — jamais accessible en écriture aux utilisateurs
+-- normaux, pas de policy INSERT pour authenticated. Exécutée en prod et
+-- vérifiée en direct avant ce commit.
+-- ============================================================================
+create table if not exists public.flouci_payment_incidents (
+  id uuid primary key default gen_random_uuid(),
+  travel_request_id uuid not null references public.travel_requests(id) on delete cascade,
+  travel_proposal_id uuid not null references public.travel_proposals(id) on delete cascade,
+  client_id uuid not null references public.profiles(id),
+  flouci_payment_id text not null unique,
+  amount numeric(10,3) not null check (amount >= 0),
+  error_message text not null,
+  status text not null default 'unresolved' check (status in ('unresolved', 'resolved')),
+  resolution_note text,
+  resolved_by uuid references public.profiles(id),
+  resolved_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists flouci_incidents_status_idx on public.flouci_payment_incidents(status);
+create index if not exists flouci_incidents_client_idx on public.flouci_payment_incidents(client_id);
+
+alter table public.flouci_payment_incidents enable row level security;
+
+drop policy if exists "flouci_incidents_select_admin_only" on public.flouci_payment_incidents;
+create policy "flouci_incidents_select_admin_only"
+  on public.flouci_payment_incidents for select
+  using (public.is_admin());
+
+drop policy if exists "flouci_incidents_update_admin_only" on public.flouci_payment_incidents;
+create policy "flouci_incidents_update_admin_only"
+  on public.flouci_payment_incidents for update
+  using (public.is_admin());
+
+-- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,
 -- catalogue, livraison zone tarifée — a existé puis a été retiré
 -- intégralement, cf. tête de fichier).
