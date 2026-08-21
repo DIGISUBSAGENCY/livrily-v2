@@ -113,3 +113,33 @@ export async function deactivateAccount(): Promise<DeactivateAccountResult> {
   await supabase.auth.signOut()
   redirect('/')
 }
+
+export interface RevokeSessionResult {
+  error: string | null
+}
+
+// Déconnexion à distance d'une autre session (components/account/
+// ConnectedSessions.tsx). La vérification de propriété (auth.uid() =
+// user_id de la session ciblée) est faite CÔTÉ BASE par revoke_my_session()
+// (SECURITY DEFINER, cf. supabase/schema.sql) — jamais uniquement côté
+// application, exactement pour ce genre d'action où une erreur laisserait
+// un utilisateur déconnecter la session d'un autre. Vérifié en direct
+// (compte de test à 2 sessions + compte tiers) avant ce commit.
+export async function revokeSession(sessionId: string): Promise<RevokeSessionResult> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: 'Session expirée, reconnecte-toi.' }
+  }
+
+  const { error } = await supabase.rpc('revoke_my_session', { p_session_id: sessionId })
+  if (error) {
+    return { error: 'Impossible de déconnecter cet appareil, réessaie.' }
+  }
+
+  return { error: null }
+}
