@@ -5,6 +5,7 @@ import { ReferralCodeCard } from '@/components/account/ReferralCodeCard'
 import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import { pageMetadata } from '@/lib/seo'
+import { getSiteUrl } from '@/lib/site'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Parrainage & portefeuille',
@@ -31,7 +32,7 @@ export default async function ParrainagePage() {
     supabase.from('wallet_credits').select('*').eq('profile_id', user.id).order('created_at', { ascending: false }).limit(20),
   ])
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+  const siteUrl = getSiteUrl()
   const shareUrl = `${siteUrl}/signup?ref=${profile?.referral_code ?? ''}`
 
   return (

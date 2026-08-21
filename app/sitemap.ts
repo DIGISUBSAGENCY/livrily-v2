@@ -1,7 +1,8 @@
 import type { MetadataRoute } from 'next'
 import { createClient } from '@/lib/supabase/server'
+import { getSiteUrl } from '@/lib/site'
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+const siteUrl = getSiteUrl()
 
 // Next.js génère /sitemap.xml à partir de ce fichier (convention App
 // Router). Contenu public et indexable uniquement — pas /admin ni les

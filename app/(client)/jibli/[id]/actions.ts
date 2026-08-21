@@ -13,6 +13,7 @@ const VALIDITY_DURATIONS_MS: Record<ProposalValidity, number> = {
 import { generateFlouciPayment, isFlouciConfigured, tndToMillimes, FlouciConfigError, FlouciApiError } from '@/lib/flouci'
 import { getIdentityStatus, isIdentityVerified } from '@/lib/identity'
 import { disputeSchema } from '@/lib/validations/disputes'
+import { getSiteUrl } from '@/lib/site'
 
 export interface ProposalFormState {
   error: string | null
@@ -182,7 +183,7 @@ export async function initiateFlouciPayment(requestId: string, proposalId: strin
     return { error: "Cette proposition n'est plus en attente." }
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+  const siteUrl = getSiteUrl()
   const amountTnd = proposal.item_price + proposal.delivery_fee
 
   let paymentLink: string

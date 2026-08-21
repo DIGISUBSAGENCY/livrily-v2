@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { signInSchema, signUpSchema } from '@/lib/validations/auth'
+import { getSiteUrl } from '@/lib/site'
 import type { UserRole } from '@/types/database'
 
 export interface AuthFormState {
@@ -69,7 +70,7 @@ export async function signUp(_prevState: AuthFormState, formData: FormData): Pro
   }
 
   const supabase = await createClient()
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+  const siteUrl = getSiteUrl()
 
   // Code de parrainage optionnel : transmis en métadonnée, résolu en
   // referred_by par le trigger handle_new_user() (schema.sql) — jamais
