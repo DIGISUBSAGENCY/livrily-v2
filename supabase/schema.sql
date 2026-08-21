@@ -1835,6 +1835,167 @@ create policy "flouci_incidents_update_admin_only"
   using (public.is_admin());
 
 -- ============================================================================
+-- Table: travel_reviews
+-- ============================================================================
+-- Avis mutuel client<->voyageur, un par mission complétée (grain =
+-- travel_request_id, comme disputes/travel_payments) et par auteur (unique
+-- ci-dessous) : reviewer_id est toujours soit le client, soit le voyageur
+-- accepté de CETTE demande, donc au plus 2 lignes par mission.
+--
+-- Double aveugle : un avis n'est visible par LA PERSONNE NOTÉE que quand
+-- l'autre avis de la même mission existe déjà, ou que 14 jours se sont
+-- écoulés (cf. is_review_revealed ci-dessous) — évite qu'une note influence
+-- la note en retour (représailles). L'auteur voit toujours son propre avis
+-- (nécessaire pour pouvoir le corriger dans les 48h, cf. policy update).
+--
+-- hidden_by_admin/hidden_reason/hidden_by/hidden_at : modération sans jamais
+-- supprimer (même logique que resolution_note sur disputes) — champs prêts,
+-- aucune UI admin construite dans cette passe (dette volontaire assumée).
+create table if not exists public.travel_reviews (
+  id uuid primary key default gen_random_uuid(),
+  travel_request_id uuid not null references public.travel_requests(id) on delete cascade,
+  reviewer_id uuid not null references public.profiles(id),
+  reviewee_id uuid not null references public.profiles(id),
+  direction text not null check (direction in ('client_to_voyageur', 'voyageur_to_client')),
+  rating smallint not null check (rating between 1 and 5),
+  comment text,
+  hidden_by_admin boolean not null default false,
+  hidden_reason text,
+  hidden_by uuid references public.profiles(id),
+  hidden_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (travel_request_id, reviewer_id)
+);
+
+create index if not exists travel_reviews_reviewee_idx on public.travel_reviews(reviewee_id);
+create index if not exists travel_reviews_request_idx on public.travel_reviews(travel_request_id);
+
+drop trigger if exists trg_travel_reviews_updated_at on public.travel_reviews;
+create trigger trg_travel_reviews_updated_at
+  before update on public.travel_reviews
+  for each row execute function public.set_updated_at();
+
+-- Révélation à LA PERSONNE NOTÉE (pas à l'auteur, qui voit toujours son
+-- propre avis) : soit l'autre avis de la mission existe, soit 14 jours sont
+-- passés depuis la soumission de CET avis. SECURITY DEFINER : la policy
+-- SELECT de travel_reviews a besoin de cette vérification, qui interroge
+-- travel_reviews elle-même — même pattern que owns_travel_request()/
+-- is_accepted_voyageur_for_request() plus haut, pour éviter toute ambiguïté
+-- d'évaluation récursive de policy en gardant la requête interne hors RLS.
+create or replace function public.is_review_revealed(p_review_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+stable
+as $$
+declare
+  v_request_id uuid;
+  v_reviewer_id uuid;
+  v_created_at timestamptz;
+begin
+  select travel_request_id, reviewer_id, created_at
+    into v_request_id, v_reviewer_id, v_created_at
+  from public.travel_reviews
+  where id = p_review_id;
+
+  if v_request_id is null then
+    return false;
+  end if;
+
+  return
+    now() - v_created_at > interval '14 days'
+    or exists (
+      select 1 from public.travel_reviews
+      where travel_request_id = v_request_id and reviewer_id <> v_reviewer_id
+    );
+end;
+$$;
+
+alter table public.travel_reviews enable row level security;
+
+drop policy if exists "travel_reviews_select_involved" on public.travel_reviews;
+create policy "travel_reviews_select_involved"
+  on public.travel_reviews for select
+  using (
+    reviewer_id = auth.uid()
+    or (reviewee_id = auth.uid() and public.is_review_revealed(id))
+    or public.is_admin()
+  );
+
+-- Mutuel, gaté sur client_confirmed_at (pas juste status='completed' : seul
+-- confirm_travel_receipt() prouve que la transaction est vraiment allée au
+-- bout, cf. commentaire sur cette fonction plus haut) et bloqué si un litige
+-- est encore ouvert sur la mission (évite qu'un avis serve d'arme pendant
+-- un conflit actif — reste possible une fois le litige résolu).
+drop policy if exists "travel_reviews_insert_involved" on public.travel_reviews;
+create policy "travel_reviews_insert_involved"
+  on public.travel_reviews for insert
+  with check (
+    reviewer_id = auth.uid()
+    and (public.owns_travel_request(travel_request_id) or public.is_accepted_voyageur_for_request(travel_request_id))
+    and exists (
+      select 1 from public.travel_requests
+      where id = travel_request_id and client_confirmed_at is not null
+    )
+    and not exists (
+      select 1 from public.disputes
+      where travel_request_id = travel_reviews.travel_request_id and status = 'open'
+    )
+  );
+
+-- Fenêtre de correction de 48h après soumission, puis figé (aucune policy
+-- ne couvre au-delà) — corrige une erreur de frappe/étoile sans permettre
+-- un revirement tardif une fois l'avis potentiellement déjà révélé à l'autre.
+drop policy if exists "travel_reviews_update_own_recent" on public.travel_reviews;
+create policy "travel_reviews_update_own_recent"
+  on public.travel_reviews for update
+  using (reviewer_id = auth.uid() and created_at > now() - interval '48 hours');
+
+drop policy if exists "travel_reviews_update_admin_moderation" on public.travel_reviews;
+create policy "travel_reviews_update_admin_moderation"
+  on public.travel_reviews for update
+  using (public.is_admin());
+
+-- Moyenne PUBLIQUE (avg_rating + review_count seulement, jamais le contenu
+-- d'un avis ni qui l'a écrit) : nécessaire pour évaluer la confiance d'un
+-- inconnu (ex: un voyageur qui hésite à proposer sur la demande d'un client
+-- qu'il n'a jamais croisé) — la policy SELECT ci-dessus, elle, reste
+-- contreparties-only pour le contenu individuel. SECURITY DEFINER pour lire
+-- au-delà de cette policy, mais ne renvoie que l'agrégat. Respecte le
+-- double aveugle (exclut les avis pas encore révélés) et la modération
+-- (exclut hidden_by_admin) — jamais recalculée/stockée : ce projet calcule
+-- ce type d'agrégat à la lecture plutôt que par trigger dès que le volume
+-- reste faible (cf. commentaires ailleurs dans ce fichier), et un trigger
+-- ne pourrait de toute façon pas suivre la révélation par simple écoulement
+-- du temps (aucun événement d'écriture ne se produit au bout de 14 jours).
+create or replace function public.get_profile_rating(p_profile_id uuid)
+returns table (avg_rating numeric, review_count int)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select
+    round(avg(rating), 1) as avg_rating,
+    count(*)::int as review_count
+  from public.travel_reviews
+  where reviewee_id = p_profile_id
+    and hidden_by_admin = false
+    and (
+      now() - created_at > interval '14 days'
+      or exists (
+        select 1 from public.travel_reviews other
+        where other.travel_request_id = travel_reviews.travel_request_id
+          and other.reviewer_id <> travel_reviews.reviewer_id
+      )
+    );
+$$;
+
+grant execute on function public.get_profile_rating(uuid) to authenticated;
+
+-- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,
 -- catalogue, livraison zone tarifée — a existé puis a été retiré
 -- intégralement, cf. tête de fichier).
