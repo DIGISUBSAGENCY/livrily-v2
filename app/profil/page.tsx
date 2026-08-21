@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/Button'
 import { pageMetadata } from '@/lib/seo'
 import { getProfileStats } from '@/lib/profileStats'
 import { getIdentityStatus, isIdentityVerified } from '@/lib/identity'
+import { getProfileRating } from '@/lib/reviews'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Mon profil',
@@ -46,10 +47,36 @@ export default async function ProfilPage() {
 
   if (!profile) redirect('/login?next=/profil')
 
-  const [stats, identityStatus] = await Promise.all([
+  const [stats, identityStatus, rating] = await Promise.all([
     getProfileStats(supabase, user.id),
     getIdentityStatus(supabase, user.id),
+    getProfileRating(supabase, user.id),
   ])
+
+  // Avis reçus : la policy travel_reviews_select_involved gère elle-même le
+  // double aveugle (reviewee_id = auth.uid() ne remonte que les avis déjà
+  // révélés) — rien à filtrer de plus ici. Deux temps (pas de jointure
+  // PostgREST embarquée) : même convention que le reste de l'app (cf.
+  // /admin/litiges).
+  const { data: reviewRows } = await supabase
+    .from('travel_reviews')
+    .select('id, rating, comment, reviewer_id, created_at')
+    .eq('reviewee_id', user.id)
+    .order('created_at', { ascending: false })
+
+  const reviewerIds = Array.from(new Set((reviewRows ?? []).map((r) => r.reviewer_id)))
+  const { data: reviewers } = reviewerIds.length
+    ? await supabase.from('profiles').select('id, full_name').in('id', reviewerIds)
+    : { data: [] as { id: string; full_name: string | null }[] }
+  const reviewerNameById = new Map((reviewers ?? []).map((r) => [r.id, r.full_name]))
+
+  const reviews = (reviewRows ?? []).map((r) => ({
+    id: r.id,
+    rating: r.rating,
+    comment: r.comment,
+    createdAt: r.created_at,
+    reviewerName: reviewerNameById.get(r.reviewer_id) ?? 'Utilisateur',
+  }))
 
   const emailVerified = Boolean(user.email_confirmed_at)
   const kycVerified = isIdentityVerified(identityStatus)
@@ -97,8 +124,10 @@ export default async function ProfilPage() {
             kycVerified={kycVerified}
             memberSinceLabel={memberSinceLabel}
             userId={user.id}
+            rating={rating}
           />
         }
+        reviews={reviews}
       />
     </div>
   )
