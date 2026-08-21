@@ -29,6 +29,7 @@ function isGroup(item: NavItem): item is NavGroup {
 // pour la même raison (ne reste que le volet Jibli).
 const items: NavItem[] = [
   { href: '/admin', label: 'Tableau de bord' },
+  { href: '/admin/demandes', label: 'Demandes' },
   { href: '/admin/utilisateurs', label: 'Utilisateurs' },
   { href: '/admin/verifications', label: 'Vérifications' },
   { href: '/admin/litiges', label: 'Litiges' },
