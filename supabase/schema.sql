@@ -685,6 +685,17 @@ as $$
 declare
   v_is_accepted_voyageur boolean;
 begin
+  -- Timestampe précisément le moment où le voyageur déclare la livraison
+  -- faite — nécessaire pour la libération automatique après délai
+  -- (auto_release_stale_payments ci-dessous) : sans cette colonne, aucun
+  -- champ ne capture ce moment (updated_at est réécrit par toute écriture
+  -- ultérieure, y compris confirm_travel_receipt() lui-même). Posé AVANT
+  -- les branches bypass/admin ci-dessous pour s'appliquer uniformément,
+  -- quel que soit l'acteur qui déclenche la transition.
+  if old.status = 'in_transit' and new.status = 'completed' then
+    new.completed_at := now();
+  end if;
+
   if coalesce(current_setting('jibli.bypass_transition_checks', true), 'false') = 'true' then
     return new;
   end if;
@@ -940,10 +951,17 @@ grant execute on function public.agree_to_current_offer(uuid) to authenticated;
 create table if not exists public.platform_settings (
   id boolean primary key default true,
   travel_commission_rate numeric(5,4) not null default 0.10 check (travel_commission_rate >= 0 and travel_commission_rate <= 1),
+  -- Délai de libération automatique des fonds séquestrés si le client ne
+  -- confirme jamais réception (cf. auto_release_stale_payments plus bas),
+  -- éditable depuis /admin/parametres/liberation-automatique — même logique
+  -- que travel_commission_rate : configurable plutôt que câblé en dur.
+  auto_release_delay_days integer not null default 7 check (auto_release_delay_days > 0),
   updated_at timestamptz not null default now(),
   updated_by uuid references public.profiles(id),
   constraint platform_settings_singleton check (id)
 );
+
+alter table public.platform_settings add column if not exists auto_release_delay_days integer not null default 7 check (auto_release_delay_days > 0);
 
 insert into public.platform_settings (id, travel_commission_rate)
 values (true, 0.10)
@@ -1091,6 +1109,13 @@ begin
   if v_confirmed_at is not null then
     raise exception 'Réception déjà confirmée.';
   end if;
+  -- Même garde-fou que travel_reviews_insert_involved (avis) et
+  -- auto_release_stale_payments (plus bas) : un litige ouvert bloque toute
+  -- libération de fonds, manuelle ou automatique, quel que soit le délai
+  -- écoulé — trou fermé ici (cette fonction ne le vérifiait pas avant).
+  if exists (select 1 from public.disputes where travel_request_id = p_request_id and status = 'open') then
+    raise exception 'Un litige est ouvert sur cette mission — résolution requise avant libération des fonds.';
+  end if;
 
   select status into v_payment_status from public.travel_payments where request_id = p_request_id for update;
 
@@ -1104,7 +1129,9 @@ begin
   perform set_config('jibli.bypass_transition_checks', 'true', true);
 
   update public.travel_requests set client_confirmed_at = now() where id = p_request_id;
-  update public.travel_payments set status = 'released', released_at = now() where request_id = p_request_id;
+  update public.travel_payments
+    set status = 'released', released_at = now(), release_reason = 'client_confirmed'
+    where request_id = p_request_id;
 
   perform set_config('jibli.bypass_transition_checks', 'false', true);
 end;
@@ -1116,6 +1143,11 @@ grant execute on function public.confirm_travel_receipt(uuid) to authenticated;
 -- Escrow : colonnes ajoutées, travel_payments, withdrawal_requests
 -- ============================================================================
 alter table public.travel_requests add column if not exists client_confirmed_at timestamptz;
+-- Posée par enforce_travel_request_transitions() au moment exact de la
+-- transition in_transit → completed (cf. plus haut) — référence temporelle
+-- de auto_release_stale_payments(), plus bas.
+alter table public.travel_requests add column if not exists completed_at timestamptz;
+alter table public.travel_payments add column if not exists release_reason text check (release_reason in ('client_confirmed', 'auto_released_after_delay'));
 
 -- Coordonnées Flouci de la plateforme, affichées au client au moment du
 -- paiement (même table que les coordonnées bancaires : c'est la même idée
@@ -1139,6 +1171,14 @@ create table if not exists public.travel_payments (
   verified_by uuid references public.profiles(id), -- admin ayant validé un virement ; null pour Flouci (vérifié par l'API)
   verified_at timestamptz,
   released_at timestamptz,
+  -- Distingue une libération sur action du client ('client_confirmed', via
+  -- confirm_travel_receipt) d'une libération automatique après délai de
+  -- silence ('auto_released_after_delay', via auto_release_stale_payments,
+  -- plus bas) — le client n'a rien confirmé dans ce second cas ; nulle tant
+  -- que status n'est pas 'released'. Ne JAMAIS faire dire à cette colonne
+  -- autre chose que ce qui s'est réellement passé (même discipline que
+  -- resolution_note sur disputes : pas de donnée maquillée).
+  release_reason text check (release_reason in ('client_confirmed', 'auto_released_after_delay')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -1994,6 +2034,91 @@ as $$
 $$;
 
 grant execute on function public.get_profile_rating(uuid) to authenticated;
+
+-- ============================================================================
+-- Libération automatique des fonds après délai de silence du client
+-- ============================================================================
+-- Si le client ne confirme jamais réception (silence, pas de litige non
+-- plus), le voyageur restait bloqué indéfiniment — aucun recours. Cette
+-- fonction reproduit exactement les effets de confirm_travel_receipt()
+-- (mêmes 2 updates, même garde bypass_transition_checks) pour un lot de
+-- missions éligibles, appelée par pg_cron une fois par jour (cf. plus bas).
+--
+-- Éligibilité : status='completed' (le voyageur a déclaré la livraison),
+-- client_confirmed_at encore null (le client n'a jamais confirmé),
+-- completed_at posé depuis au moins platform_settings.auto_release_delay_days
+-- jours, ET aucun litige 'open' sur la mission — ce dernier point est un
+-- blocage absolu, quel que soit le délai écoulé, jamais contournable.
+--
+-- Pas de grant execute à authenticated : cette fonction n'est appelable que
+-- par pg_cron (contexte système, hors PostgREST) — même posture que
+-- is_admin()/owns_travel_request(), jamais exposée en RPC cliente.
+create or replace function public.auto_release_stale_payments()
+returns table (released_request_id uuid)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_delay_days integer;
+  v_request record;
+begin
+  select auto_release_delay_days into v_delay_days from public.platform_settings where id = true;
+
+  perform set_config('jibli.bypass_transition_checks', 'true', true);
+
+  for v_request in
+    select tr.id
+    from public.travel_requests tr
+    join public.travel_payments tp on tp.request_id = tr.id
+    where tr.status = 'completed'
+      and tr.client_confirmed_at is null
+      and tr.completed_at is not null
+      and tr.completed_at <= now() - (coalesce(v_delay_days, 7) || ' days')::interval
+      and tp.status = 'escrowed'
+      and not exists (
+        select 1 from public.disputes d
+        where d.travel_request_id = tr.id and d.status = 'open'
+      )
+    for update of tr, tp
+  loop
+    update public.travel_requests set client_confirmed_at = now() where id = v_request.id;
+    update public.travel_payments
+      set status = 'released', released_at = now(), release_reason = 'auto_released_after_delay'
+      where request_id = v_request.id and status = 'escrowed';
+
+    released_request_id := v_request.id;
+    return next;
+  end loop;
+
+  perform set_config('jibli.bypass_transition_checks', 'false', true);
+end;
+$$;
+
+-- pg_cron plutôt que Vercel Cron : toute la logique métier de ce projet vit
+-- déjà en Postgres (SECURITY DEFINER, triggers d'invariants) — cohérent
+-- avec cette architecture, et surtout aucun secret à configurer côté
+-- dashboard Vercel (classe de risque déjà rencontrée avec
+-- NEXT_PUBLIC_SITE_URL manquant en prod). Fonctionne même si le
+-- déploiement Next.js a un problème.
+--
+-- Disponibilité de l'extension non garantie selon le plan Supabase —
+-- postgis l'est déjà (tête de ce fichier), bon signe mais pas une
+-- certitude pour pg_cron. Si cette ligne échoue, basculer sur Vercel Cron
+-- (route API appelant auto_release_stale_payments() via le client
+-- service_role) — la fonction ci-dessus reste inchangée dans les deux cas.
+create extension if not exists pg_cron;
+
+do $$
+begin
+  if not exists (select 1 from cron.job where jobname = 'auto-release-stale-payments') then
+    perform cron.schedule(
+      'auto-release-stale-payments',
+      '0 3 * * *', -- tous les jours à 3h (heure du serveur, généralement UTC)
+      $cron$select public.auto_release_stale_payments();$cron$
+    );
+  end if;
+end $$;
 
 -- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,
