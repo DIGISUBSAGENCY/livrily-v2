@@ -65,6 +65,27 @@ export async function createProposal(
     return { error: parsed.error.issues[0]?.message ?? 'Formulaire invalide.' }
   }
 
+  // Trips (Phase 3, brique 2/N) : source_trip_id vient d'un champ caché du
+  // formulaire (ProposalForm, pré-rempli depuis "Proposer" sur un match) —
+  // donc falsifiable côté client. Revérifié ici que le trip existe, est
+  // encore ouvert, et appartient bien à CE voyageur avant de l'inclure —
+  // pas juste laissé à accept_travel_proposal() (qui a son propre garde-fou
+  // silencieux, mais une erreur claire ici vaut mieux qu'un silence plus
+  // tard). Un trip_id invalide/étranger n'empêche pas la proposition, juste
+  // le lien au trip.
+  const rawSourceTripId = formData.get('source_trip_id')
+  let sourceTripId: string | null = null
+  if (typeof rawSourceTripId === 'string' && rawSourceTripId) {
+    const { data: trip } = await supabase
+      .from('trips')
+      .select('id')
+      .eq('id', rawSourceTripId)
+      .eq('voyageur_id', user.id)
+      .eq('status', 'open')
+      .maybeSingle()
+    sourceTripId = trip?.id ?? null
+  }
+
   const expiresAt = parsed.data.validity
     ? new Date(Date.now() + VALIDITY_DURATIONS_MS[parsed.data.validity]).toISOString()
     : null
@@ -78,6 +99,7 @@ export async function createProposal(
     pickup_city: parsed.data.pickup_city ?? null,
     expires_at: expiresAt,
     message: parsed.data.message ?? null,
+    source_trip_id: sourceTripId,
   })
 
   if (error) {
@@ -92,6 +114,51 @@ export async function createProposal(
   }
 
   revalidatePath(`/jibli/${requestId}`)
+  return { error: null }
+}
+
+// Trips (Phase 3, brique 2/N) — le client ne peut PAS créer de
+// travel_proposals lui-même (RLS : voyageur_id = auth.uid() uniquement),
+// donc "se connecter" à un trip depuis le panneau de matches d'une demande
+// ne peut pas créer la mise en relation directement. Se contente de
+// notifier le voyageur (REQUEST_MATCHED) — c'est LUI qui, depuis son
+// propre trip, verra la demande dans ses matches et pourra "Proposer"
+// (createProposal ci-dessus, avec source_trip_id). Pas de dédoublonnage si
+// cliqué plusieurs fois sur le même match — simplification v1, pas gênant
+// (best-effort, comme toute notification).
+export async function expressInterestInTrip(requestId: string, tripId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) return { error: 'Non authentifié.' }
+
+  const { data: request } = await supabase
+    .from('travel_requests')
+    .select('client_id, item_description')
+    .eq('id', requestId)
+    .single()
+
+  if (!request || request.client_id !== user.id) {
+    return { error: 'Accès refusé.' }
+  }
+
+  const { data: trip } = await supabase.from('trips').select('voyageur_id').eq('id', tripId).eq('status', 'open').single()
+  if (!trip) {
+    return { error: "Ce trip n'est plus disponible." }
+  }
+
+  await notifyUser({
+    userId: trip.voyageur_id,
+    type: 'request_matched',
+    title: 'Une demande pourrait te correspondre',
+    body: `Un client a signalé son intérêt pour ton trip : "${request.item_description}".`,
+    relatedObjectType: 'travel_request',
+    relatedObjectId: requestId,
+  })
+
   return { error: null }
 }
 

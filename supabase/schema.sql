@@ -1075,10 +1075,16 @@ begin
   -- écriture de tout ce chantier qui fait passer un trip à 'matched'.
   -- 'open' dans le where : ne fait rien si le trip a déjà été utilisé par
   -- une autre proposition entre-temps (garde-fou silencieux, pas une
-  -- erreur bloquante pour le client qui accepte).
+  -- erreur bloquante pour le client qui accepte). 'voyageur_id =
+  -- v_voyageur_id' : source_trip_id vient d'un champ caché de formulaire
+  -- côté TypeScript, donc falsifiable côté client — sans ce contrôle de
+  -- propriété, un voyageur malveillant pourrait pointer vers le trip d'un
+  -- AUTRE voyageur, qui se retrouverait 'matched' par une proposition qui
+  -- n'est pas la sienne. Trouvé en concevant createProposal, pas exploité
+  -- en prod.
   if v_source_trip_id is not null then
     update public.trips set status = 'matched', matched_proposal_id = p_proposal_id
-      where id = v_source_trip_id and status = 'open';
+      where id = v_source_trip_id and status = 'open' and voyageur_id = v_voyageur_id;
   end if;
 
   -- REQUEST_UPDATE au voyageur — déjà SECURITY DEFINER ici, insertion

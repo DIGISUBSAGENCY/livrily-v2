@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { Plane, Weight, Wallet, CalendarDays } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { TripStatusBadge } from '@/components/travel/TripStatusBadge'
+import { RequestMatchesPanel } from '@/components/travel/RequestMatchesPanel'
 import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
 import { formatTND } from '@/lib/format'
@@ -27,12 +28,8 @@ export async function generateMetadata({ params }: TripPageProps): Promise<Metad
   })
 }
 
-// Page minimale (route + capacité + statut) — le panneau "Demandes qui
-// pourraient convenir" (get_request_matches_for_trip) et l'action
-// "Proposer" arrivent dans le prochain lot de ce chantier, pas construits
-// ici pour garder ce commit focalisé sur la création. La redirection de
-// createTrip() pointe déjà ici : mieux vaut une page minimale réelle
-// qu'un lien mort en attendant la suite.
+// Route + capacité + statut, et pour le propriétaire (voyageur) le
+// panneau de matches (RequestMatchesPanel) avec le bouton "Proposer".
 export default async function TripPage({ params }: TripPageProps) {
   const { id } = await params
   const supabase = await createClient()
@@ -96,13 +93,7 @@ export default async function TripPage({ params }: TripPageProps) {
         )}
       </Card>
 
-      {isOwner && trip.status === 'open' && (
-        <Card className="mt-4">
-          <p className="text-sm text-slate-500">
-            Les demandes qui pourraient correspondre à ce trip arrivent bientôt sur cette page.
-          </p>
-        </Card>
-      )}
+      {isOwner && trip.status === 'open' && <RequestMatchesPanel tripId={trip.id} />}
     </main>
   )
 }

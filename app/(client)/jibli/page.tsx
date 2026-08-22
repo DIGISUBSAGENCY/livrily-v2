@@ -239,6 +239,11 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
               Mes gains
             </Button>
           </Link>
+          <Link href="/jibli/trips">
+            <Button variant="secondary" size="sm">
+              Trips
+            </Button>
+          </Link>
           <Link href="/jibli/nouvelle-demande">
             <Button size="sm">Publier une demande</Button>
           </Link>

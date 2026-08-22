@@ -13,14 +13,29 @@ import { SubmitButton } from '@/components/ui/SubmitButton'
 const initialState: ProposalFormState = { error: null }
 const MESSAGE_MAX_LENGTH = 500
 
-export function ProposalForm({ requestId }: { requestId: string }) {
+interface ProposalFormProps {
+  requestId: string
+  // Pré-remplissage depuis "Proposer" sur un match Trips (RequestMatchCard)
+  // — sourceTripId part en champ caché, revérifié côté serveur
+  // (createProposal) avant d'être réellement lié : falsifiable ici, jamais
+  // fait confiance tel quel. delivery_fee/pickup_city ne sont que des
+  // valeurs de départ, l'utilisateur reste libre de les changer avant
+  // d'envoyer — "indication de départ", pas un tarif imposé.
+  sourceTripId?: string
+  defaultDeliveryFee?: number
+  defaultPickupCity?: string
+}
+
+export function ProposalForm({ requestId, sourceTripId, defaultDeliveryFee, defaultPickupCity }: ProposalFormProps) {
   const action = createProposal.bind(null, requestId)
   const [state, formAction] = useFormState(action, initialState)
-  const [deliveryFee, setDeliveryFee] = useState(0)
+  const [deliveryFee, setDeliveryFee] = useState(defaultDeliveryFee ?? 0)
   const [message, setMessage] = useState('')
 
   return (
     <form action={formAction} className="space-y-4">
+      {sourceTripId && <input type="hidden" name="source_trip_id" value={sourceTripId} />}
+
       <div>
         <Label htmlFor="item_price">Prix de l&apos;objet — remboursé (DT)</Label>
         <Input id="item_price" name="item_price" type="number" step="0.001" min="0" required hasError={!!state.error} />
@@ -38,7 +53,14 @@ export function ProposalForm({ requestId }: { requestId: string }) {
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor="pickup_city">Ville de départ (optionnel)</Label>
-          <Input id="pickup_city" name="pickup_city" type="text" placeholder="Ex: Lyon" maxLength={100} />
+          <Input
+            id="pickup_city"
+            name="pickup_city"
+            type="text"
+            placeholder="Ex: Lyon"
+            defaultValue={defaultPickupCity}
+            maxLength={100}
+          />
         </div>
         <div>
           <Label htmlFor="travel_date">Date de retour prévue (optionnel)</Label>
