@@ -24,13 +24,15 @@ export type TravelProposalStatus = 'pending' | 'accepted' | 'rejected' | 'withdr
 
 export type TravelPaymentStatus = 'awaiting_verification' | 'escrowed' | 'released' | 'refunded'
 
-export type ReleaseReason = 'client_confirmed' | 'auto_released_after_delay'
+export type ReleaseReason = 'client_confirmed' | 'auto_released_after_delay' | 'admin_dispute_resolution'
 
 export type WithdrawalStatus = 'pending' | 'paid' | 'rejected'
 
 export type IdentityVerificationStatus = 'pending' | 'approved' | 'rejected'
 
 export type DisputeStatus = 'open' | 'resolved'
+
+export type DisputeResolutionType = 'released_to_voyageur' | 'refunded_to_client' | 'closed_no_action'
 
 export type FlouciIncidentStatus = 'unresolved' | 'resolved'
 
@@ -263,6 +265,7 @@ export interface Database {
           verified_at: string | null
           released_at: string | null
           release_reason: ReleaseReason | null
+          refunded_at: string | null
           created_at: string
           updated_at: string
         }
@@ -279,6 +282,7 @@ export interface Database {
           verified_at?: string | null
           released_at?: string | null
           release_reason?: ReleaseReason | null
+          refunded_at?: string | null
         }
         Update: Partial<Database['public']['Tables']['travel_payments']['Insert']>
         Relationships: []
@@ -293,6 +297,7 @@ export interface Database {
           resolution_note: string | null
           resolved_by: string | null
           resolved_at: string | null
+          resolution_type: DisputeResolutionType | null
           created_at: string
           updated_at: string
         }
@@ -304,6 +309,7 @@ export interface Database {
           status?: DisputeStatus
           resolution_note?: string | null
           resolved_by?: string | null
+          resolution_type?: DisputeResolutionType | null
           resolved_at?: string | null
         }
         Update: Partial<Database['public']['Tables']['disputes']['Insert']>
@@ -497,6 +503,18 @@ export interface Database {
       get_profile_rating: {
         Args: { p_profile_id: string }
         Returns: { avg_rating: number | null; review_count: number }[]
+      }
+      resolve_dispute_release_funds: {
+        Args: { p_dispute_id: string; p_note: string }
+        Returns: undefined
+      }
+      resolve_dispute_refund: {
+        Args: { p_dispute_id: string; p_note: string }
+        Returns: undefined
+      }
+      resolve_dispute_close: {
+        Args: { p_dispute_id: string; p_note: string }
+        Returns: undefined
       }
     }
   }

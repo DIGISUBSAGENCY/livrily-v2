@@ -26,22 +26,52 @@ export default async function AdminLitigesPage({ searchParams }: AdminLitigesPag
 
   const requestIds = Array.from(new Set((disputes ?? []).map((d) => d.travel_request_id)))
   const { data: requests } = requestIds.length
-    ? await supabase.from('travel_requests').select('id, item_description').in('id', requestIds)
-    : { data: [] as { id: string; item_description: string }[] }
-  const requestById = new Map((requests ?? []).map((r) => [r.id, r.item_description]))
+    ? await supabase.from('travel_requests').select('id, item_description, client_id, accepted_proposal_id').in('id', requestIds)
+    : { data: [] as { id: string; item_description: string; client_id: string; accepted_proposal_id: string | null }[] }
+  const requestById = new Map((requests ?? []).map((r) => [r.id, r]))
 
-  const openerIds = Array.from(new Set((disputes ?? []).map((d) => d.opened_by)))
-  const { data: openers } = openerIds.length
-    ? await supabase.from('profiles').select('id, full_name').in('id', openerIds)
+  const proposalIds = Array.from(new Set((requests ?? []).map((r) => r.accepted_proposal_id).filter((v): v is string => !!v)))
+  const { data: proposals } = proposalIds.length
+    ? await supabase.from('travel_proposals').select('id, voyageur_id').in('id', proposalIds)
+    : { data: [] as { id: string; voyageur_id: string }[] }
+  const voyageurIdByProposal = new Map((proposals ?? []).map((p) => [p.id, p.voyageur_id]))
+
+  const profileIds = Array.from(
+    new Set([
+      ...(disputes ?? []).map((d) => d.opened_by),
+      ...(requests ?? []).map((r) => r.client_id),
+      ...(proposals ?? []).map((p) => p.voyageur_id),
+    ])
+  )
+  const { data: profileRows } = profileIds.length
+    ? await supabase.from('profiles').select('id, full_name').in('id', profileIds)
     : { data: [] as { id: string; full_name: string | null }[] }
-  const openerById = new Map((openers ?? []).map((o) => [o.id, o.full_name]))
+  const nameById = new Map((profileRows ?? []).map((p) => [p.id, p.full_name]))
 
   const needle = q.trim().toLowerCase()
-  const filtered = (disputes ?? []).filter((d) => {
-    if (!needle) return true
-    const requestLabel = (requestById.get(d.travel_request_id) ?? '').toLowerCase()
-    return d.reason.toLowerCase().includes(needle) || requestLabel.includes(needle)
-  })
+  const rows = (disputes ?? [])
+    .map((d) => {
+      const request = requestById.get(d.travel_request_id)
+      const voyageurId = request?.accepted_proposal_id ? voyageurIdByProposal.get(request.accepted_proposal_id) : null
+      return {
+        dispute: d,
+        requestLabel: request?.item_description ?? 'Mission',
+        clientName: request ? (nameById.get(request.client_id) ?? 'Client') : '—',
+        voyageurName: voyageurId ? (nameById.get(voyageurId) ?? 'Voyageur') : 'Aucun voyageur accepté',
+      }
+    })
+    .filter((r) => {
+      if (!needle) return true
+      return r.dispute.reason.toLowerCase().includes(needle) || r.requestLabel.toLowerCase().includes(needle)
+    })
+    // Ouverts en premier (une seule requête n'imposerait pas cet ordre en
+    // combinaison avec le filtre statut ci-dessus), puis les plus récents
+    // d'abord dans chaque groupe — calculé en JS, même convention que le
+    // reste de cette page (volume faible).
+    .sort((a, b) => {
+      if (a.dispute.status !== b.dispute.status) return a.dispute.status === 'open' ? -1 : 1
+      return new Date(b.dispute.created_at).getTime() - new Date(a.dispute.created_at).getTime()
+    })
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
@@ -57,33 +87,39 @@ export default async function AdminLitigesPage({ searchParams }: AdminLitigesPag
 
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger les litiges.</p>}
 
-      {!error && filtered.length === 0 && (
+      {!error && rows.length === 0 && (
         <div className="mt-16 flex flex-col items-center text-center text-slate-500">
           <AlertTriangle className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
           <p>Aucun litige ne correspond à ces critères.</p>
         </div>
       )}
 
-      {!error && filtered.length > 0 && (
+      {!error && rows.length > 0 && (
         <div className="mt-6 space-y-3">
-          {filtered.map((dispute) => (
-            <Link key={dispute.id} href={`/admin/litiges/${dispute.id}`}>
-              <Card interactive>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-900">
-                      {requestById.get(dispute.travel_request_id) ?? 'Mission'}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Ouvert par {openerById.get(dispute.opened_by) ?? 'Utilisateur'} le{' '}
-                      {new Date(dispute.created_at).toLocaleDateString('fr-TN')}
-                    </p>
-                  </div>
-                  <DisputeStatusBadge status={dispute.status} />
+          {rows.map(({ dispute, requestLabel, clientName, voyageurName }) => (
+            <Card key={dispute.id}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Link href={`/jibli/${dispute.travel_request_id}`} className="truncate font-medium text-slate-900 hover:underline">
+                    {requestLabel}
+                  </Link>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Client : {clientName} · Voyageur : {voyageurName}
+                  </p>
+                  <p className="text-xs text-slate-400">Ouvert le {new Date(dispute.created_at).toLocaleDateString('fr-TN')}</p>
                 </div>
-                <p className="mt-2 line-clamp-2 text-sm text-slate-600">{dispute.reason}</p>
-              </Card>
-            </Link>
+                <DisputeStatusBadge status={dispute.status} />
+              </div>
+
+              <p className="mt-2 line-clamp-2 text-sm text-slate-600">{dispute.reason}</p>
+
+              <Link
+                href={`/admin/litiges/${dispute.id}`}
+                className="mt-2 inline-block text-sm font-medium text-brand-600 hover:underline"
+              >
+                Voir le litige →
+              </Link>
+            </Card>
           ))}
         </div>
       )}
