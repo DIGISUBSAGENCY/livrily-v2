@@ -12,3 +12,11 @@ export const commissionSettingsSchema = z.object({
     .max(100, 'Le taux ne peut pas dépasser 100%.')
     .transform((percent) => Math.round((percent / 100) * 10000) / 10000),
 })
+
+export const autoReleaseSettingsSchema = z.object({
+  auto_release_delay_days: z.coerce
+    .number({ message: 'Délai invalide.' })
+    .int('Le délai doit être un nombre entier de jours.')
+    .min(1, "Le délai doit être d'au moins 1 jour.")
+    .max(90, 'Le délai ne peut pas dépasser 90 jours.'),
+})

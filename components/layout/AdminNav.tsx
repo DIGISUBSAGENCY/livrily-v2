@@ -47,6 +47,7 @@ const items: NavItem[] = [
       { href: '/admin/parametres', label: "Vue d'ensemble" },
       { href: '/admin/parametres/commission', label: 'Commission' },
       { href: '/admin/parametres/virement', label: 'Virement' },
+      { href: '/admin/parametres/liberation-automatique', label: 'Libération automatique' },
     ],
   },
 ]

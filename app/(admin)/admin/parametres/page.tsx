@@ -1,21 +1,20 @@
 import Link from 'next/link'
-import { Percent, Landmark } from 'lucide-react'
+import { Percent, Landmark, Clock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 
 // Hub qui regroupe les réglages plateforme déjà existants (Commission,
-// Virement) sous un même point d'entrée — ne remplace ni ne restructure
-// ces pages, se contente d'y renvoyer avec un aperçu chiffré. Tuile
-// "Zones" retirée avec le rôle commerce (delivery_zones supprimée).
-// Aucun autre paramètre configurable en base n'a été trouvé dans le code
-// (les clés OneSignal/Twilio/Flouci sont des variables d'environnement,
-// pas des lignes admin-éditables — pas de "réglage notifications" à lister
-// ici tant que ça reste le cas).
+// Virement, Libération automatique) sous un même point d'entrée — ne
+// remplace ni ne restructure ces pages, se contente d'y renvoyer avec un
+// aperçu chiffré. Tuile "Zones" retirée avec le rôle commerce
+// (delivery_zones supprimée). Les clés OneSignal/Twilio/Flouci restent des
+// variables d'environnement, pas des lignes admin-éditables — pas de
+// "réglage notifications" à lister ici tant que ça reste le cas.
 export default async function AdminParametresPage() {
   const supabase = await createClient()
 
   const [{ data: settings }, { count: bankCount }] = await Promise.all([
-    supabase.from('platform_settings').select('travel_commission_rate').eq('id', true).single(),
+    supabase.from('platform_settings').select('travel_commission_rate, auto_release_delay_days').eq('id', true).single(),
     supabase.from('bank_transfer_info').select('id', { count: 'exact', head: true }),
   ])
 
@@ -52,6 +51,23 @@ export default async function AdminParametresPage() {
               </div>
             </div>
             <p className="text-lg font-bold text-slate-900">{bankCount ?? 0}</p>
+          </Card>
+        </Link>
+
+        <Link href="/admin/parametres/liberation-automatique">
+          <Card interactive className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Clock className="h-6 w-6 text-brand-600" aria-hidden />
+              <div>
+                <p className="font-medium text-slate-900">Libération automatique</p>
+                <p className="text-sm text-slate-500">
+                  Délai avant libération des fonds si le client ne confirme jamais réception
+                </p>
+              </div>
+            </div>
+            <p className="text-lg font-bold text-slate-900">
+              {settings ? `${settings.auto_release_delay_days} j` : '—'}
+            </p>
           </Card>
         </Link>
       </div>

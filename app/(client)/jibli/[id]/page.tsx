@@ -228,6 +228,23 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
     myReview = data ?? null
   }
 
+  // Transparence sur la libération automatique (auto_release_stale_payments,
+  // schema.sql) : affichée aux deux parties tant que le client n'a pas
+  // confirmé et qu'aucun litige n'est ouvert — même gate que la fonction
+  // SQL, recalculée ici uniquement pour l'affichage (aucune action, la
+  // vraie décision reste côté base).
+  let autoReleaseDate: Date | null = null
+  if ((isOwner || isAcceptedVoyageur) && request.status === 'completed' && !request.client_confirmed_at && request.completed_at) {
+    const [{ data: platformSettings }, { data: openDispute }] = await Promise.all([
+      supabase.from('platform_settings').select('auto_release_delay_days').eq('id', true).single(),
+      supabase.from('disputes').select('id').eq('travel_request_id', id).eq('status', 'open').maybeSingle(),
+    ])
+    if (!openDispute) {
+      const delayDays = platformSettings?.auto_release_delay_days ?? 7
+      autoReleaseDate = new Date(new Date(request.completed_at).getTime() + delayDays * 24 * 60 * 60 * 1000)
+    }
+  }
+
   // Montants réels dès qu'une proposition concrète existe (celle acceptée
   // pour le client propriétaire, la sienne pour un voyageur) — sinon
   // estimation dérivée du budget, jamais un montant fixé par la
@@ -324,6 +341,12 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
             Le voyageur a marqué l&apos;objet comme remis. Confirme si tu l&apos;as bien reçu — ça
             libère le paiement.
           </p>
+          {autoReleaseDate && (
+            <p className="mb-3 text-xs text-slate-400">
+              Si tu ne confirmes pas et qu&apos;aucun litige n&apos;est ouvert, les fonds seront
+              automatiquement libérés au voyageur le {autoReleaseDate.toLocaleDateString('fr-TN')}.
+            </p>
+          )}
           <ConfirmReceiptButton requestId={request.id} />
         </Card>
       )}
@@ -332,6 +355,13 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
         <Card className="mt-4">
           <h2 className="mb-3 font-semibold text-slate-900">Suivi de la mission</h2>
           <VoyageurStatusActions requestId={request.id} status={request.status} />
+          {autoReleaseDate && (
+            <p className="mt-3 text-xs text-slate-400">
+              En attente de confirmation du client. Si aucun litige n&apos;est ouvert, les fonds
+              séquestrés te seront automatiquement libérés le{' '}
+              {autoReleaseDate.toLocaleDateString('fr-TN')} même sans confirmation.
+            </p>
+          )}
         </Card>
       )}
 
