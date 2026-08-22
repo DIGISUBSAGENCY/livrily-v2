@@ -1000,6 +1000,7 @@ declare
   v_request_id uuid;
   v_request_status public.travel_request_status;
   v_client_id uuid;
+  v_voyageur_id uuid;
   v_proposal_status public.travel_proposal_status;
   v_item_price numeric(10,3);
   v_delivery_fee numeric(10,3);
@@ -1012,8 +1013,8 @@ begin
     raise exception 'Méthode de paiement invalide pour le séquestre : % (cash exclu, aucune garde possible).', p_payment_method;
   end if;
 
-  select tp.request_id, tp.status, tr.status, tr.client_id, tp.item_price, tp.delivery_fee
-    into v_request_id, v_proposal_status, v_request_status, v_client_id, v_item_price, v_delivery_fee
+  select tp.request_id, tp.status, tr.status, tr.client_id, tp.voyageur_id, tp.item_price, tp.delivery_fee
+    into v_request_id, v_proposal_status, v_request_status, v_client_id, v_voyageur_id, v_item_price, v_delivery_fee
   from public.travel_proposals tp
   join public.travel_requests tr on tr.id = tp.request_id
   where tp.id = p_proposal_id
@@ -1065,6 +1066,16 @@ begin
     request_id, payment_method, payment_proof_url, payment_ref, amount, commission_amount, status
   ) values (
     v_request_id, p_payment_method, p_payment_proof_url, p_payment_ref, v_amount, v_commission, v_payment_status
+  );
+
+  -- REQUEST_UPDATE au voyageur — déjà SECURITY DEFINER ici, insertion
+  -- directe (pas besoin de passer par create_notification()/service_role).
+  insert into public.notifications (user_id, type, priority, title, body, related_object_type, related_object_id)
+  values (
+    v_voyageur_id, 'request_update', 'normal',
+    'Proposition acceptée',
+    'Le client a accepté ta proposition — direction /jibli pour la suite.',
+    'travel_request', v_request_id
   );
 
   perform set_config('jibli.bypass_transition_checks', 'false', true);
@@ -2340,6 +2351,139 @@ begin
     );
   end if;
 end $$;
+
+-- ============================================================================
+-- Table: notifications
+-- Centre de notifications générique (Phase 3, brique 1/N — Trust System,
+-- Trips, Matching viendront après). Branché uniquement sur des événements
+-- qui existent déjà : TRANSACTION_UPDATE (paiement virement vérifié,
+-- verifyTravelPayment), REQUEST_UPDATE (statut d'une demande qui change),
+-- REVIEW_AVAILABLE (avis révélé — cas mutuel seulement ; le cas 14 jours
+-- n'a aucun événement d'écriture, cf. is_review_revealed() plus haut,
+-- sous-chantier séparé si voulu), VERIFICATION_UPDATE (KYC approuvé/rejeté).
+--
+-- Décision explicite : ne notifie PAS la résolution de litige
+-- (resolve_dispute_release_funds/refund/close) — décision antérieure
+-- intacte, pas rouverte par ce chantier.
+--
+-- In-app uniquement pour cette phase (aucun déclenchement OneSignal :
+-- sendPushToUser() n'est appelée nulle part dans le code actuel, jamais
+-- testée en prod). Pas de table notification_deliveries pour l'instant —
+-- rien à y mettre tant qu'aucun canal n'envoie réellement ; le design
+-- polymorphe (related_object_type/id) permet d'en ajouter une plus tard
+-- sans aucune migration sur cette table.
+-- ============================================================================
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  -- text+check plutôt qu'un vrai enum Postgres : cet ensemble va grossir à
+  -- chaque futur chantier de la direction Phase 3 (Trust System, Trips,
+  -- Matching ajoutent chacun leurs propres types) — même raisonnement que
+  -- disputes.resolution_type (ensemble textuel qui évolue), pas
+  -- travel_payment_status (ensemble stable, vrai enum).
+  type text not null check (type in (
+    'transaction_update', 'request_update', 'review_available', 'verification_update'
+  )),
+  priority text not null default 'normal' check (priority in ('low', 'normal', 'high', 'urgent')),
+  -- Texte généré à l'écriture (pas de JSON structuré + template au rendu) :
+  -- plus simple, et reste historiquement exact même si l'objet lié change
+  -- après coup.
+  title text not null,
+  body text,
+  -- Lien "ouvrir l'objet lié" — polymorphe (peut pointer vers
+  -- travel_requests, travel_payments, identity_verifications...), donc pas
+  -- de vraie FK ; résolu côté UI au clic (href construit selon
+  -- related_object_type).
+  related_object_type text check (related_object_type in ('travel_request', 'travel_payment', 'identity_verification')),
+  related_object_id uuid,
+  read_at timestamptz,
+  created_at timestamptz not null default now()
+  -- Pas d'updated_at/trigger set_updated_at : une notification n'a qu'UNE
+  -- seule mutation possible dans sa vie (read_at), qui porte déjà son
+  -- propre horodatage.
+);
+
+create index if not exists notifications_user_created_idx on public.notifications(user_id, created_at desc);
+create index if not exists notifications_user_unread_idx on public.notifications(user_id) where read_at is null;
+
+alter table public.notifications enable row level security;
+
+drop policy if exists "notifications_select_own" on public.notifications;
+create policy "notifications_select_own"
+  on public.notifications for select
+  using (user_id = auth.uid());
+
+drop policy if exists "notifications_update_own" on public.notifications;
+create policy "notifications_update_own"
+  on public.notifications for update
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+-- Pas de policy INSERT — même principe que flouci_payment_incidents
+-- (aucune policy INSERT du tout, vérifié) : écriture réservée à
+-- create_notification() ci-dessous (appelée exclusivement via le client
+-- service_role) et aux RPC qui insèrent directement dans leur propre
+-- transaction (accept_travel_proposal ci-dessus, déjà SECURITY DEFINER).
+
+-- Point d'entrée centralisé pour créer une notification "pour un autre
+-- utilisateur" (ex: le client notifie le voyageur) depuis les Server
+-- Actions qui ne sont pas déjà des RPC SECURITY DEFINER (verifyTravelPayment,
+-- advanceRequestStatus, cancelRequest, submitReview, approveVerification,
+-- rejectVerification). SECURITY DEFINER pour contourner l'absence de
+-- policy INSERT ci-dessus — mais AUCUN grant à `authenticated` (à la
+-- différence des autres RPC de ce fichier, appelées via la session de
+-- l'utilisateur lui-même) : un utilisateur authentifié qui pourrait
+-- l'appeler directement créerait des notifications arbitraires pour
+-- n'importe qui (spam/hameçonnage). Appelée exclusivement via le client
+-- service_role (createAdminClient()) depuis les Server Actions concernées
+-- — même modèle de confiance que le callback webhook Flouci, qui utilise
+-- déjà le client service_role pour écrire dans flouci_payment_incidents
+-- (aucune policy INSERT là non plus). Ce projet Supabase accorde EXECUTE à
+-- anon/authenticated/service_role PAR DÉFAUT à la création d'une fonction
+-- (alter default privileges configuré au niveau du projet) — un simple
+-- `revoke ... from public` ne suffit PAS à retirer ce grant DIRECT sur
+-- authenticated (vérifié en direct : un utilisateur authentifié normal a pu
+-- appeler cette fonction malgré ce revoke, avant le correctif ci-dessous).
+-- Revoke explicite des rôles concrets (public, authenticated, anon), pas
+-- seulement de PUBLIC.
+create or replace function public.create_notification(
+  p_user_id uuid,
+  p_type text,
+  p_title text,
+  p_body text default null,
+  p_priority text default 'normal',
+  p_related_object_type text default null,
+  p_related_object_id uuid default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+begin
+  insert into public.notifications (user_id, type, priority, title, body, related_object_type, related_object_id)
+  values (p_user_id, p_type, p_priority, p_title, p_body, p_related_object_type, p_related_object_id)
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+-- CORRECTIF : `revoke ... from public` seul ne suffit PAS sur ce projet
+-- Supabase — vérifié en direct (un utilisateur authentifié normal a réussi
+-- à appeler create_notification() et à insérer une notification forgée
+-- malgré ce revoke). Cause : Supabase configure par défaut
+-- `alter default privileges in schema public grant execute on functions to
+-- anon, authenticated, service_role`, donc `authenticated` reçoit un grant
+-- DIRECT à la création de la fonction, indépendant du pseudo-rôle PUBLIC —
+-- révoquer PUBLIC ne touche pas ce grant séparé. Revoke explicite des deux
+-- rôles concrets ci-dessous, qui fonctionne quel que soit le mécanisme de
+-- grant par défaut.
+revoke execute on function public.create_notification(uuid, text, text, text, text, text, uuid) from public;
+revoke execute on function public.create_notification(uuid, text, text, text, text, text, uuid) from authenticated;
+revoke execute on function public.create_notification(uuid, text, text, text, text, text, uuid) from anon;
 
 -- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,

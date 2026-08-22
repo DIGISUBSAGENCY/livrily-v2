@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/Button'
 import { MobileNav } from '@/components/layout/MobileNav'
 import { UserMenu } from '@/components/layout/UserMenu'
+import { NotificationBell } from '@/components/notifications/NotificationBell'
 
 // Server Component : lit la session une fois par requête et affiche la nav
 // adaptée au rôle. La déconnexion passe par une Server Action (formulaire),
@@ -16,6 +17,7 @@ export async function Header() {
   let fullName: string | null = null
   let displayName: string | null = null
   let role: string | null = null
+  let unreadNotificationCount = 0
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
@@ -25,6 +27,12 @@ export async function Header() {
     fullName = profile?.full_name ?? null
     displayName = fullName ?? user.email ?? null
     role = profile?.role ?? null
+
+    // Compteur seulement ici (pas la liste complète) : coût d'une requête
+    // count(*) supplémentaire, la liste elle-même n'est chargée qu'à
+    // l'ouverture du dropdown (NotificationBell), pas à chaque page.
+    const { count } = await supabase.from('notifications').select('*', { count: 'exact', head: true }).is('read_at', null)
+    unreadNotificationCount = count ?? 0
   }
 
   // Le crowd-shipping n'a de sens que côté client (invité ou compte
@@ -62,9 +70,17 @@ export async function Header() {
             </Link>
           )}
           {user ? (
-            <div className="hidden sm:block">
-              <UserMenu fullName={fullName} email={user.email ?? null} />
-            </div>
+            <>
+              {/*
+                Visible mobile + desktop (contrairement à UserMenu) : une
+                liste de notifications n'a pas sa place dans MobileNav (menu
+                plein écran, état d'ouverture distinct) — icône autonome.
+              */}
+              <NotificationBell initialUnreadCount={unreadNotificationCount} />
+              <div className="hidden sm:block">
+                <UserMenu fullName={fullName} email={user.email ?? null} />
+              </div>
+            </>
           ) : (
             <div className="flex items-center gap-2">
               <Link href="/login">
