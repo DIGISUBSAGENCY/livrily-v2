@@ -48,10 +48,7 @@ export default async function Admin2faVerifierPage({ searchParams }: Admin2faVer
           </p>
         </div>
         <Card>
-          <MfaChallengeForm
-            factorId={status.factorId}
-            verifyAction={(factorId, code) => verifyAdminMfaChallenge(factorId, code, next)}
-          />
+          <MfaChallengeForm factorId={status.factorId} verifyAction={verifyAdminMfaChallenge.bind(null, next)} />
         </Card>
       </div>
     </div>

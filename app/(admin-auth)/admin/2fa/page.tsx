@@ -49,10 +49,7 @@ export default async function Admin2faPage({ searchParams }: Admin2faPageProps) 
           </p>
         </div>
         <Card>
-          <MfaSetupForm
-            enrollAction={enrollAdminMfaFactor}
-            verifyAction={(factorId, code) => verifyAdminMfaEnrollment(factorId, code, next)}
-          />
+          <MfaSetupForm enrollAction={enrollAdminMfaFactor} verifyAction={verifyAdminMfaEnrollment.bind(null, next)} />
         </Card>
       </div>
     </div>
