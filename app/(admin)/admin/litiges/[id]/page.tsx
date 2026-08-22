@@ -3,11 +3,18 @@ import { notFound } from 'next/navigation'
 import { AlertTriangle, User, Plane, Package, Wallet, CalendarDays } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { DisputeStatusBadge } from '@/components/travel/DisputeStatusBadge'
-import { ResolutionForm } from '@/components/admin/ResolutionForm'
-import { resolveDispute } from '../actions'
+import { DisputeResolutionActions } from '@/components/admin/DisputeResolutionActions'
+import { resolveDisputeReleaseFunds, resolveDisputeRefund, resolveDisputeClose } from '../actions'
 import { Card } from '@/components/ui/Card'
 import { Alert } from '@/components/ui/Alert'
 import { formatTND } from '@/lib/format'
+import type { DisputeResolutionType } from '@/types/database'
+
+const RESOLUTION_TYPE_LABELS: Record<DisputeResolutionType, string> = {
+  released_to_voyageur: 'Fonds libérés au voyageur',
+  refunded_to_client: 'Remboursement manuel enregistré (aucun remboursement automatique)',
+  closed_no_action: 'Clôturé sans action financière',
+}
 
 interface AdminLitigeDetailPageProps {
   params: Promise<{ id: string }>
@@ -42,7 +49,7 @@ export default async function AdminLitigeDetailPage({ params }: AdminLitigeDetai
 
   const { data: payment } = await supabase
     .from('travel_payments')
-    .select('amount, commission_amount, status, payment_method')
+    .select('amount, commission_amount, status, payment_method, release_reason, created_at, verified_at, released_at, refunded_at')
     .eq('request_id', dispute.travel_request_id)
     .maybeSingle()
 
@@ -116,24 +123,43 @@ export default async function AdminLitigeDetailPage({ params }: AdminLitigeDetai
           Paiement associé
         </h2>
         {payment ? (
-          <div className="mt-3 flex flex-wrap gap-6 text-sm">
-            <div>
-              <p className="text-slate-500">Montant</p>
-              <p className="font-medium text-slate-900">{formatTND(payment.amount)}</p>
+          <>
+            <div className="mt-3 flex flex-wrap gap-6 text-sm">
+              <div>
+                <p className="text-slate-500">Montant</p>
+                <p className="font-medium text-slate-900">{formatTND(payment.amount)}</p>
+              </div>
+              <div>
+                <p className="text-slate-500">Commission</p>
+                <p className="font-medium text-slate-900">{formatTND(payment.commission_amount)}</p>
+              </div>
+              <div>
+                <p className="text-slate-500">Méthode</p>
+                <p className="font-medium text-slate-900">{payment.payment_method}</p>
+              </div>
+              <div>
+                <p className="text-slate-500">Statut escrow</p>
+                <p className="font-medium text-slate-900">{payment.status}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-slate-500">Commission</p>
-              <p className="font-medium text-slate-900">{formatTND(payment.commission_amount)}</p>
-            </div>
-            <div>
-              <p className="text-slate-500">Méthode</p>
-              <p className="font-medium text-slate-900">{payment.payment_method}</p>
-            </div>
-            <div>
-              <p className="text-slate-500">Statut escrow</p>
-              <p className="font-medium text-slate-900">{payment.status}</p>
-            </div>
-          </div>
+
+            <ol className="mt-4 space-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-500">
+              <li>Accepté / paiement initié : {new Date(payment.created_at).toLocaleString('fr-TN')}</li>
+              {payment.verified_at && <li>Virement vérifié par un admin : {new Date(payment.verified_at).toLocaleString('fr-TN')}</li>}
+              {payment.released_at && (
+                <li>
+                  Fonds libérés
+                  {payment.release_reason === 'admin_dispute_resolution' && ' (résolution de litige)'}
+                  {payment.release_reason === 'auto_released_after_delay' && ' (libération automatique après délai)'}
+                  {payment.release_reason === 'client_confirmed' && ' (confirmation client)'} :{' '}
+                  {new Date(payment.released_at).toLocaleString('fr-TN')}
+                </li>
+              )}
+              {payment.refunded_at && (
+                <li>Remboursement manuel enregistré : {new Date(payment.refunded_at).toLocaleString('fr-TN')}</li>
+              )}
+            </ol>
+          </>
         ) : (
           <p className="mt-3 text-sm text-slate-500">Aucun paiement enregistré pour cette mission (proposition pas encore acceptée).</p>
         )}
@@ -152,7 +178,9 @@ export default async function AdminLitigeDetailPage({ params }: AdminLitigeDetai
 
       {dispute.status === 'resolved' ? (
         <Alert tone="success" className="mt-4">
-          <p className="font-semibold">Litige résolu</p>
+          <p className="font-semibold">
+            Litige résolu — {dispute.resolution_type ? RESOLUTION_TYPE_LABELS[dispute.resolution_type] : 'issue non renseignée'}
+          </p>
           <p className="mt-1">{dispute.resolution_note}</p>
           <p className="mt-2 text-xs opacity-80">
             Par {profileById.get(dispute.resolved_by ?? '')?.full_name ?? 'un admin'} le{' '}
@@ -162,9 +190,20 @@ export default async function AdminLitigeDetailPage({ params }: AdminLitigeDetai
       ) : (
         <Card className="mt-4">
           <h2 className="mb-3 font-semibold text-slate-900">Résoudre ce litige</h2>
-          <ResolutionForm
-            onResolve={(note) => resolveDispute(dispute.id, note)}
-            confirmMessage="Confirmer la résolution de ce litige ?"
+          {/*
+            .bind() sur les vraies server actions, pas des closures — une
+            arrow function qui se contente d'appeler une 'use server' dans
+            son corps n'est pas une référence server action valide pour un
+            prop de Client Component (frontière RSC : "Functions cannot be
+            passed directly to Client Components..."). Même bug, même
+            correctif que /admin/flouci-incidents/[id] et /admin/2fa. Pas de
+            réordonnancement des paramètres nécessaire ici : disputeId est
+            déjà en tête dans les 3 signatures (../actions.ts).
+          */}
+          <DisputeResolutionActions
+            onReleaseFunds={resolveDisputeReleaseFunds.bind(null, dispute.id)}
+            onRefund={resolveDisputeRefund.bind(null, dispute.id)}
+            onClose={resolveDisputeClose.bind(null, dispute.id)}
           />
         </Card>
       )}

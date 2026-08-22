@@ -7,50 +7,58 @@ export interface ActionResult {
   error: string | null
 }
 
-// Écriture directe (pas de RPC) : la policy disputes_update_admin_only
-// (is_admin()) est la vraie frontière de sécurité, pas une vérification
-// dupliquée ici — même pattern que verifications/actions.ts.
+// Les 3 fonctions ci-dessous appellent chacune un RPC SECURITY DEFINER
+// (resolve_dispute_release_funds/refund/close, schema.sql) — remplacent
+// l'ancienne action générique resolveDispute (simple .update() gardé par
+// disputes_update_admin_only), retirée : elle ne posait jamais
+// resolution_type et permettait de "résoudre" sans distinguer une vraie
+// libération de fonds d'un remboursement manuel ou d'une clôture sans
+// action. Un seul chemin de résolution désormais, pas deux en parallèle.
 //
-// .eq('status', 'open') dans le WHERE : empêche le double traitement.
-// Si le litige est déjà résolu, la clause ne matche aucune ligne, l'update
-// est un no-op silencieux côté Postgres — on le détecte via .select()
-// (data vide) pour renvoyer une vraie erreur plutôt que de faire croire à
-// l'admin que sa résolution a été appliquée.
-export async function resolveDispute(disputeId: string, note: string): Promise<ActionResult> {
+// Contrairement à resolveDispute, is_admin() n'est PAS la seule frontière
+// ici : ces RPC sont SECURITY DEFINER (contournent RLS), donc chaque
+// fonction SQL revérifie is_admin() elle-même en première ligne — cette
+// action ne fait que relayer l'erreur, jamais de vérification dupliquée
+// côté application qui pourrait diverger de la vraie règle en base.
+async function callResolveRpc(
+  rpcName: 'resolve_dispute_release_funds' | 'resolve_dispute_refund' | 'resolve_dispute_close',
+  disputeId: string,
+  note: string
+): Promise<ActionResult> {
   if (note.trim().length < 5) {
     return { error: 'Une note de résolution est requise (5 caractères minimum).' }
   }
 
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) return { error: 'Non authentifié.' }
-
-  const { data, error } = await supabase
-    .from('disputes')
-    .update({
-      status: 'resolved',
-      resolution_note: note.trim(),
-      resolved_by: user.id,
-      resolved_at: new Date().toISOString(),
-    })
-    .eq('id', disputeId)
-    .eq('status', 'open')
-    .select('id')
+  const { error } = await supabase.rpc(rpcName, { p_dispute_id: disputeId, p_note: note.trim() })
 
   if (error) {
-    console.error('[admin/litiges] resolveDispute a échoué', { message: error.message, code: error.code })
-    return { error: 'Impossible de résoudre ce litige, réessaie.' }
-  }
-
-  if (!data || data.length === 0) {
-    return { error: 'Ce litige est déjà résolu ou introuvable.' }
+    console.error(`[admin/litiges] ${rpcName} a échoué`, { message: error.message, code: error.code })
+    // Les messages du RPC (litige déjà résolu, paiement pas "escrowed",
+    // accès refusé...) sont déjà rédigés pour un admin — safe à relayer
+    // tels quels, contrairement à d'autres erreurs Postgres internes.
+    return { error: error.message }
   }
 
   revalidatePath('/admin/litiges')
   revalidatePath(`/admin/litiges/${disputeId}`)
+  revalidatePath('/admin/demandes')
   return { error: null }
+}
+
+export async function resolveDisputeReleaseFunds(disputeId: string, note: string): Promise<ActionResult> {
+  return callResolveRpc('resolve_dispute_release_funds', disputeId, note)
+}
+
+// Ne déclenche AUCUN remboursement réel — voir resolve_dispute_refund()
+// (schema.sql) et le texte du bouton côté UI (DisputeResolutionActions.tsx) :
+// documente qu'un remboursement a déjà été fait manuellement par l'admin
+// en dehors de Livrily, jamais une action automatique.
+export async function resolveDisputeRefund(disputeId: string, note: string): Promise<ActionResult> {
+  return callResolveRpc('resolve_dispute_refund', disputeId, note)
+}
+
+export async function resolveDisputeClose(disputeId: string, note: string): Promise<ActionResult> {
+  return callResolveRpc('resolve_dispute_close', disputeId, note)
 }

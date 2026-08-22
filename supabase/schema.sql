@@ -1172,13 +1172,18 @@ create table if not exists public.travel_payments (
   verified_at timestamptz,
   released_at timestamptz,
   -- Distingue une libération sur action du client ('client_confirmed', via
-  -- confirm_travel_receipt) d'une libération automatique après délai de
-  -- silence ('auto_released_after_delay', via auto_release_stale_payments,
-  -- plus bas) — le client n'a rien confirmé dans ce second cas ; nulle tant
-  -- que status n'est pas 'released'. Ne JAMAIS faire dire à cette colonne
-  -- autre chose que ce qui s'est réellement passé (même discipline que
-  -- resolution_note sur disputes : pas de donnée maquillée).
-  release_reason text check (release_reason in ('client_confirmed', 'auto_released_after_delay')),
+  -- confirm_travel_receipt), automatique après délai de silence
+  -- ('auto_released_after_delay', via auto_release_stale_payments) ou sur
+  -- décision admin lors d'un litige ('admin_dispute_resolution', via
+  -- resolve_dispute_release_funds, plus bas) — nulle tant que status n'est
+  -- pas 'released'. Ne JAMAIS faire dire à cette colonne autre chose que ce
+  -- qui s'est réellement passé (même discipline que resolution_note sur
+  -- disputes : pas de donnée maquillée).
+  release_reason text check (release_reason in ('client_confirmed', 'auto_released_after_delay', 'admin_dispute_resolution')),
+  -- Posée par resolve_dispute_refund() : ne documente jamais qu'un
+  -- remboursement réel a été déclenché par le code (aucun mécanisme
+  -- n'existe), seulement qu'un admin a enregistré l'avoir fait manuellement.
+  refunded_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -1723,9 +1728,19 @@ create table if not exists public.disputes (
   resolution_note text,
   resolved_by uuid references public.profiles(id),
   resolved_at timestamptz,
+  -- Quelle décision financière a été prise à la résolution — distinct de
+  -- resolution_note (texte libre) : permet de filtrer/afficher sans parser
+  -- le texte. Posé exclusivement par les 3 fonctions resolve_dispute_*
+  -- ci-dessous, jamais par écriture directe.
+  resolution_type text check (resolution_type in ('released_to_voyageur', 'refunded_to_client', 'closed_no_action')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Table déjà existante en prod (créée sans resolution_type à l'origine) :
+-- ADD COLUMN nécessaire pour que la ligne ci-dessus atteigne la vraie table.
+alter table public.disputes add column if not exists resolution_type text
+  check (resolution_type in ('released_to_voyageur', 'refunded_to_client', 'closed_no_action'));
 
 create index if not exists disputes_travel_request_idx on public.disputes(travel_request_id);
 create index if not exists disputes_opened_by_idx on public.disputes(opened_by);
@@ -1768,6 +1783,212 @@ drop policy if exists "disputes_update_admin_only" on public.disputes;
 create policy "disputes_update_admin_only"
   on public.disputes for update
   using (public.is_admin());
+
+-- ============================================================================
+-- Résolution admin des litiges — 3 issues financières possibles
+-- ============================================================================
+-- Même squelette que confirm_travel_receipt() (SECURITY DEFINER, verrouillage
+-- FOR UPDATE, vérifications explicites avant écriture). Différence
+-- importante : confirm_travel_receipt()/accept_travel_proposal() sont des
+-- actions CLIENT (vérifiées via auth.uid() = client_id) — ici ce sont des
+-- actions ADMIN. SECURITY DEFINER contourne RLS, donc is_admin() DOIT être
+-- vérifié explicitement en tout début de chaque fonction : aucune policy ne
+-- protège un appel RPC de la même façon qu'un .update() direct passant par
+-- disputes_update_admin_only.
+--
+-- Aucune des 3 ne touche travel_requests (ni status ni client_confirmed_at) :
+-- client_confirmed_at documente exclusivement une confirmation réelle du
+-- client (le remplir depuis une décision admin fausserait tout ce qui s'en
+-- sert plus tard, ex: avis/trust score) et le statut opérationnel de la
+-- mission est orthogonal à l'issue financière d'un litige. disputes.resolved_at
+-- (déjà existant) + resolution_type (ci-dessus) suffisent à documenter la
+-- résolution — aucune nouvelle colonne sur travel_requests.
+--
+-- Note obligatoire sur les 3 (pas seulement refund/close) : cohérent avec
+-- l'exigence UI "note obligatoire avant résolution", et resolution_note
+-- sert à documenter la décision quelle que soit l'issue, pas seulement les
+-- cas sans action automatique.
+alter table public.travel_payments add column if not exists refunded_at timestamptz;
+
+-- resolve_dispute_release_funds() a besoin d'une 3e valeur pour
+-- release_reason (déjà contraint à 'client_confirmed'/'auto_released_after_delay'
+-- depuis le chantier libération automatique) — recrée la contrainte avec la
+-- valeur ajoutée plutôt que d'en poser une nouvelle en parallèle.
+alter table public.travel_payments drop constraint if exists travel_payments_release_reason_check;
+alter table public.travel_payments add constraint travel_payments_release_reason_check
+  check (release_reason in ('client_confirmed', 'auto_released_after_delay', 'admin_dispute_resolution'));
+
+-- Action financière RÉELLE et complète : passe travel_payments.status à
+-- 'released', exactement ce que fait déjà confirm_travel_receipt() —
+-- déblocage comptable interne (travel_voyageur_balance() somme sur ce
+-- statut, indifférent à la raison), aucun appel externe banque/Flouci
+-- nécessaire. Précondition status='escrowed' identique à
+-- confirm_travel_receipt() : un paiement déjà released/refunded/pas encore
+-- vérifié ne peut pas être "libéré" une seconde fois par ce chemin.
+create or replace function public.resolve_dispute_release_funds(p_dispute_id uuid, p_note text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_dispute_status text;
+  v_request_id uuid;
+  v_payment_status public.travel_payment_status;
+begin
+  if not public.is_admin() then
+    raise exception 'Accès refusé — réservé aux administrateurs.';
+  end if;
+  if p_note is null or length(trim(p_note)) < 5 then
+    raise exception 'Une note de résolution est requise (5 caractères minimum).';
+  end if;
+
+  select status, travel_request_id into v_dispute_status, v_request_id
+  from public.disputes
+  where id = p_dispute_id
+  for update;
+
+  if v_request_id is null then
+    raise exception 'Litige introuvable.';
+  end if;
+  if v_dispute_status <> 'open' then
+    raise exception 'Ce litige est déjà résolu.';
+  end if;
+
+  select status into v_payment_status
+  from public.travel_payments
+  where request_id = v_request_id
+  for update;
+
+  if v_payment_status is null then
+    raise exception 'Aucun paiement associé à cette mission.';
+  end if;
+  if v_payment_status <> 'escrowed' then
+    raise exception 'Le paiement doit être "escrowed" pour être libéré (statut actuel : %).', v_payment_status;
+  end if;
+
+  update public.travel_payments
+    set status = 'released', released_at = now(), release_reason = 'admin_dispute_resolution'
+    where request_id = v_request_id;
+
+  update public.disputes
+    set status = 'resolved',
+        resolution_type = 'released_to_voyageur',
+        resolution_note = trim(p_note),
+        resolved_by = auth.uid(),
+        resolved_at = now()
+    where id = p_dispute_id;
+end;
+$$;
+
+grant execute on function public.resolve_dispute_release_funds(uuid, text) to authenticated;
+
+-- NE DÉCLENCHE AUCUN REMBOURSEMENT RÉEL : aucun mécanisme de remboursement
+-- n'existe dans ce projet (pas d'API Flouci de remboursement, jamais testée
+-- de toute façon — cf. lib/flouci.ts ; un virement retour est par nature une
+-- action manuelle hors système). Cette fonction documente uniquement qu'un
+-- remboursement a déjà été effectué manuellement par l'admin EN DEHORS de
+-- Livrily — le texte du bouton côté UI doit le dire explicitement
+-- ("Marquer comme remboursé manuellement", jamais juste "Rembourser").
+create or replace function public.resolve_dispute_refund(p_dispute_id uuid, p_note text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_dispute_status text;
+  v_request_id uuid;
+  v_payment_status public.travel_payment_status;
+begin
+  if not public.is_admin() then
+    raise exception 'Accès refusé — réservé aux administrateurs.';
+  end if;
+  if p_note is null or length(trim(p_note)) < 5 then
+    raise exception 'Une note de résolution est requise (5 caractères minimum) — documente comment le remboursement a été effectué manuellement.';
+  end if;
+
+  select status, travel_request_id into v_dispute_status, v_request_id
+  from public.disputes
+  where id = p_dispute_id
+  for update;
+
+  if v_request_id is null then
+    raise exception 'Litige introuvable.';
+  end if;
+  if v_dispute_status <> 'open' then
+    raise exception 'Ce litige est déjà résolu.';
+  end if;
+
+  select status into v_payment_status
+  from public.travel_payments
+  where request_id = v_request_id
+  for update;
+
+  if v_payment_status is null then
+    raise exception 'Aucun paiement associé à cette mission.';
+  end if;
+  if v_payment_status <> 'escrowed' then
+    raise exception 'Le paiement doit être "escrowed" pour être marqué remboursé (statut actuel : %).', v_payment_status;
+  end if;
+
+  update public.travel_payments
+    set status = 'refunded', refunded_at = now()
+    where request_id = v_request_id;
+
+  update public.disputes
+    set status = 'resolved',
+        resolution_type = 'refunded_to_client',
+        resolution_note = trim(p_note),
+        resolved_by = auth.uid(),
+        resolved_at = now()
+    where id = p_dispute_id;
+end;
+$$;
+
+grant execute on function public.resolve_dispute_refund(uuid, text) to authenticated;
+
+-- Litige non fondé (ou déjà réglé hors de ces 2 chemins) : aucune action
+-- financière, juste la décision et l'audit trail.
+create or replace function public.resolve_dispute_close(p_dispute_id uuid, p_note text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_dispute_status text;
+begin
+  if not public.is_admin() then
+    raise exception 'Accès refusé — réservé aux administrateurs.';
+  end if;
+  if p_note is null or length(trim(p_note)) < 5 then
+    raise exception 'Une note de résolution est requise (5 caractères minimum).';
+  end if;
+
+  select status into v_dispute_status
+  from public.disputes
+  where id = p_dispute_id
+  for update;
+
+  if v_dispute_status is null then
+    raise exception 'Litige introuvable.';
+  end if;
+  if v_dispute_status <> 'open' then
+    raise exception 'Ce litige est déjà résolu.';
+  end if;
+
+  update public.disputes
+    set status = 'resolved',
+        resolution_type = 'closed_no_action',
+        resolution_note = trim(p_note),
+        resolved_by = auth.uid(),
+        resolved_at = now()
+    where id = p_dispute_id;
+end;
+$$;
+
+grant execute on function public.resolve_dispute_close(uuid, text) to authenticated;
 
 -- ============================================================================
 -- Appareils connectés : lecture + révocation des sessions actives
