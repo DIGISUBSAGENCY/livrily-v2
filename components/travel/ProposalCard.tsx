@@ -22,6 +22,8 @@ import { formatDeadline } from '@/lib/travel/formatDeadline'
 import { actualGainFromProposal } from '@/lib/travel/estimateGain'
 import type { IdentityGateStatus } from '@/lib/identity'
 import type { ProfileRating } from '@/lib/reviews'
+import { TRUST_CATEGORY_LABELS, TRUST_CATEGORY_TONE, type TrustCategory } from '@/lib/trust'
+import { cn } from '@/lib/utils'
 import type { BankTransferInfo, TravelProposal, TravelProposalOffer, TravelRequestStatus } from '@/types/database'
 
 type PlatformPaymentInfo = Pick<BankTransferInfo, 'bank_name' | 'account_holder' | 'rib' | 'flouci_phone'>
@@ -49,6 +51,12 @@ interface ProposalCardProps {
   // avis) — uniquement pertinent pour viewerRole="owner", même logique que
   // voyageurVerified : aide le client à comparer plusieurs propositions.
   voyageurRating?: ProfileRating | null
+  // Catégorie Trust Score du voyageur (get_trust_score) — même logique que
+  // voyageurVerified/voyageurRating, uniquement pertinent pour
+  // viewerRole="owner". Catégorie affichée, jamais le score brut (cf.
+  // lib/trust.ts). Distinct de voyageurVerified : agrège identité + avis +
+  // historique de missions + litiges + ancienneté, pas seulement l'identité.
+  voyageurTrustCategory?: TrustCategory | null
 }
 
 export function ProposalCard({
@@ -62,6 +70,7 @@ export function ProposalCard({
   voyageurVerified = false,
   identityStatus = null,
   voyageurRating = null,
+  voyageurTrustCategory = null,
 }: ProposalCardProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -134,6 +143,16 @@ export function ProposalCard({
               >
                 <ShieldCheck className="h-3 w-3" aria-hidden />
                 Voyageur vérifié
+              </span>
+            )}
+            {voyageurTrustCategory && (
+              <span
+                className={cn(
+                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                  TRUST_CATEGORY_TONE[voyageurTrustCategory]
+                )}
+              >
+                {TRUST_CATEGORY_LABELS[voyageurTrustCategory]}
               </span>
             )}
           </div>

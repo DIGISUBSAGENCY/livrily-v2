@@ -6,6 +6,7 @@ import { StatCard } from '@/components/ui/StatCard'
 import { TrustPanel } from '@/components/profile/TrustPanel'
 import type { ProfileStats } from '@/lib/profileStats'
 import type { ProfileRating } from '@/lib/reviews'
+import type { TrustBadge, TrustCategory } from '@/lib/trust'
 
 interface ProfileOverviewProps {
   stats: ProfileStats
@@ -14,6 +15,8 @@ interface ProfileOverviewProps {
   memberSinceLabel: string
   userId: string
   rating: ProfileRating
+  trustCategory: TrustCategory
+  trustBadges: TrustBadge[]
 }
 
 export function ProfileOverview({
@@ -23,6 +26,8 @@ export function ProfileOverview({
   memberSinceLabel,
   userId,
   rating,
+  trustCategory,
+  trustBadges,
 }: ProfileOverviewProps) {
   const verificationsCompleted = (emailVerified ? 1 : 0) + (kycVerified ? 1 : 0)
 
@@ -39,7 +44,12 @@ export function ProfileOverview({
         <StatCard icon={ShieldCheck} value={`${verificationsCompleted}/2`} label="Vérifications" />
       </div>
 
-      <TrustPanel emailVerified={emailVerified} kycVerified={kycVerified} />
+      <TrustPanel
+        emailVerified={emailVerified}
+        kycVerified={kycVerified}
+        trustCategory={trustCategory}
+        trustBadges={trustBadges}
+      />
 
       {/* Contenu de l'étape 1/3, conservé tel quel. */}
       <div className="grid gap-3 sm:grid-cols-2">
