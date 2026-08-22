@@ -348,11 +348,68 @@ async function testMfaOrphanFactorRetry() {
   await service.auth.admin.deleteUser(adminId)
 }
 
+// ============================================================================
+// Scénario : /admin/litiges/[id] avec un litige OUVERT sur une mission avec
+// paiement escrowed (branche du composant qui expose DisputeResolutionActions
+// — celle qui plantait avec les 3 closures onReleaseFunds/onRefund/onClose).
+// ============================================================================
+async function testAdminLitigeDetail() {
+  console.log('\n=== /admin/litiges/[id] (litige ouvert, paiement escrowed) ===')
+  const ts = Date.now()
+  const adminId = await makeAdmin(`smoke-admin-litige-${ts}@example.com`, 'SmokeTestPass!23')
+  const clientId = await makeAdmin(`smoke-client-litige-${ts}@example.com`, 'SmokeTestPass!23')
+  const voyageurId = await makeAdmin(`smoke-voyageur-litige-${ts}@example.com`, 'SmokeTestPass!23')
+  await service.from('profiles').update({ role: 'client' }).in('id', [clientId, voyageurId])
+
+  const { data: req } = await service
+    .from('travel_requests')
+    .insert({ client_id: clientId, item_description: 'Smoke test litige', origin_country: 'France', destination_city: 'Tunis', budget_max: 80 })
+    .select('id')
+    .single()
+  const { data: proposal } = await service
+    .from('travel_proposals')
+    .insert({ request_id: req.id, voyageur_id: voyageurId, item_price: 50, delivery_fee: 20, status: 'accepted' })
+    .select('id')
+    .single()
+  await service.from('travel_requests').update({ accepted_proposal_id: proposal.id, status: 'matched' }).eq('id', req.id)
+  const { data: payment } = await service
+    .from('travel_payments')
+    .insert({ request_id: req.id, payment_method: 'virement', amount: 70, commission_amount: 5, status: 'escrowed' })
+    .select('id')
+    .single()
+  const { data: dispute, error: disputeErr } = await service
+    .from('disputes')
+    .insert({ travel_request_id: req.id, opened_by: clientId, reason: 'Smoke test — objet jamais reçu', status: 'open' })
+    .select('id')
+    .single()
+
+  if (disputeErr || !dispute) {
+    check('setup litige réussit', false, disputeErr)
+  } else {
+    const { cookie } = await signInSession(`smoke-admin-litige-${ts}@example.com`, 'SmokeTestPass!23')
+    const result = await renderPage(`/admin/litiges/${dispute.id}`, cookie)
+    assertRendersOk('/admin/litiges/[id]', result)
+    await service.from('disputes').delete().eq('id', dispute.id)
+  }
+
+  await service.from('travel_payments').delete().eq('id', payment.id)
+  await service.from('travel_proposals').delete().eq('id', proposal.id)
+  await service.from('travel_requests').delete().eq('id', req.id)
+  await service.auth.admin.deleteUser(adminId)
+  await service.auth.admin.deleteUser(clientId)
+  await service.auth.admin.deleteUser(voyageurId)
+}
+
+// Les 6 scénarios sont désormais tous pertinents : fix/rsc-closure-boundary-flouci
+// (PR #10), feat/2fa-admin (PR #9), fix/2fa-qr-code-data-uri (PR #12) et
+// fix/2fa-orphan-factor-retry (PR #13) sont mergées sur main au moment de ce
+// rebase, et cette branche ajoute son propre correctif litiges.
 await testFlouciIncidentDetail()
 await testAdmin2faEnrollPage()
 await testAdmin2faVerifierPage()
 await testMfaQrCodeDataUriShape()
 await testMfaOrphanFactorRetry()
+await testAdminLitigeDetail()
 
 console.log(`\n=== RÉSULTAT : ${pass} OK, ${fail} FAIL ===`)
 process.exit(fail > 0 ? 1 : 0)

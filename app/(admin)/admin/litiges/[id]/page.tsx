@@ -190,10 +190,20 @@ export default async function AdminLitigeDetailPage({ params }: AdminLitigeDetai
       ) : (
         <Card className="mt-4">
           <h2 className="mb-3 font-semibold text-slate-900">Résoudre ce litige</h2>
+          {/*
+            .bind() sur les vraies server actions, pas des closures — une
+            arrow function qui se contente d'appeler une 'use server' dans
+            son corps n'est pas une référence server action valide pour un
+            prop de Client Component (frontière RSC : "Functions cannot be
+            passed directly to Client Components..."). Même bug, même
+            correctif que /admin/flouci-incidents/[id] et /admin/2fa. Pas de
+            réordonnancement des paramètres nécessaire ici : disputeId est
+            déjà en tête dans les 3 signatures (../actions.ts).
+          */}
           <DisputeResolutionActions
-            onReleaseFunds={(note) => resolveDisputeReleaseFunds(dispute.id, note)}
-            onRefund={(note) => resolveDisputeRefund(dispute.id, note)}
-            onClose={(note) => resolveDisputeClose(dispute.id, note)}
+            onReleaseFunds={resolveDisputeReleaseFunds.bind(null, dispute.id)}
+            onRefund={resolveDisputeRefund.bind(null, dispute.id)}
+            onClose={resolveDisputeClose.bind(null, dispute.id)}
           />
         </Card>
       )}
