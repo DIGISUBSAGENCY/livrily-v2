@@ -1004,6 +1004,7 @@ declare
   v_proposal_status public.travel_proposal_status;
   v_item_price numeric(10,3);
   v_delivery_fee numeric(10,3);
+  v_source_trip_id uuid;
   v_amount numeric(10,3);
   v_commission numeric(10,3);
   v_commission_rate numeric(5,4);
@@ -1013,8 +1014,8 @@ begin
     raise exception 'Méthode de paiement invalide pour le séquestre : % (cash exclu, aucune garde possible).', p_payment_method;
   end if;
 
-  select tp.request_id, tp.status, tr.status, tr.client_id, tp.voyageur_id, tp.item_price, tp.delivery_fee
-    into v_request_id, v_proposal_status, v_request_status, v_client_id, v_voyageur_id, v_item_price, v_delivery_fee
+  select tp.request_id, tp.status, tr.status, tr.client_id, tp.voyageur_id, tp.item_price, tp.delivery_fee, tp.source_trip_id
+    into v_request_id, v_proposal_status, v_request_status, v_client_id, v_voyageur_id, v_item_price, v_delivery_fee, v_source_trip_id
   from public.travel_proposals tp
   join public.travel_requests tr on tr.id = tp.request_id
   where tp.id = p_proposal_id
@@ -1067,6 +1068,18 @@ begin
   ) values (
     v_request_id, p_payment_method, p_payment_proof_url, p_payment_ref, v_amount, v_commission, v_payment_status
   );
+
+  -- Trips (Phase 3, brique 2/N) : si cette proposition vient d'un match
+  -- (source_trip_id posé à sa création), c'est ICI que la mise en
+  -- relation "un trip = une seule à la fois" se concrétise — la seule
+  -- écriture de tout ce chantier qui fait passer un trip à 'matched'.
+  -- 'open' dans le where : ne fait rien si le trip a déjà été utilisé par
+  -- une autre proposition entre-temps (garde-fou silencieux, pas une
+  -- erreur bloquante pour le client qui accepte).
+  if v_source_trip_id is not null then
+    update public.trips set status = 'matched', matched_proposal_id = p_proposal_id
+      where id = v_source_trip_id and status = 'open';
+  end if;
 
   -- REQUEST_UPDATE au voyageur — déjà SECURITY DEFINER ici, insertion
   -- directe (pas besoin de passer par create_notification()/service_role).
@@ -2484,6 +2497,221 @@ $$;
 revoke execute on function public.create_notification(uuid, text, text, text, text, text, uuid) from public;
 revoke execute on function public.create_notification(uuid, text, text, text, text, text, uuid) from authenticated;
 revoke execute on function public.create_notification(uuid, text, text, text, text, text, uuid) from anon;
+
+-- ============================================================================
+-- Table: trips (Phase 3, brique 2/N — Trips)
+-- Un voyageur publie une disponibilité À L'AVANCE (route + date + poids
+-- disponible), avant qu'aucune demande spécifique n'existe — première fois
+-- dans ce projet qu'un voyageur agit de façon PROACTIVE plutôt que
+-- réactive (répondre à une travel_requests existante). Décisions
+-- tranchées : un trip = une seule mise en relation à la fois pour la v1
+-- (pas de gestion de capacité partagée — matched_proposal_id ci-dessous en
+-- est la seule trace) ; le matching est une recommandation, jamais une
+-- mise en relation automatique (aucune écriture de ce chantier ne crée de
+-- travel_proposals toute seule) ; indicative_price est un point de départ
+-- qui alimente le même fil de négociation existant, jamais un tarif fixe.
+-- ============================================================================
+do $$ begin
+  create type public.trip_status as enum ('open', 'matched', 'completed', 'cancelled');
+exception when duplicate_object then null; end $$;
+
+create table if not exists public.trips (
+  id uuid primary key default gen_random_uuid(),
+  voyageur_id uuid not null references public.profiles(id),
+  origin_country text not null,
+  destination_city text not null,
+  travel_date date not null,
+  -- NOT NULL contrairement à travel_requests.item_weight_kg (ajouté plus
+  -- bas, nullable) : un trip existe précisément pour annoncer une capacité,
+  -- pas de sens sans elle. item_weight_kg côté demande reste optionnel car
+  -- rétrofitté sur un flux existant qui ne le demandait pas jusqu'ici.
+  available_weight_kg numeric(6,2) not null check (available_weight_kg > 0),
+  -- Indication de départ, jamais un tarif verrouillé — alimente le même
+  -- fil de négociation existant (travel_proposal_offers) une fois une
+  -- mise en relation créée, cf. travel_proposals.source_trip_id plus bas.
+  indicative_price numeric(10,3) check (indicative_price >= 0),
+  pickup_city text,
+  message text,
+  status public.trip_status not null default 'open',
+  -- Posé uniquement par accept_travel_proposal() quand la proposition
+  -- acceptée a source_trip_id = ce trip — la seule trace de "mise en
+  -- relation" pour la v1 (pas de table de capacité partagée).
+  matched_proposal_id uuid references public.travel_proposals(id),
+  expires_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists trips_status_idx on public.trips(status);
+create index if not exists trips_voyageur_idx on public.trips(voyageur_id);
+create index if not exists trips_route_idx on public.trips(origin_country, destination_city);
+
+drop trigger if exists trg_trips_updated_at on public.trips;
+create trigger trg_trips_updated_at
+  before update on public.trips
+  for each row execute function public.set_updated_at();
+
+-- Pas de trigger de transition de statut (contrairement à
+-- trg_travel_requests_transitions) : la seule transition automatique
+-- (open -> matched) est posée par accept_travel_proposal(), déjà
+-- SECURITY DEFINER ; matched -> completed/cancelled n'a pas encore de
+-- règle métier définie pour la v1, pas de machine à états à deviner
+-- maintenant.
+
+-- Lien optionnel vers le trip d'origine d'une proposition — permet à
+-- accept_travel_proposal() de savoir quel trip faire passer à 'matched'.
+-- Nullable : une proposition créée normalement (voyageur parcourant une
+-- demande directement, sans passer par un trip) laisse ce champ vide,
+-- comportement inchangé.
+alter table public.travel_proposals add column if not exists source_trip_id uuid references public.trips(id);
+
+-- Optionnel : n'affecte que le calcul de score des RPC de matching
+-- ci-dessous, aucun flux existant (création de demande, négociation,
+-- acceptation) n'en dépend.
+alter table public.travel_requests add column if not exists item_weight_kg numeric(6,2) check (item_weight_kg is null or item_weight_kg > 0);
+
+alter table public.trips enable row level security;
+
+drop policy if exists "trips_select_open_or_involved" on public.trips;
+create policy "trips_select_open_or_involved"
+  on public.trips for select
+  using (
+    status = 'open'
+    or voyageur_id = auth.uid()
+    or public.is_admin()
+  );
+
+drop policy if exists "trips_insert_own" on public.trips;
+create policy "trips_insert_own"
+  on public.trips for insert
+  with check (voyageur_id = auth.uid() and public.is_client());
+
+drop policy if exists "trips_update_own_or_admin" on public.trips;
+create policy "trips_update_own_or_admin"
+  on public.trips for update
+  using (voyageur_id = auth.uid() or public.is_admin());
+
+-- Score de matching — RECOMMANDATION SEULEMENT, aucune écriture. Calculé à
+-- la lecture (même philosophie que get_profile_rating : pas d'agrégat
+-- stocké tant que le volume reste faible). Route obligatoire (filtrée
+-- côté where, pas de fuzzy matching v1) ; date et poids sont des bonus,
+-- absents si l'une des deux valeurs manque (item_weight_kg optionnel côté
+-- demande). Pas de signal de confiance : Trust System n'existe pas encore
+-- (chantier suivant de cette direction) — point d'extension clair pour
+-- plus tard, pas construit maintenant.
+create or replace function public.get_trip_matches_for_request(p_request_id uuid)
+returns table (
+  trip_id uuid,
+  voyageur_id uuid,
+  origin_country text,
+  destination_city text,
+  travel_date date,
+  available_weight_kg numeric,
+  indicative_price numeric,
+  score int
+)
+language sql
+set search_path = public
+stable
+as $$
+  select
+    t.id,
+    t.voyageur_id,
+    t.origin_country,
+    t.destination_city,
+    t.travel_date,
+    t.available_weight_kg,
+    t.indicative_price,
+    (
+      50
+      + case
+          when tr.needed_by is null then 0
+          when abs(t.travel_date - tr.needed_by) <= 3 then 30
+          when abs(t.travel_date - tr.needed_by) <= 7 then 15
+          else 0
+        end
+      + case
+          when tr.item_weight_kg is null then 0
+          when t.available_weight_kg >= tr.item_weight_kg then 20
+          else 0
+        end
+    )::int as score
+  from public.trips t
+  join public.travel_requests tr on tr.id = p_request_id
+  where t.status = 'open'
+    and t.origin_country = tr.origin_country
+    and t.destination_city = tr.destination_city
+  order by score desc, t.created_at desc
+  limit 20;
+$$;
+
+grant execute on function public.get_trip_matches_for_request(uuid) to authenticated;
+
+-- Symétrique côté voyageur (ses trips -> demandes qui pourraient
+-- convenir) — même formule de score, dupliquée plutôt que factorisée en
+-- une seule fonction générique : les deux sens ont des colonnes de retour
+-- différentes (contexte demande vs contexte trip), une fonction générique
+-- aurait nécessité un type de retour composite plus complexe pour un gain
+-- de lisibilité négatif à ce stade.
+create or replace function public.get_request_matches_for_trip(p_trip_id uuid)
+returns table (
+  request_id uuid,
+  client_id uuid,
+  item_description text,
+  origin_country text,
+  destination_city text,
+  needed_by date,
+  budget_max numeric,
+  item_weight_kg numeric,
+  score int
+)
+language sql
+set search_path = public
+stable
+as $$
+  select
+    tr.id,
+    tr.client_id,
+    tr.item_description,
+    tr.origin_country,
+    tr.destination_city,
+    tr.needed_by,
+    tr.budget_max,
+    tr.item_weight_kg,
+    (
+      50
+      + case
+          when tr.needed_by is null then 0
+          when abs(t.travel_date - tr.needed_by) <= 3 then 30
+          when abs(t.travel_date - tr.needed_by) <= 7 then 15
+          else 0
+        end
+      + case
+          when tr.item_weight_kg is null then 0
+          when t.available_weight_kg >= tr.item_weight_kg then 20
+          else 0
+        end
+    )::int as score
+  from public.travel_requests tr
+  join public.trips t on t.id = p_trip_id
+  where tr.status = 'open'
+    and tr.origin_country = t.origin_country
+    and tr.destination_city = t.destination_city
+  order by score desc, tr.created_at desc
+  limit 20;
+$$;
+
+grant execute on function public.get_request_matches_for_trip(uuid) to authenticated;
+
+-- Nouveau type de notification pour ce chantier — colonne conçue pour
+-- grossir (cf. commentaire sur notifications.type). Distinct de
+-- request_update : sémantiquement différent (une opportunité détectée,
+-- pas un changement d'état d'une demande existante). Déclenché plus tard
+-- par l'action "Signaler mon intérêt" côté client (pas construite dans ce
+-- lot SQL — ne modifie aucune Server Action existante).
+alter table public.notifications drop constraint if exists notifications_type_check;
+alter table public.notifications add constraint notifications_type_check
+  check (type in ('transaction_update', 'request_update', 'review_available', 'verification_update', 'request_matched'));
 
 -- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,
