@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { Package } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { TrustCategoryBadge } from '@/components/profile/TrustCategoryBadge'
 import { formatTND } from '@/lib/format'
+import type { TrustCategory } from '@/lib/trust'
 
 interface RequestMatchCardProps {
   tripId: string
@@ -12,7 +14,11 @@ interface RequestMatchCardProps {
   destinationCity: string
   budgetMax: number
   itemWeightKg: number | null
-  score: number
+  // Sans le bonus Trust Score (date + poids seuls) — pilote uniquement le
+  // badge "Très bonne correspondance" ci-dessous. `score` (avec trust)
+  // pilote déjà le tri côté SQL, pas besoin de le recevoir ici.
+  logisticsScore: number
+  trustCategory: TrustCategory
 }
 
 // "Proposer" navigue vers la demande avec ?trip_id=... — c'est la page de
@@ -28,7 +34,8 @@ export function RequestMatchCard({
   destinationCity,
   budgetMax,
   itemWeightKg,
-  score,
+  logisticsScore,
+  trustCategory,
 }: RequestMatchCardProps) {
   return (
     <Card className="flex flex-wrap items-center justify-between gap-3">
@@ -40,7 +47,12 @@ export function RequestMatchCard({
             {originCountry} → {destinationCity} · budget max {formatTND(budgetMax)}
             {itemWeightKg !== null && <> · {itemWeightKg} kg</>}
           </p>
-          {score >= 90 && <p className="mt-0.5 text-xs font-medium text-brand-600">Très bonne correspondance</p>}
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {logisticsScore >= 90 && (
+              <p className="text-xs font-medium text-brand-600">Très bonne correspondance</p>
+            )}
+            <TrustCategoryBadge category={trustCategory} />
+          </div>
         </div>
       </div>
 
