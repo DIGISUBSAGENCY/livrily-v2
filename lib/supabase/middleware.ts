@@ -46,8 +46,15 @@ export async function updateSession(request: NextRequest) {
   // arrivant sur cette page (aucun /auth/callback ne s'exécute avant), la
   // session n'existe qu'une fois le code soumis via verifyOtp() dans son
   // Server Action. La exiger ici bloquerait l'accès à la page elle-même.
+  //
+  // /admin/2fa et /admin/2fa/verifier rejoignent cette liste pour une
+  // raison différente : elles nécessitent bien une session (contrairement
+  // aux 3 ci-dessus), mais sont justement LA destination du garde-fou AAL
+  // plus bas — les exclure du garde-fou lui-même évite une boucle de
+  // redirection infinie.
   const isPublicAdminAuthRoute =
     pathname === '/admin/login' || pathname === '/admin/forgot-password' || pathname === '/admin/reset-password'
+  const isAdmin2faRoute = pathname === '/admin/2fa' || pathname === '/admin/2fa/verifier'
   const isAdminRoute = !isPublicAdminAuthRoute && (pathname === '/admin' || pathname.startsWith('/admin/'))
 
   if (isAdminRoute) {
@@ -74,6 +81,29 @@ export async function updateSession(request: NextRequest) {
       const url = request.nextUrl.clone()
       url.pathname = '/'
       return NextResponse.redirect(url)
+    }
+
+    // 2FA obligatoire pour tout compte admin (P3 de l'audit — pas encore
+    // ouvert aux comptes client/voyageur, optionnel là-bas via
+    // /profil/parametres). Vérifié ici plutôt que dans chaque Server
+    // Action de connexion : couvre tous les chemins d'entrée (login,
+    // session déjà ouverte, onglet direct) depuis un seul endroit, cohérent
+    // avec le garde-fou role/is_active juste au-dessus.
+    if (!isAdmin2faRoute) {
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== aal.nextLevel) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/admin/2fa/verifier'
+        url.searchParams.set('next', pathname)
+        return NextResponse.redirect(url)
+      }
+      if (aal && aal.nextLevel !== 'aal2') {
+        // Aucun facteur vérifié du tout : admin pas encore enrôlé.
+        const url = request.nextUrl.clone()
+        url.pathname = '/admin/2fa'
+        url.searchParams.set('next', pathname)
+        return NextResponse.redirect(url)
+      }
     }
   }
 
