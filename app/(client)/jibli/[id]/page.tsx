@@ -460,7 +460,22 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
           />
           <Card className="mt-6">
             <h2 className="mb-3 font-semibold text-slate-900">Faire une proposition</h2>
+            {/*
+              key=sourceTrip?.id : Next.js ne démonte PAS l'arbre de
+              composants d'une page quand seuls les searchParams changent
+              (même pathname) — sans ce key, ProposalForm réutilise son
+              instance déjà montée lors d'une navigation client-side
+              antérieure sur CETTE MÊME page sans ?trip_id=, et
+              useState(defaultDeliveryFee ?? 0) n'étant lu qu'au tout
+              premier montage, le nouveau pré-remplissage n'est jamais
+              appliqué (bug reproduit en direct : HTML serveur correct à
+              chaque fois, mais navigation client-side réelle affichait un
+              formulaire vide). Forcer un remount à chaque trip_id
+              différent — pattern React documenté pour "reset state when a
+              prop changes".
+            */}
             <ProposalForm
+              key={sourceTrip?.id ?? 'no-trip'}
               requestId={request.id}
               sourceTripId={sourceTrip?.id}
               defaultDeliveryFee={sourceTrip?.indicative_price ?? undefined}
