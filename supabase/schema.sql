@@ -2284,6 +2284,16 @@ as $$
     );
 $$;
 
+-- Revoke explicite de anon en plus du grant à authenticated — trou de
+-- sécurité préexistant trouvé en testant en direct le Trust System (Phase
+-- 3, brique 3/N, plus bas dans ce fichier) : sans ce revoke, le piège des
+-- privilèges par défaut de ce projet (alter default privileges accorde
+-- EXECUTE à anon directement à la création, indépendamment de PUBLIC)
+-- laissait n'importe quel appelant anonyme lire la note moyenne de
+-- n'importe quel profil. Corrigé indépendamment de ce chantier, dès
+-- confirmation.
+revoke execute on function public.get_profile_rating(uuid) from public;
+revoke execute on function public.get_profile_rating(uuid) from anon;
 grant execute on function public.get_profile_rating(uuid) to authenticated;
 
 -- ============================================================================
