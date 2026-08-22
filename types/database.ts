@@ -24,6 +24,8 @@ export type TravelProposalStatus = 'pending' | 'accepted' | 'rejected' | 'withdr
 
 export type TravelPaymentStatus = 'awaiting_verification' | 'escrowed' | 'released' | 'refunded'
 
+export type ReleaseReason = 'client_confirmed' | 'auto_released_after_delay'
+
 export type WithdrawalStatus = 'pending' | 'paid' | 'rejected'
 
 export type IdentityVerificationStatus = 'pending' | 'approved' | 'rejected'
@@ -139,12 +141,14 @@ export interface Database {
         Row: {
           id: boolean
           travel_commission_rate: number
+          auto_release_delay_days: number
           updated_at: string
           updated_by: string | null
         }
         Insert: {
           id?: boolean
           travel_commission_rate?: number
+          auto_release_delay_days?: number
           updated_by?: string | null
         }
         Update: Partial<Database['public']['Tables']['platform_settings']['Insert']>
@@ -164,6 +168,7 @@ export interface Database {
           status: TravelRequestStatus
           accepted_proposal_id: string | null
           client_confirmed_at: string | null
+          completed_at: string | null
           created_at: string
           updated_at: string
         }
@@ -180,6 +185,7 @@ export interface Database {
           status?: TravelRequestStatus
           accepted_proposal_id?: string | null
           client_confirmed_at?: string | null
+          completed_at?: string | null
         }
         Update: Partial<Database['public']['Tables']['travel_requests']['Insert']>
         Relationships: []
@@ -256,6 +262,7 @@ export interface Database {
           verified_by: string | null
           verified_at: string | null
           released_at: string | null
+          release_reason: ReleaseReason | null
           created_at: string
           updated_at: string
         }
@@ -271,6 +278,7 @@ export interface Database {
           verified_by?: string | null
           verified_at?: string | null
           released_at?: string | null
+          release_reason?: ReleaseReason | null
         }
         Update: Partial<Database['public']['Tables']['travel_payments']['Insert']>
         Relationships: []
