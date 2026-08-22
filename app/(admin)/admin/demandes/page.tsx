@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Package, AlertTriangle, Wallet } from 'lucide-react'
+import { Package, AlertTriangle, Wallet, Clock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { TravelRequestStatusBadge } from '@/components/travel/TravelRequestStatusBadge'
 import { RequestSearchFilters } from '@/components/admin/RequestSearchFilters'
@@ -62,8 +62,8 @@ export default async function AdminDemandesPage({ searchParams }: AdminDemandesP
       ? supabase.from('travel_proposals').select('id, request_id, voyageur_id, item_price, delivery_fee').in('id', proposalIds)
       : Promise.resolve({ data: [] as { id: string; request_id: string; voyageur_id: string; item_price: number; delivery_fee: number }[] }),
     requestIds.length
-      ? supabase.from('travel_payments').select('request_id, amount, status').in('request_id', requestIds)
-      : Promise.resolve({ data: [] as { request_id: string; amount: number; status: string }[] }),
+      ? supabase.from('travel_payments').select('request_id, amount, status, release_reason').in('request_id', requestIds)
+      : Promise.resolve({ data: [] as { request_id: string; amount: number; status: string; release_reason: string | null }[] }),
     requestIds.length
       ? supabase.from('disputes').select('id, travel_request_id').in('travel_request_id', requestIds).eq('status', 'open')
       : Promise.resolve({ data: [] as { id: string; travel_request_id: string }[] }),
@@ -103,6 +103,7 @@ export default async function AdminDemandesPage({ searchParams }: AdminDemandesP
       amount,
       isRealAmount,
       paymentPending: payment?.status === 'awaiting_verification',
+      autoReleased: payment?.release_reason === 'auto_released_after_delay',
       disputeId,
       needsAttention,
     }
@@ -172,6 +173,15 @@ export default async function AdminDemandesPage({ searchParams }: AdminDemandesP
                       Paiement en attente
                     </Badge>
                   </Link>
+                )}
+
+                {r.autoReleased && (
+                  <span title="Le client n'a jamais confirmé réception — fonds libérés automatiquement après le délai configuré">
+                    <Badge tone="info" className="gap-1">
+                      <Clock className="h-3 w-3" aria-hidden />
+                      Libéré automatiquement
+                    </Badge>
+                  </span>
                 )}
 
                 {r.disputeId && (
