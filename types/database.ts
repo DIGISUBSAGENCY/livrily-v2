@@ -38,11 +38,18 @@ export type FlouciIncidentStatus = 'unresolved' | 'resolved'
 
 export type ReviewDirection = 'client_to_voyageur' | 'voyageur_to_client'
 
-export type NotificationType = 'transaction_update' | 'request_update' | 'review_available' | 'verification_update'
+export type NotificationType =
+  | 'transaction_update'
+  | 'request_update'
+  | 'review_available'
+  | 'verification_update'
+  | 'request_matched'
 
 export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent'
 
 export type NotificationRelatedObjectType = 'travel_request' | 'travel_payment' | 'identity_verification'
+
+export type TripStatus = 'open' | 'matched' | 'completed' | 'cancelled'
 
 export interface Database {
   public: {
@@ -177,6 +184,9 @@ export interface Database {
           accepted_proposal_id: string | null
           client_confirmed_at: string | null
           completed_at: string | null
+          // Optionnel — n'affecte que le score des RPC de matching Trips,
+          // aucun flux existant n'en dépend. cf. schema.sql.
+          item_weight_kg: number | null
           created_at: string
           updated_at: string
         }
@@ -194,6 +204,7 @@ export interface Database {
           accepted_proposal_id?: string | null
           client_confirmed_at?: string | null
           completed_at?: string | null
+          item_weight_kg?: number | null
         }
         Update: Partial<Database['public']['Tables']['travel_requests']['Insert']>
         Relationships: []
@@ -213,6 +224,11 @@ export interface Database {
           last_offer_by: 'client' | 'voyageur'
           terms_confirmed_by: string | null
           terms_confirmed_at: string | null
+          // Non nul quand cette proposition vient d'un match Trips
+          // ("Proposer" depuis la liste de matches d'un trip). Nul pour une
+          // proposition créée normalement (voyageur parcourant une demande
+          // directement) — comportement inchangé.
+          source_trip_id: string | null
           created_at: string
           updated_at: string
         }
@@ -230,8 +246,43 @@ export interface Database {
           last_offer_by?: 'client' | 'voyageur'
           terms_confirmed_by?: string | null
           terms_confirmed_at?: string | null
+          source_trip_id?: string | null
         }
         Update: Partial<Database['public']['Tables']['travel_proposals']['Insert']>
+        Relationships: []
+      }
+      trips: {
+        Row: {
+          id: string
+          voyageur_id: string
+          origin_country: string
+          destination_city: string
+          travel_date: string
+          available_weight_kg: number
+          indicative_price: number | null
+          pickup_city: string | null
+          message: string | null
+          status: TripStatus
+          matched_proposal_id: string | null
+          expires_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          voyageur_id: string
+          origin_country: string
+          destination_city: string
+          travel_date: string
+          available_weight_kg: number
+          indicative_price?: number | null
+          pickup_city?: string | null
+          message?: string | null
+          status?: TripStatus
+          matched_proposal_id?: string | null
+          expires_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['trips']['Insert']>
         Relationships: []
       }
       travel_proposal_offers: {
@@ -537,6 +588,34 @@ export interface Database {
         Args: { p_profile_id: string }
         Returns: { avg_rating: number | null; review_count: number }[]
       }
+      // Recommandation seulement — n'écrit jamais de travel_proposals.
+      get_trip_matches_for_request: {
+        Args: { p_request_id: string }
+        Returns: {
+          trip_id: string
+          voyageur_id: string
+          origin_country: string
+          destination_city: string
+          travel_date: string
+          available_weight_kg: number
+          indicative_price: number | null
+          score: number
+        }[]
+      }
+      get_request_matches_for_trip: {
+        Args: { p_trip_id: string }
+        Returns: {
+          request_id: string
+          client_id: string
+          item_description: string
+          origin_country: string
+          destination_city: string
+          needed_by: string | null
+          budget_max: number
+          item_weight_kg: number | null
+          score: number
+        }[]
+      }
       resolve_dispute_release_funds: {
         Args: { p_dispute_id: string; p_note: string }
         Returns: undefined
@@ -575,6 +654,7 @@ export type WalletAdjustment = Database['public']['Tables']['wallet_adjustments'
 export type IdentityVerification = Database['public']['Tables']['identity_verifications']['Row']
 export type TravelRequest = Database['public']['Tables']['travel_requests']['Row']
 export type TravelProposal = Database['public']['Tables']['travel_proposals']['Row']
+export type Trip = Database['public']['Tables']['trips']['Row']
 export type TravelProposalOffer = Database['public']['Tables']['travel_proposal_offers']['Row']
 export type TravelPayment = Database['public']['Tables']['travel_payments']['Row']
 export type WithdrawalRequest = Database['public']['Tables']['withdrawal_requests']['Row']

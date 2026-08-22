@@ -51,6 +51,15 @@ export function MobileNav({ showJibli, showParrainage, isLoggedIn, displayName }
                 Voyages
               </Link>
             )}
+            {showJibli && (
+              <Link
+                href="/jibli/trips"
+                onClick={() => setIsOpen(false)}
+                className="rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Trips
+              </Link>
+            )}
             <Link
               href="/comment-ca-marche"
               onClick={() => setIsOpen(false)}

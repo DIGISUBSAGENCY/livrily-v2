@@ -10,6 +10,7 @@ import { ProposalForm } from '@/components/travel/ProposalForm'
 import { VoyageurStatusActions } from '@/components/travel/VoyageurStatusActions'
 import { ConfirmReceiptButton } from '@/components/travel/ConfirmReceiptButton'
 import { CancelRequestButton } from '@/components/travel/CancelRequestButton'
+import { TripMatchesPanel } from '@/components/travel/TripMatchesPanel'
 import { MissionInfoGrid } from '@/components/travel/MissionInfoGrid'
 import { VoyageurGainCard } from '@/components/travel/VoyageurGainCard'
 import { RequestPhotoPlaceholder } from '@/components/travel/RequestPhotoPlaceholder'
@@ -28,7 +29,11 @@ import type { BankTransferInfo, TravelPayment, TravelProposal, TravelProposalOff
 
 interface TravelRequestPageProps {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ flouci?: string }>
+  // trip_id : pré-remplissage de ProposalForm depuis "Proposer" sur un
+  // match Trips (RequestMatchCard, page trip). Revérifié côté serveur
+  // avant d'être réellement lié (cf. createProposal) — un id invalide/pas
+  // le sien ici n'affiche juste pas de pré-remplissage, sans erreur.
+  searchParams: Promise<{ flouci?: string; trip_id?: string }>
 }
 
 export async function generateMetadata({ params }: TravelRequestPageProps): Promise<Metadata> {
@@ -67,7 +72,7 @@ const flouciBannerMessages: Record<string, { text: string; tone: string }> = {
 // authentifiés, via les Server Actions + RLS.
 export default async function TravelRequestPage({ params, searchParams }: TravelRequestPageProps) {
   const { id } = await params
-  const { flouci } = await searchParams
+  const { flouci, trip_id: tripId } = await searchParams
   const supabase = await createClient()
 
   const {
@@ -207,6 +212,24 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
   const isAcceptedVoyageur = !isOwner && myProposal?.status === 'accepted'
   const canPropose = !!user && !isOwner && request.status === 'open' && !myProposal && profileRole === 'client'
   const mustLoginToPropose = !user && request.status === 'open'
+
+  // Trips (Phase 3, brique 2/N) — pré-remplissage depuis "Proposer" sur un
+  // match (RequestMatchCard, page trip). Uniquement affiché si CE trip
+  // appartient bien à l'utilisateur courant (RLS filtre déjà, revérifié
+  // explicitement ici pour ne montrer le pré-remplissage que quand il a un
+  // sens) — createProposal revalide indépendamment côté serveur avant de
+  // lier réellement le trip, ceci n'est que l'affichage.
+  let sourceTrip: { id: string; indicative_price: number | null; pickup_city: string | null } | null = null
+  if (canPropose && tripId) {
+    const { data: tripData } = await supabase
+      .from('trips')
+      .select('id, indicative_price, pickup_city')
+      .eq('id', tripId)
+      .eq('voyageur_id', user!.id)
+      .eq('status', 'open')
+      .maybeSingle()
+    sourceTrip = tripData ?? null
+  }
   const canConfirmReceipt = isOwner && request.status === 'completed' && !request.client_confirmed_at
   const flouciBanner = flouci ? flouciBannerMessages[flouci] : null
   // Un litige n'a de sens qu'une fois une transaction engagée (proposition
@@ -334,6 +357,8 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
         </div>
       )}
 
+      {isOwner && request.status === 'open' && <TripMatchesPanel requestId={request.id} />}
+
       {canConfirmReceipt && (
         <Card className="mt-4">
           <h2 className="mb-2 font-semibold text-slate-900">Réception</h2>
@@ -435,7 +460,27 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
           />
           <Card className="mt-6">
             <h2 className="mb-3 font-semibold text-slate-900">Faire une proposition</h2>
-            <ProposalForm requestId={request.id} />
+            {/*
+              key=sourceTrip?.id : Next.js ne démonte PAS l'arbre de
+              composants d'une page quand seuls les searchParams changent
+              (même pathname) — sans ce key, ProposalForm réutilise son
+              instance déjà montée lors d'une navigation client-side
+              antérieure sur CETTE MÊME page sans ?trip_id=, et
+              useState(defaultDeliveryFee ?? 0) n'étant lu qu'au tout
+              premier montage, le nouveau pré-remplissage n'est jamais
+              appliqué (bug reproduit en direct : HTML serveur correct à
+              chaque fois, mais navigation client-side réelle affichait un
+              formulaire vide). Forcer un remount à chaque trip_id
+              différent — pattern React documenté pour "reset state when a
+              prop changes".
+            */}
+            <ProposalForm
+              key={sourceTrip?.id ?? 'no-trip'}
+              requestId={request.id}
+              sourceTripId={sourceTrip?.id}
+              defaultDeliveryFee={sourceTrip?.indicative_price ?? undefined}
+              defaultPickupCity={sourceTrip?.pickup_city ?? undefined}
+            />
           </Card>
         </>
       )}

@@ -22,6 +22,42 @@ export const travelRequestSchema = z.object({
     .trim()
     .optional()
     .or(z.literal('').transform(() => undefined)),
+  // Optionnel côté formulaire de demande (rétrofitté sur un flux existant) —
+  // n'affecte que le score des RPC de matching Trips, cf. schema.sql.
+  item_weight_kg: z.coerce
+    .number()
+    .positive('Le poids doit être positif.')
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+})
+
+// Trip (Phase 3, brique 2/N) — publication d'une disponibilité à l'avance
+// par un voyageur. available_weight_kg obligatoire (contrairement à
+// item_weight_kg côté demande) : un trip existe précisément pour annoncer
+// une capacité. indicative_price optionnel — point de départ, jamais un
+// tarif verrouillé (cf. schema.sql).
+export const tripSchema = z.object({
+  origin_country: z.string().trim().min(2, "Pays d'origine requis."),
+  destination_city: z.string().trim().min(2, 'Ville de destination requise.'),
+  travel_date: z.string().trim().min(1, 'Date de voyage requise.'),
+  available_weight_kg: z.coerce.number().positive('Le poids disponible doit être positif.'),
+  indicative_price: z.coerce
+    .number()
+    .min(0, 'Le prix indicatif doit être positif.')
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  pickup_city: z
+    .string()
+    .trim()
+    .max(100)
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  message: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
 })
 
 // Durées de validité proposées côté formulaire (dropdown) — converties en
