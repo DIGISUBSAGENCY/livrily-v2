@@ -3,7 +3,8 @@ import { CheckCircle2, Circle, Mail, ShieldCheck, Lock, Award } from 'lucide-rea
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
-import { TRUST_BADGE_LABELS, TRUST_CATEGORY_LABELS, TRUST_CATEGORY_TONE, type TrustBadge, type TrustCategory } from '@/lib/trust'
+import { TrustCategoryBadge } from '@/components/profile/TrustCategoryBadge'
+import { TRUST_BADGE_LABELS, type TrustBadge, type TrustCategory } from '@/lib/trust'
 
 interface TrustPanelProps {
   emailVerified: boolean
@@ -33,11 +34,7 @@ export function TrustPanel({ emailVerified, kycVerified, trustCategory, trustBad
     <Card>
       <div className="flex items-center justify-between gap-2">
         <p className="font-medium text-slate-900">Confiance & sécurité</p>
-        {trustCategory && (
-          <span className={cn('rounded-full px-2.5 py-1 text-xs font-medium', TRUST_CATEGORY_TONE[trustCategory])}>
-            {TRUST_CATEGORY_LABELS[trustCategory]}
-          </span>
-        )}
+        {trustCategory && <TrustCategoryBadge category={trustCategory} size="md" />}
       </div>
 
       <ul className="mt-3 space-y-2.5">

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { RequestMatchCard } from '@/components/travel/RequestMatchCard'
 import { Card } from '@/components/ui/Card'
+import type { TrustCategory } from '@/lib/trust'
 
 // Symétrique de TripMatchesPanel côté voyageur — RECOMMANDATION SEULEMENT.
 export async function RequestMatchesPanel({ tripId }: { tripId: string }) {
@@ -32,7 +33,8 @@ export async function RequestMatchesPanel({ tripId }: { tripId: string }) {
             destinationCity={match.destination_city}
             budgetMax={match.budget_max}
             itemWeightKg={match.item_weight_kg}
-            score={match.score}
+            logisticsScore={match.logistics_score}
+            trustCategory={match.trust_category as TrustCategory}
           />
         ))}
       </div>

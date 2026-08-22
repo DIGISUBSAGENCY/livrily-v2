@@ -600,6 +600,9 @@ export interface Database {
         Returns: { badge: string }[]
       }
       // Recommandation seulement — n'écrit jamais de travel_proposals.
+      // score inclut le bonus Trust Score (catégorie, jamais le brut) ;
+      // logistics_score (date + poids seuls) pilote le badge "Très bonne
+      // correspondance" côté cartes — cf. schema.sql pour la séparation.
       get_trip_matches_for_request: {
         Args: { p_request_id: string }
         Returns: {
@@ -611,6 +614,8 @@ export interface Database {
           available_weight_kg: number
           indicative_price: number | null
           score: number
+          logistics_score: number
+          trust_category: string
         }[]
       }
       get_request_matches_for_trip: {
@@ -625,6 +630,8 @@ export interface Database {
           budget_max: number
           item_weight_kg: number | null
           score: number
+          logistics_score: number
+          trust_category: string
         }[]
       }
       resolve_dispute_release_funds: {

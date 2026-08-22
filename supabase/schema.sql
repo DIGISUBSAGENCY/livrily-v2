@@ -2634,14 +2634,41 @@ create policy "trips_update_own_or_admin"
   on public.trips for update
   using (voyageur_id = auth.uid() or public.is_admin());
 
+-- returns table modifié (ajout logistics_score/trust_category) : Postgres
+-- refuse un changement de type de retour via create or replace, DROP
+-- explicite requis. Sûr : aucune autre fonction/vue/policy de ce fichier
+-- ne référence ces deux noms (vérifié par recherche exhaustive avant ce
+-- changement).
+drop function if exists public.get_trip_matches_for_request(uuid);
+drop function if exists public.get_request_matches_for_trip(uuid);
+
 -- Score de matching — RECOMMANDATION SEULEMENT, aucune écriture. Calculé à
 -- la lecture (même philosophie que get_profile_rating : pas d'agrégat
 -- stocké tant que le volume reste faible). Route obligatoire (filtrée
 -- côté where, pas de fuzzy matching v1) ; date et poids sont des bonus,
 -- absents si l'une des deux valeurs manque (item_weight_kg optionnel côté
--- demande). Pas de signal de confiance : Trust System n'existe pas encore
--- (chantier suivant de cette direction) — point d'extension clair pour
--- plus tard, pas construit maintenant.
+-- demande).
+--
+-- Trust Score (Phase 3, brique 3/N, extension) : bonus dérivé de la
+-- CATÉGORIE (jamais le score brut, même principe que TrustPanel/
+-- ProposalCard) du voyageur propriétaire du trip. Jamais négatif — un
+-- historique limité n'est jamais pénalisé, juste pas boosté (même
+-- discipline "non punitive" que get_trust_score() lui-même).
+--
+-- score (avec bonus trust) pilote UNIQUEMENT le tri (order by) ;
+-- logistics_score (date + poids seuls, sans trust) est la colonne que les
+-- cartes (TripMatchCard/RequestMatchCard) utilisent pour le badge "Très
+-- bonne correspondance" — sans cette séparation, un trip avec un timing
+-- correct mais un poids insuffisant/non renseigné pourrait franchir le
+-- seuil d'affichage grâce au seul bonus trust, ce qui viderait ce badge de
+-- son sens ("ça correspond à ta demande" devenant partiellement "ce
+-- voyageur est réputé").
+--
+-- CTE candidates avec limit 200 (par récence) AVANT le calcul des bonus :
+-- filet de sécurité quasi gratuit contre un volume extrême de trips
+-- ouverts sur une route exacte (le calcul du trust score, plus coûteux que
+-- date/poids, se ferait sinon sur tout le jeu de candidats avant le tri
+-- final) — sans effet au volume actuel, juste une borne pour plus tard.
 create or replace function public.get_trip_matches_for_request(p_request_id uuid)
 returns table (
   trip_id uuid,
@@ -2651,40 +2678,64 @@ returns table (
   travel_date date,
   available_weight_kg numeric,
   indicative_price numeric,
-  score int
+  score int,
+  logistics_score int,
+  trust_category text
 )
 language sql
 set search_path = public
 stable
 as $$
+  with req as (
+    select * from public.travel_requests where id = p_request_id
+  ),
+  candidates as (
+    select t.*
+    from public.trips t, req
+    where t.status = 'open'
+      and t.origin_country = req.origin_country
+      and t.destination_city = req.destination_city
+    order by t.created_at desc
+    limit 200
+  ),
+  scored as (
+    select
+      c.*,
+      case
+        when req.needed_by is null then 0
+        when abs(c.travel_date - req.needed_by) <= 3 then 30
+        when abs(c.travel_date - req.needed_by) <= 7 then 15
+        else 0
+      end as date_bonus,
+      case
+        when req.item_weight_kg is null then 0
+        when c.available_weight_kg >= req.item_weight_kg then 20
+        else 0
+      end as weight_bonus
+    from candidates c, req
+  )
   select
-    t.id,
-    t.voyageur_id,
-    t.origin_country,
-    t.destination_city,
-    t.travel_date,
-    t.available_weight_kg,
-    t.indicative_price,
+    s.id,
+    s.voyageur_id,
+    s.origin_country,
+    s.destination_city,
+    s.travel_date,
+    s.available_weight_kg,
+    s.indicative_price,
     (
-      50
-      + case
-          when tr.needed_by is null then 0
-          when abs(t.travel_date - tr.needed_by) <= 3 then 30
-          when abs(t.travel_date - tr.needed_by) <= 7 then 15
-          else 0
-        end
-      + case
-          when tr.item_weight_kg is null then 0
-          when t.available_weight_kg >= tr.item_weight_kg then 20
-          else 0
-        end
-    )::int as score
-  from public.trips t
-  join public.travel_requests tr on tr.id = p_request_id
-  where t.status = 'open'
-    and t.origin_country = tr.origin_country
-    and t.destination_city = tr.destination_city
-  order by score desc, t.created_at desc
+      50 + s.date_bonus + s.weight_bonus +
+      case coalesce(gts.category, 'limited_history')
+        when 'excellent' then 15
+        when 'high_trust' then 10
+        when 'new_member' then 5
+        else 0
+      end
+    )::int as score,
+    (50 + s.date_bonus + s.weight_bonus)::int as logistics_score,
+    coalesce(gts.category, 'limited_history') as trust_category
+  from scored s
+  left join lateral public.get_trust_score(s.voyageur_id) gts on true
+  order by score desc, s.created_at desc
   limit 20;
 $$;
 
@@ -2695,7 +2746,9 @@ grant execute on function public.get_trip_matches_for_request(uuid) to authentic
 -- une seule fonction générique : les deux sens ont des colonnes de retour
 -- différentes (contexte demande vs contexte trip), une fonction générique
 -- aurait nécessité un type de retour composite plus complexe pour un gain
--- de lisibilité négatif à ce stade.
+-- de lisibilité négatif à ce stade. Bonus trust ici sur le CLIENT
+-- (tr.client_id) — symétrique du sens ci-dessus, même raisonnement
+-- (score/logistics_score/trust_category, cap 200 candidats).
 create or replace function public.get_request_matches_for_trip(p_trip_id uuid)
 returns table (
   request_id uuid,
@@ -2706,41 +2759,65 @@ returns table (
   needed_by date,
   budget_max numeric,
   item_weight_kg numeric,
-  score int
+  score int,
+  logistics_score int,
+  trust_category text
 )
 language sql
 set search_path = public
 stable
 as $$
+  with trip as (
+    select * from public.trips where id = p_trip_id
+  ),
+  candidates as (
+    select tr.*
+    from public.travel_requests tr, trip
+    where tr.status = 'open'
+      and tr.origin_country = trip.origin_country
+      and tr.destination_city = trip.destination_city
+    order by tr.created_at desc
+    limit 200
+  ),
+  scored as (
+    select
+      c.*,
+      case
+        when c.needed_by is null then 0
+        when abs(trip.travel_date - c.needed_by) <= 3 then 30
+        when abs(trip.travel_date - c.needed_by) <= 7 then 15
+        else 0
+      end as date_bonus,
+      case
+        when c.item_weight_kg is null then 0
+        when trip.available_weight_kg >= c.item_weight_kg then 20
+        else 0
+      end as weight_bonus
+    from candidates c, trip
+  )
   select
-    tr.id,
-    tr.client_id,
-    tr.item_description,
-    tr.origin_country,
-    tr.destination_city,
-    tr.needed_by,
-    tr.budget_max,
-    tr.item_weight_kg,
+    s.id,
+    s.client_id,
+    s.item_description,
+    s.origin_country,
+    s.destination_city,
+    s.needed_by,
+    s.budget_max,
+    s.item_weight_kg,
     (
-      50
-      + case
-          when tr.needed_by is null then 0
-          when abs(t.travel_date - tr.needed_by) <= 3 then 30
-          when abs(t.travel_date - tr.needed_by) <= 7 then 15
-          else 0
-        end
-      + case
-          when tr.item_weight_kg is null then 0
-          when t.available_weight_kg >= tr.item_weight_kg then 20
-          else 0
-        end
-    )::int as score
-  from public.travel_requests tr
-  join public.trips t on t.id = p_trip_id
-  where tr.status = 'open'
-    and tr.origin_country = t.origin_country
-    and tr.destination_city = t.destination_city
-  order by score desc, tr.created_at desc
+      50 + s.date_bonus + s.weight_bonus +
+      case coalesce(gts.category, 'limited_history')
+        when 'excellent' then 15
+        when 'high_trust' then 10
+        when 'new_member' then 5
+        else 0
+      end
+    )::int as score,
+    (50 + s.date_bonus + s.weight_bonus)::int as logistics_score,
+    coalesce(gts.category, 'limited_history') as trust_category
+  from scored s
+  left join lateral public.get_trust_score(s.client_id) gts on true
+  order by score desc, s.created_at desc
   limit 20;
 $$;
 
