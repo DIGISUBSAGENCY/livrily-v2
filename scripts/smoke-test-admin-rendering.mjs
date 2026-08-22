@@ -1,21 +1,34 @@
-// Garde-fou de rendu HTTP réel pour les pages admin qui passent des
-// Server Actions "bindées" (avec argument supplémentaire) à un composant
-// client — la classe de bug qui a échappé aux tests DB/RPC directs tout
-// au long de cette session : une closure (`(note) => action(id, note)`)
-// compile et type-check sans erreur, mais fait planter le rendu React
-// Server Components en dur ("Functions cannot be passed directly to
-// Client Components...") — seul un vrai rendu HTTP le révèle.
+// Garde-fous manuels contre des régressions silencieuses (compilent/type-
+// checkent sans erreur, ne plantent qu'à l'usage réel) qui ont échappé aux
+// tests DB/RPC directs tout au long de cette session :
+//
+// 1. Rendu HTTP réel des pages admin qui passent des Server Actions
+//    "bindées" (avec argument supplémentaire) à un composant client — une
+//    closure (`(note) => action(id, note)`) compile et type-check sans
+//    erreur, mais fait planter le rendu React Server Components en dur
+//    ("Functions cannot be passed directly to Client Components...").
+// 2. Forme des données renvoyées par lib/mfa.ts::enrollTotpFactor() — un
+//    double-encapsulage de la data URI du QR code TOTP produit un <img>
+//    cassé/vide en silence (aucune erreur JS, rien en console).
 //
 // Usage : lance `npm run dev` dans un terminal, puis dans un autre :
 //   node scripts/smoke-test-admin-rendering.mjs
 //
 // Ne fait PARTIE d'aucune suite de tests automatisée (aucun framework de
 // test dans ce projet) — script manuel à relancer après toute page admin
-// qui passe une Server Action bindée à un composant client.
+// qui passe une Server Action bindée à un composant client, ou après tout
+// changement à la forme des données renvoyées par lib/mfa.ts.
 import { createServerClient } from '@supabase/ssr'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { readFileSync } from 'node:fs'
 import { createHmac } from 'node:crypto'
+// Import direct de la VRAIE fonction (pas une réimplémentation de son
+// calcul dans ce script) : Node ≥22 strip nativement les annotations de
+// types (testé sur v24, aucun flag requis) — `import type` dans lib/mfa.ts
+// est éliminé à l'exécution, aucune résolution de l'alias @/types/database
+// n'est tentée. Ce détour garantit qu'une régression dans lib/mfa.ts elle-
+// même est détectée, pas seulement l'hypothèse de départ sur l'API Supabase.
+import { enrollTotpFactor } from '../lib/mfa.ts'
 
 for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
   const trimmed = line.trim()
@@ -243,9 +256,55 @@ async function testAdmin2faVerifierPage() {
   await service.auth.admin.deleteUser(adminId)
 }
 
+// ============================================================================
+// Scénario (pas un rendu HTTP — un garde-fou sur la FORME des données) :
+// lib/mfa.ts::enrollTotpFactor() doit renvoyer un qrCodeDataUri directement
+// exploitable dans <img src>, sans double-encapsulation. Régression trouvée
+// en direct sur /admin/2fa (QR cassé/vide, secret texte OK en fallback,
+// aucune erreur JS/console) — data.totp.qr_code de supabase-js est DÉJÀ une
+// data URI complète (confirmé via le JSDoc du SDK installé : exemple officiel
+// `<Image src={data.totp.qr_code} .../>`), pas du SVG brut à préfixer. Un
+// double-préfixage produit un <img> dont le SVG décodé est le texte littéral
+// de la 1ère data URI — pas du XML valide, silencieusement cassé.
+// ============================================================================
+async function testMfaQrCodeDataUriShape() {
+  console.log('\n=== lib/mfa.ts enrollTotpFactor() — forme du QR code ===')
+  const ts = Date.now()
+  const email = `smoke-mfa-qrcode-${ts}@example.com`
+  const password = 'SmokeTestPass!23'
+  const adminId = await makeAdmin(email, password)
+
+  const { supabase } = await signInSession(email, password)
+  const result = await enrollTotpFactor(supabase)
+
+  if (result.error || !result.qrCodeDataUri) {
+    check('enrollTotpFactor() réussit et renvoie un qrCodeDataUri', false, { error: result.error })
+  } else {
+    const uri = result.qrCodeDataUri
+    check('qrCodeDataUri commence par data:image/svg+xml', uri.startsWith('data:image/svg+xml'), {
+      start: uri.slice(0, 40),
+    })
+    const payload = uri.slice(uri.indexOf(',') + 1)
+    // Le bug exact, vérifié en le réintroduisant temporairement pendant
+    // l'écriture de ce garde-fou : un double-préfixage produit un payload
+    // qui recommence par "data%3A..." (une 2e data URI, percent-encodée
+    // par le encodeURIComponent() du bug) au lieu de XML/SVG littéral —
+    // signature précise et fiable du double-encapsulage.
+    check('pas de double encapsulation (le payload ne recommence pas par "data%3A")', !payload.startsWith('data%3A'), {
+      payloadStart: payload.slice(0, 40),
+    })
+    check('le payload contient un <svg>...</svg> exploitable', payload.includes('<svg') && payload.includes('</svg>'), {
+      payloadStart: payload.slice(0, 60),
+    })
+  }
+
+  await service.auth.admin.deleteUser(adminId)
+}
+
 await testFlouciIncidentDetail()
 await testAdmin2faEnrollPage()
 await testAdmin2faVerifierPage()
+await testMfaQrCodeDataUriShape()
 
 console.log(`\n=== RÉSULTAT : ${pass} OK, ${fail} FAIL ===`)
 process.exit(fail > 0 ? 1 : 0)
