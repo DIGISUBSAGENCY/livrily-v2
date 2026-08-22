@@ -163,8 +163,17 @@ export default async function AdminFlouciIncidentDetailPage({ params }: AdminFlo
       ) : (
         <Card className="mt-4">
           <h2 className="mb-3 font-semibold text-slate-900">Résoudre cet incident</h2>
+          {/* .bind() sur la vraie référence server action, PAS une arrow
+              function fermant sur incident.id : "Functions cannot be passed
+              directly to Client Components unless..." — seule une vraie
+              référence 'use server' (ou son .bind()) traverse la frontière
+              RSC, une closure ordinaire ne le peut pas même si elle
+              n'appelle qu'un vrai server action dans son corps. Reproduit
+              en direct (500 sur /admin/2fa avec ce même pattern), trou
+              resté invisible ici car jamais rendu via un vrai navigateur
+              (seulement testé au niveau RPC/DB). */}
           <ResolutionForm
-            onResolve={(note) => resolveFlouciIncident(incident.id, note)}
+            onResolve={resolveFlouciIncident.bind(null, incident.id)}
             confirmMessage="Confirmer la résolution de cet incident Flouci ?"
           />
         </Card>
