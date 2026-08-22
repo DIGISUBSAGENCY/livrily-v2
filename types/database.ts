@@ -588,6 +588,17 @@ export interface Database {
         Args: { p_profile_id: string }
         Returns: { avg_rating: number | null; review_count: number }[]
       }
+      // Trust System (Phase 3, brique 3/N). compute_trust_signals() est
+      // interne (verrouillée en base, aucun grant à authenticated/anon) —
+      // pas d'entrée ici, jamais appelable depuis le client.
+      get_trust_score: {
+        Args: { p_profile_id: string }
+        Returns: { score: number; category: string }[]
+      }
+      get_trust_badges: {
+        Args: { p_profile_id: string }
+        Returns: { badge: string }[]
+      }
       // Recommandation seulement — n'écrit jamais de travel_proposals.
       get_trip_matches_for_request: {
         Args: { p_request_id: string }

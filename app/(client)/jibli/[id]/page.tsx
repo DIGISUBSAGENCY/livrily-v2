@@ -25,6 +25,7 @@ import { pageMetadata } from '@/lib/seo'
 import { estimateSuggestedGain, actualGainFromProposal } from '@/lib/travel/estimateGain'
 import { getIdentityStatus, type IdentityGateStatus } from '@/lib/identity'
 import { getProfileRating, type ProfileRating } from '@/lib/reviews'
+import { getTrustScore, type TrustCategory } from '@/lib/trust'
 import type { BankTransferInfo, TravelPayment, TravelProposal, TravelProposalOffer, TravelReview } from '@/types/database'
 
 interface TravelRequestPageProps {
@@ -92,6 +93,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
   let voyageurNames = new Map<string, string>()
   let voyageurVerified = new Map<string, boolean>()
   let voyageurRatings = new Map<string, ProfileRating>()
+  let voyageurTrustCategories = new Map<string, TrustCategory>()
   let myProposal: TravelProposal | null = null
   let payment: TravelPayment | null = null
   let bankInfo: PlatformPaymentInfo | null = null
@@ -141,6 +143,14 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
           voyageurIds.map(async (voyageurId) => [voyageurId, await getProfileRating(supabase, voyageurId)] as const)
         )
         voyageurRatings = new Map(ratingEntries)
+
+        // Catégorie Trust Score de chaque voyageur (get_trust_score, jamais
+        // le score brut) — même logique que voyageurVerified/voyageurRatings
+        // ci-dessus, aide le client à comparer ses propositions.
+        const trustEntries = await Promise.all(
+          voyageurIds.map(async (voyageurId) => [voyageurId, (await getTrustScore(supabase, voyageurId)).category] as const)
+        )
+        voyageurTrustCategories = new Map(trustEntries)
       }
 
       // Historique de négociation de chaque fil (une seule requête groupée,
@@ -433,6 +443,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
                 voyageurVerified={voyageurVerified.get(proposal.voyageur_id) ?? false}
                 identityStatus={ownerIdentityStatus}
                 voyageurRating={voyageurRatings.get(proposal.voyageur_id) ?? null}
+                voyageurTrustCategory={voyageurTrustCategories.get(proposal.voyageur_id) ?? null}
               />
             ))}
           </div>

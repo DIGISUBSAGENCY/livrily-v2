@@ -15,6 +15,7 @@ import { pageMetadata } from '@/lib/seo'
 import { getProfileStats } from '@/lib/profileStats'
 import { getIdentityStatus, isIdentityVerified } from '@/lib/identity'
 import { getProfileRating } from '@/lib/reviews'
+import { getTrustScore, getTrustBadges } from '@/lib/trust'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Mon profil',
@@ -47,10 +48,12 @@ export default async function ProfilPage() {
 
   if (!profile) redirect('/login?next=/profil')
 
-  const [stats, identityStatus, rating] = await Promise.all([
+  const [stats, identityStatus, rating, trustScore, trustBadges] = await Promise.all([
     getProfileStats(supabase, user.id),
     getIdentityStatus(supabase, user.id),
     getProfileRating(supabase, user.id),
+    getTrustScore(supabase, user.id),
+    getTrustBadges(supabase, user.id),
   ])
 
   // Avis reçus : la policy travel_reviews_select_involved gère elle-même le
@@ -125,6 +128,8 @@ export default async function ProfilPage() {
             memberSinceLabel={memberSinceLabel}
             userId={user.id}
             rating={rating}
+            trustCategory={trustScore.category}
+            trustBadges={trustBadges}
           />
         }
         reviews={reviews}

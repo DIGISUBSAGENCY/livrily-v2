@@ -2284,6 +2284,16 @@ as $$
     );
 $$;
 
+-- Revoke explicite de anon en plus du grant à authenticated — trou de
+-- sécurité préexistant trouvé en testant en direct le Trust System (Phase
+-- 3, brique 3/N, plus bas dans ce fichier) : sans ce revoke, le piège des
+-- privilèges par défaut de ce projet (alter default privileges accorde
+-- EXECUTE à anon directement à la création, indépendamment de PUBLIC)
+-- laissait n'importe quel appelant anonyme lire la note moyenne de
+-- n'importe quel profil. Corrigé indépendamment de ce chantier, dès
+-- confirmation.
+revoke execute on function public.get_profile_rating(uuid) from public;
+revoke execute on function public.get_profile_rating(uuid) from anon;
 grant execute on function public.get_profile_rating(uuid) to authenticated;
 
 -- ============================================================================
@@ -2745,6 +2755,238 @@ grant execute on function public.get_request_matches_for_trip(uuid) to authentic
 alter table public.notifications drop constraint if exists notifications_type_check;
 alter table public.notifications add constraint notifications_type_check
   check (type in ('transaction_update', 'request_update', 'review_available', 'verification_update', 'request_matched'));
+
+-- ============================================================================
+-- Trust System (Phase 3, brique 3/N)
+-- Score composite calculé À LA LECTURE (même philosophie que
+-- get_profile_rating : pas d'agrégat stocké tant que le volume reste
+-- faible — chaque signal individuel est déjà bon marché, pas de jointure
+-- lourde). get_profile_rating() reste inchangée, c'est UN signal parmi
+-- d'autres ici, jamais remplacée.
+--
+-- Équité annulation/complétion (cf. document d'origine, "ne pas compter
+-- les transactions annulées par l'autre partie de manière injuste") :
+-- seul le CLIENT peut annuler une demande (cancelRequest, aucune action
+-- équivalente côté voyageur, vérifié dans le code) — donc TOUTE demande
+-- 'cancelled' est structurellement imputable au client, jamais au
+-- voyageur. Conséquence assumée : aucun "taux de complétion voyageur"
+-- n'est calculé (il serait trivialement toujours ~100%, donc sans
+-- signal réel avec les données actuelles) — seul le VOLUME de missions
+-- complétées comme voyageur compte, le taux de complétion/annulation
+-- n'est calculé que côté client, où il est réellement significatif.
+--
+-- Pas de "Phone Verified" : aucune donnée source, canal SMS
+-- (lib/twilio.ts) documenté comme non fiabilisé pour un usage de
+-- sécurité — décision explicite de ne pas construire ce badge ici.
+-- ============================================================================
+do $$ begin
+  create type public.trust_signals as (
+    identity_verified boolean,
+    avg_rating numeric,
+    review_count int,
+    accepted_as_client int,
+    completed_as_client int,
+    cancelled_as_client int,
+    completed_as_voyageur int,
+    disputes_count int,
+    account_age_months int,
+    has_released_payment boolean
+  );
+exception when duplicate_object then null; end $$;
+
+-- Fonction interne, appelée uniquement par get_trust_score()/
+-- get_trust_badges() ci-dessous (mêmes privilèges SECURITY DEFINER, appel
+-- direct fonction-à-fonction) — pas de grant à authenticated, ne doit pas
+-- devenir un point d'accès RPC public séparé qui exposerait la forme
+-- interne des signaux bruts.
+create or replace function public.compute_trust_signals(p_profile_id uuid)
+returns public.trust_signals
+language plpgsql
+security definer
+set search_path = public
+stable
+as $$
+declare
+  v public.trust_signals;
+begin
+  select exists(
+    select 1 from public.identity_verifications
+    where profile_id = p_profile_id and status = 'approved'
+  ) into v.identity_verified;
+
+  -- Réutilise get_profile_rating() telle quelle — ne duplique jamais la
+  -- logique double-aveugle de révélation des avis.
+  select gpr.avg_rating, gpr.review_count into v.avg_rating, v.review_count
+  from public.get_profile_rating(p_profile_id) gpr;
+
+  select
+    count(*) filter (where accepted_proposal_id is not null),
+    count(*) filter (where status = 'completed'),
+    count(*) filter (where status = 'cancelled')
+  into v.accepted_as_client, v.completed_as_client, v.cancelled_as_client
+  from public.travel_requests
+  where client_id = p_profile_id;
+
+  select count(*)
+  into v.completed_as_voyageur
+  from public.travel_proposals tp
+  join public.travel_requests tr on tr.id = tp.request_id
+  where tp.voyageur_id = p_profile_id
+    and tp.status = 'accepted'
+    and tr.status = 'completed';
+
+  -- Même dérivation opener/client/voyageur accepté que
+  -- /admin/litiges/[id]/page.tsx, réutilisée telle quelle.
+  select count(distinct d.id)
+  into v.disputes_count
+  from public.disputes d
+  join public.travel_requests tr on tr.id = d.travel_request_id
+  left join public.travel_proposals tp on tp.id = tr.accepted_proposal_id
+  where d.opened_by = p_profile_id
+     or tr.client_id = p_profile_id
+     or tp.voyageur_id = p_profile_id;
+
+  select (
+    extract(year from age(now(), created_at)) * 12
+    + extract(month from age(now(), created_at))
+  )::int
+  into v.account_age_months
+  from public.profiles
+  where id = p_profile_id;
+
+  select exists (
+    select 1
+    from public.travel_payments tpay
+    join public.travel_requests tr on tr.id = tpay.request_id
+    left join public.travel_proposals tp on tp.id = tr.accepted_proposal_id
+    where tpay.status in ('escrowed', 'released')
+      and (tr.client_id = p_profile_id or tp.voyageur_id = p_profile_id)
+  ) into v.has_released_payment;
+
+  return v;
+end;
+$$;
+
+revoke execute on function public.compute_trust_signals(uuid) from public;
+revoke execute on function public.compute_trust_signals(uuid) from authenticated;
+revoke execute on function public.compute_trust_signals(uuid) from anon;
+
+-- Poids de départ, non calibrés sur du volume réel — même réserve que
+-- GOOD_PRICE_THRESHOLD_TND/SOON_WINDOW_DAYS ailleurs dans ce projet, à
+-- ajuster une fois qu'il y a des données réelles. Chaque contribution est
+-- explicitement neutralisée à 0 si le signal est absent (coalesce
+-- systématique) : un profil neuf sans aucun avis/transaction doit
+-- contribuer exactement 0 partout, jamais une erreur ni une valeur
+-- fausse — en particulier (avg_rating - 3) * 5 vaudrait NULL pour un
+-- profil sans aucun avis (avg_rating NULL), ce qui annulerait TOUT le
+-- score sans le coalesce ci-dessous, pas juste le signal avis.
+create or replace function public.get_trust_score(p_profile_id uuid)
+returns table (score int, category text)
+language plpgsql
+security definer
+set search_path = public
+stable
+as $$
+declare
+  v public.trust_signals;
+  v_score numeric;
+begin
+  v := public.compute_trust_signals(p_profile_id);
+
+  v_score := 50
+    + (case when v.identity_verified then 15 else 0 end)
+    + coalesce((v.avg_rating - 3) * 5, 0)
+    + least((coalesce(v.completed_as_client, 0) + coalesce(v.completed_as_voyageur, 0)) * 2, 15)
+    + (case
+         when coalesce(v.accepted_as_client, 0) >= 3 and v.completed_as_client::numeric / v.accepted_as_client >= 0.9 then 10
+         when coalesce(v.accepted_as_client, 0) >= 3 and v.completed_as_client::numeric / v.accepted_as_client < 0.7 then -15
+         else 0
+       end)
+    + (case
+         when coalesce(v.accepted_as_client, 0) >= 3 and v.cancelled_as_client::numeric / v.accepted_as_client > 0.3 then -10
+         else 0
+       end)
+    - least(coalesce(v.disputes_count, 0) * 8, 20)
+    + least(floor(coalesce(v.account_age_months, 0)::numeric / 3) * 2, 5);
+
+  -- Plancher 0, plafond 99 — jamais 100/100 automatique. Règle dure, pas
+  -- une tendance statistique.
+  score := greatest(0, least(99, round(v_score)::int));
+
+  category := case
+    when score >= 90 then 'excellent'
+    when score >= 70 then 'high_trust'
+    when score >= 50 then 'new_member'
+    else 'limited_history'
+  end;
+
+  return next;
+end;
+$$;
+
+-- Revoke explicite de anon en plus du grant à authenticated : le piège des
+-- privilèges par défaut de ce projet (alter default privileges accorde
+-- EXECUTE à anon/authenticated directement à la création, indépendamment de
+-- PUBLIC) donnerait sinon un accès anonyme silencieux — confirmé en testant
+-- en direct pendant ce chantier (et, au passage, le même trou existe sur
+-- get_profile_rating, préexistant, hors scope ici, signalé séparément).
+revoke execute on function public.get_trust_score(uuid) from public;
+revoke execute on function public.get_trust_score(uuid) from anon;
+grant execute on function public.get_trust_score(uuid) to authenticated;
+
+-- Badges dérivés — seuls ceux avec une vraie donnée source aujourd'hui.
+-- Pas de "Phone Verified" (cf. commentaire de tête de section). Recalcule
+-- compute_trust_signals() + get_trust_score() en interne (léger doublon
+-- de calcul assumé plutôt qu'une factorisation plus complexe, pas
+-- justifié au volume actuel).
+create or replace function public.get_trust_badges(p_profile_id uuid)
+returns table (badge text)
+language plpgsql
+security definer
+set search_path = public
+stable
+as $$
+declare
+  v public.trust_signals;
+  v_score int;
+begin
+  v := public.compute_trust_signals(p_profile_id);
+  select gts.score into v_score from public.get_trust_score(p_profile_id) gts;
+
+  if v.identity_verified then
+    badge := 'identity_verified';
+    return next;
+  end if;
+
+  if v.has_released_payment then
+    badge := 'payment_verified';
+    return next;
+  end if;
+
+  if v_score >= 80 and coalesce(v.completed_as_voyageur, 0) >= 1 then
+    badge := 'trusted_traveler';
+    return next;
+  end if;
+
+  if v_score >= 90 and coalesce(v.completed_as_voyageur, 0) >= 5 then
+    badge := 'top_traveler';
+    return next;
+  end if;
+
+  if coalesce(v.accepted_as_client, 0) >= 3 and v.completed_as_client::numeric / v.accepted_as_client >= 0.95 then
+    badge := 'reliable_sender';
+    return next;
+  end if;
+
+  return;
+end;
+$$;
+
+-- Même revoke explicite de anon que get_trust_score() ci-dessus, même
+-- raison.
+revoke execute on function public.get_trust_badges(uuid) from public;
+revoke execute on function public.get_trust_badges(uuid) from anon;
+grant execute on function public.get_trust_badges(uuid) to authenticated;
 
 -- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,
