@@ -301,10 +301,58 @@ async function testMfaQrCodeDataUriShape() {
   await service.auth.admin.deleteUser(adminId)
 }
 
+// ============================================================================
+// Scénario (garde-fou sur la FORME des données, pas un rendu HTTP) :
+// lib/mfa.ts::enrollTotpFactor() doit s'auto-réparer sur un enrôlement
+// répété sans vérification entre les deux — cas RÉEL et courant, puisque
+// MfaSetupForm appelle enrollAction() sans condition à chaque montage de
+// /admin/2fa (rechargement de page avant d'entrer le code, onglet fermé…).
+// Bug bloquant trouvé en prod juste après le merge du fix QR code : un 2e
+// enroll() sans avoir vérifié le 1er est rejeté par Supabase
+// (mfa_factor_name_conflict, nom par défaut vide en conflit) — l'admin
+// restait bloqué hors de tout /admin/* (2FA obligatoire), sans mécanisme de
+// récupération. Le fix nettoie le facteur fantôme via l'API admin
+// (service_role) et retente une fois, en silence.
+// ============================================================================
+async function testMfaOrphanFactorRetry() {
+  console.log('\n=== lib/mfa.ts enrollTotpFactor() — auto-réparation après conflit de facteur fantôme ===')
+  const ts = Date.now()
+  const email = `smoke-mfa-orphan-${ts}@example.com`
+  const password = 'SmokeTestPass!23'
+  const adminId = await makeAdmin(email, password)
+
+  const { supabase } = await signInSession(email, password)
+  const first = await enrollTotpFactor(supabase)
+  check('1er enrollTotpFactor() réussit', !first.error && !!first.factorId, { error: first.error })
+
+  // Le cas exact du bug : 2e appel SANS avoir vérifié le 1er.
+  const second = await enrollTotpFactor(supabase)
+  check(
+    '2e enrollTotpFactor() (sans vérification du 1er) réussit malgré tout — auto-réparation',
+    !second.error && !!second.factorId,
+    { error: second.error }
+  )
+  check('2e appel renvoie un factorId différent du 1er (nouveau facteur émis)', second.factorId !== first.factorId, {
+    firstFactorId: first.factorId,
+    secondFactorId: second.factorId,
+  })
+
+  // Vérifie que le nettoyage a bien eu lieu côté Supabase : un seul facteur
+  // (le plus récent) doit rester, pas une accumulation de fantômes.
+  // `service` (module-level, service_role) a déjà accès à l'API admin.
+  const { data: finalFactors } = await service.auth.admin.mfa.listFactors({ userId: adminId })
+  check('un seul facteur restant après nettoyage (pas d\'accumulation de fantômes)', (finalFactors?.factors ?? []).length === 1, {
+    factors: (finalFactors?.factors ?? []).map((f) => ({ id: f.id, status: f.status })),
+  })
+
+  await service.auth.admin.deleteUser(adminId)
+}
+
 await testFlouciIncidentDetail()
 await testAdmin2faEnrollPage()
 await testAdmin2faVerifierPage()
 await testMfaQrCodeDataUriShape()
+await testMfaOrphanFactorRetry()
 
 console.log(`\n=== RÉSULTAT : ${pass} OK, ${fail} FAIL ===`)
 process.exit(fail > 0 ? 1 : 0)
