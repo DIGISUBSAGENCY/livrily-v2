@@ -1,8 +1,10 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { changePasswordSchema } from '@/lib/validations/auth'
+import { enrollTotpFactor, verifyTotpFactor, unenrollTotpFactor, type MfaEnrollResult } from '@/lib/mfa'
 
 export interface ChangePasswordFormState {
   error: string | null
@@ -142,4 +144,48 @@ export async function revokeSession(sessionId: string): Promise<RevokeSessionRes
   }
 
   return { error: null }
+}
+
+// Activation optionnelle (client/voyageur) — même helpers que le flow
+// admin forcé (app/(admin-auth)/admin/2fa/actions.ts), cf. lib/mfa.ts. Pas
+// de redirect() ici, contrairement au flow admin : reste sur place,
+// router.refresh() côté MfaSetupForm suffit à rafraîchir l'état affiché.
+export async function enrollMfaFactor(): Promise<MfaEnrollResult> {
+  const supabase = await createClient()
+  return enrollTotpFactor(supabase)
+}
+
+export async function verifyMfaEnrollment(factorId: string, code: string): Promise<{ error: string | null }> {
+  const supabase = await createClient()
+  const result = await verifyTotpFactor(supabase, factorId, code)
+  if (!result.error) revalidatePath('/profil/parametres')
+  return result
+}
+
+export interface DisableMfaResult {
+  error: string | null
+}
+
+// Désactivation en libre-service — bloquée côté serveur pour un compte
+// admin (2FA obligatoire pour ce rôle, cf. garde-fou middleware), pas
+// seulement masquée côté UI : même si le bouton était affiché par erreur,
+// cette vérification reste la vraie frontière. Un admin qui perd son
+// appareil passe par la procédure de récupération (désenrôlement par un
+// autre admin via l'API service_role), pas par cette action.
+export async function disableMfaFactor(factorId: string): Promise<DisableMfaResult> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Session expirée, reconnecte-toi.' }
+
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (profile?.role === 'admin') {
+    return { error: 'La double authentification est obligatoire pour les comptes administrateur.' }
+  }
+
+  const result = await unenrollTotpFactor(supabase, factorId)
+  if (!result.error) revalidatePath('/profil/parametres')
+  return result
 }

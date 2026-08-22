@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { ClipboardList, Bell, ShieldCheck, Laptop2, ShieldAlert } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getIdentityStatus, isIdentityVerified } from '@/lib/identity'
+import { getMfaStatus } from '@/lib/mfa'
 import { computeTrustLevel } from '@/lib/trustLevel'
 import { COUNTRIES } from '@/lib/constants/countries'
 import { AccountIdentityCard } from '@/components/account/AccountIdentityCard'
@@ -31,13 +32,14 @@ export default async function ParametresPage() {
 
   if (!user) redirect('/login?next=/profil/parametres')
 
-  const [{ data: profile }, identityStatus] = await Promise.all([
+  const [{ data: profile }, identityStatus, mfaStatus] = await Promise.all([
     supabase
       .from('profiles')
-      .select('full_name, phone, country, address, profession, avatar_url, is_active')
+      .select('full_name, phone, country, address, profession, avatar_url, is_active, role')
       .eq('id', user.id)
       .single(),
     getIdentityStatus(supabase, user.id),
+    getMfaStatus(supabase),
   ])
 
   if (!profile) redirect('/login?next=/profil/parametres')
@@ -102,7 +104,13 @@ export default async function ParametresPage() {
 
       <div className="mt-4">
         <CollapsibleSection icon={<ShieldCheck className="h-5 w-5" aria-hidden />} title="Sécurité">
-          <SecuritySection email={user.email ?? null} phone={profile.phone} />
+          <SecuritySection
+            email={user.email ?? null}
+            phone={profile.phone}
+            isAdmin={profile.role === 'admin'}
+            hasVerifiedFactor={mfaStatus.hasVerifiedFactor}
+            factorId={mfaStatus.factorId}
+          />
         </CollapsibleSection>
       </div>
 
