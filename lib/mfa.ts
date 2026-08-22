@@ -13,10 +13,15 @@ import type { Database } from '@/types/database'
 export interface MfaEnrollResult {
   error: string | null
   factorId?: string
-  // qr_code de Supabase est du SVG brut, pas encore une data URI (cf. doc
-  // supabase-js : "prepend data:image/svg+xml;utf-8," avant de l'utiliser
-  // dans un <img src>) — déjà converti ici pour ne pas le répéter dans
-  // chaque composant appelant.
+  // data.totp.qr_code renvoyé par supabase-js@2.112.3 est déjà une data URI
+  // COMPLÈTE ("data:image/svg+xml;utf-8,<svg...>"), pas du SVG brut — vérifié
+  // en direct (enroll() réel, inspection de la valeur). Le préfixer une 2e
+  // fois puis encodeURIComponent() l'intégralité (comme le suggère une doc
+  // Supabase visiblement obsolète) produisait une data URI dont le contenu
+  // SVG décodé était le TEXTE littéral "data:image/svg+xml;utf-8,<?xml...",
+  // pas du XML valide — image cassée dans <img>, silencieuse (aucune erreur
+  // JS, aucun problème CSP : juste un SVG invalide). Le secret texte en
+  // fallback fonctionnait car indépendant. Utilisé tel quel ci-dessous.
   qrCodeDataUri?: string
   secret?: string
 }
@@ -32,7 +37,7 @@ export async function enrollTotpFactor(supabase: SupabaseClient<Database>): Prom
   return {
     error: null,
     factorId: data.id,
-    qrCodeDataUri: `data:image/svg+xml;utf-8,${encodeURIComponent(data.totp.qr_code)}`,
+    qrCodeDataUri: data.totp.qr_code,
     secret: data.totp.secret,
   }
 }
