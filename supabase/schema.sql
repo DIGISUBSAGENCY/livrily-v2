@@ -2578,6 +2578,32 @@ alter table public.travel_requests add column if not exists item_weight_kg numer
 
 alter table public.trips enable row level security;
 
+-- CORRECTIF trouvé en testant en direct (pas une régression, un vrai
+-- oubli du design initial) : un trip qui quitte 'open' (donc 'matched' —
+-- le moment précis où il devient intéressant à consulter) devenait
+-- invisible pour le client dont la proposition acceptée l'a justement
+-- fait passer à 'matched' — 404 sur /jibli/trips/[id] après acceptation.
+-- Même pattern que owns_travel_request/is_accepted_voyageur_for_request
+-- (fonction SECURITY DEFINER plutôt qu'une sous-requête brute dans la
+-- policy, pour éviter toute récursion d'évaluation de policy).
+create or replace function public.is_client_of_matched_trip(p_trip_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+stable
+as $$
+begin
+  return exists (
+    select 1 from public.travel_proposals tp
+    join public.travel_requests tr on tr.id = tp.request_id
+    where tp.source_trip_id = p_trip_id
+      and tr.accepted_proposal_id = tp.id
+      and tr.client_id = auth.uid()
+  );
+end;
+$$;
+
 drop policy if exists "trips_select_open_or_involved" on public.trips;
 create policy "trips_select_open_or_involved"
   on public.trips for select
@@ -2585,6 +2611,7 @@ create policy "trips_select_open_or_involved"
     status = 'open'
     or voyageur_id = auth.uid()
     or public.is_admin()
+    or public.is_client_of_matched_trip(id)
   );
 
 drop policy if exists "trips_insert_own" on public.trips;
