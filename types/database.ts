@@ -38,6 +38,12 @@ export type FlouciIncidentStatus = 'unresolved' | 'resolved'
 
 export type ReviewDirection = 'client_to_voyageur' | 'voyageur_to_client'
 
+export type NotificationType = 'transaction_update' | 'request_update' | 'review_available' | 'verification_update'
+
+export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent'
+
+export type NotificationRelatedObjectType = 'travel_request' | 'travel_payment' | 'identity_verification'
+
 export interface Database {
   public: {
     Tables: {
@@ -346,6 +352,33 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['flouci_payment_incidents']['Insert']>
         Relationships: []
       }
+      notifications: {
+        Row: {
+          id: string
+          user_id: string
+          type: NotificationType
+          priority: NotificationPriority
+          title: string
+          body: string | null
+          related_object_type: NotificationRelatedObjectType | null
+          related_object_id: string | null
+          read_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          type: NotificationType
+          priority?: NotificationPriority
+          title: string
+          body?: string | null
+          related_object_type?: NotificationRelatedObjectType | null
+          related_object_id?: string | null
+          read_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['notifications']['Insert']>
+        Relationships: []
+      }
       travel_reviews: {
         Row: {
           id: string
@@ -515,6 +548,21 @@ export interface Database {
       resolve_dispute_close: {
         Args: { p_dispute_id: string; p_note: string }
         Returns: undefined
+      }
+      // Non exposée à `authenticated` côté DB (revoke explicite) — appelable
+      // uniquement via le client service_role (createAdminClient()). Gardée
+      // ici pour le typage de ce client-là, comme les autres fonctions.
+      create_notification: {
+        Args: {
+          p_user_id: string
+          p_type: NotificationType
+          p_title: string
+          p_body?: string | null
+          p_priority?: NotificationPriority
+          p_related_object_type?: NotificationRelatedObjectType | null
+          p_related_object_id?: string | null
+        }
+        Returns: string
       }
     }
   }

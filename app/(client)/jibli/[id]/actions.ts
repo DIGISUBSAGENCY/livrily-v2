@@ -15,6 +15,7 @@ import { getIdentityStatus, isIdentityVerified } from '@/lib/identity'
 import { disputeSchema } from '@/lib/validations/disputes'
 import { reviewSchema } from '@/lib/validations/reviews'
 import { getSiteUrl } from '@/lib/site'
+import { notifyUser } from '@/lib/notifications/create'
 import type { ReviewDirection } from '@/types/database'
 
 export interface ProposalFormState {
@@ -283,16 +284,36 @@ export async function withdrawProposal(requestId: string, proposalId: string): P
   return { error: null }
 }
 
+const STATUS_UPDATE_MESSAGES: Record<'in_transit' | 'completed', string> = {
+  in_transit: 'Le voyageur a indiqué que ton envoi est en transit.',
+  completed: 'Le voyageur a marqué ta mission comme livrée.',
+}
+
 export async function advanceRequestStatus(
   requestId: string,
   nextStatus: 'in_transit' | 'completed'
 ): Promise<ActionResult> {
   const supabase = await createClient()
-  const { error } = await supabase.from('travel_requests').update({ status: nextStatus }).eq('id', requestId)
+  const { data: request, error } = await supabase
+    .from('travel_requests')
+    .update({ status: nextStatus })
+    .eq('id', requestId)
+    .select('client_id')
+    .single()
 
-  if (error) {
+  if (error || !request) {
     return { error: 'Transition de statut impossible.' }
   }
+
+  // REQUEST_UPDATE au client — c'est le voyageur qui vient d'avancer le statut.
+  await notifyUser({
+    userId: request.client_id,
+    type: 'request_update',
+    title: 'Statut de mission mis à jour',
+    body: STATUS_UPDATE_MESSAGES[nextStatus],
+    relatedObjectType: 'travel_request',
+    relatedObjectId: requestId,
+  })
 
   revalidatePath(`/jibli/${requestId}`)
   return { error: null }
@@ -300,10 +321,35 @@ export async function advanceRequestStatus(
 
 export async function cancelRequest(requestId: string): Promise<ActionResult> {
   const supabase = await createClient()
-  const { error } = await supabase.from('travel_requests').update({ status: 'cancelled' }).eq('id', requestId)
+  const { data: request, error } = await supabase
+    .from('travel_requests')
+    .update({ status: 'cancelled' })
+    .eq('id', requestId)
+    .select('accepted_proposal_id')
+    .single()
 
-  if (error) {
+  if (error || !request) {
     return { error: "Impossible d'annuler cette demande." }
+  }
+
+  // REQUEST_UPDATE au voyageur — seulement s'il y en avait déjà un accepté
+  // (une demande encore 'open' sans proposition acceptée n'a personne à notifier).
+  if (request.accepted_proposal_id) {
+    const { data: proposal } = await supabase
+      .from('travel_proposals')
+      .select('voyageur_id')
+      .eq('id', request.accepted_proposal_id)
+      .single()
+    if (proposal) {
+      await notifyUser({
+        userId: proposal.voyageur_id,
+        type: 'request_update',
+        title: 'Mission annulée',
+        body: 'Le client a annulé cette demande.',
+        relatedObjectType: 'travel_request',
+        relatedObjectId: requestId,
+      })
+    }
   }
 
   revalidatePath(`/jibli/${requestId}`)
@@ -414,6 +460,18 @@ export async function submitReview(requestId: string, rating: number, comment: s
     return { error: "Tu n'es pas partie prenante de cette mission." }
   }
 
+  // Avis déjà déposé par l'AUTRE partie pour cette mission ? Si oui, cette
+  // soumission déclenche la révélation MUTUELLE immédiate des deux avis
+  // (cf. is_review_revealed() côté base) — sinon, la révélation n'aura lieu
+  // que par écoulement du délai de 14 jours, qui n'a aucun événement
+  // d'écriture (pas de notification possible ici pour ce cas, cf. plan).
+  const { data: existingReview } = await supabase
+    .from('travel_reviews')
+    .select('reviewee_id')
+    .eq('travel_request_id', requestId)
+    .neq('reviewer_id', user.id)
+    .maybeSingle()
+
   const { error } = await supabase.from('travel_reviews').insert({
     travel_request_id: requestId,
     reviewer_id: user.id,
@@ -431,6 +489,28 @@ export async function submitReview(requestId: string, rating: number, comment: s
     // encore ouvert — remonté ici comme un message générique plutôt que
     // d'exposer error.message (détail RLS interne).
     return { error: "Impossible de soumettre l'avis pour l'instant." }
+  }
+
+  if (existingReview) {
+    // Les deux avis sont désormais visibles à l'instant : le mien pour
+    // revieweeId, et celui déjà déposé par l'autre partie (dont le
+    // destinataire est justement moi, existingReview.reviewee_id).
+    await notifyUser({
+      userId: revieweeId,
+      type: 'review_available',
+      title: 'Nouvel avis disponible',
+      body: 'Un avis sur ta dernière mission Jibli est maintenant visible.',
+      relatedObjectType: 'travel_request',
+      relatedObjectId: requestId,
+    })
+    await notifyUser({
+      userId: existingReview.reviewee_id,
+      type: 'review_available',
+      title: 'Nouvel avis disponible',
+      body: 'Un avis sur ta dernière mission Jibli est maintenant visible.',
+      relatedObjectType: 'travel_request',
+      relatedObjectId: requestId,
+    })
   }
 
   revalidatePath(`/jibli/${requestId}`)
