@@ -5,7 +5,9 @@ import { Plane, Weight } from 'lucide-react'
 import { expressInterestInTrip } from '@/app/(client)/jibli/[id]/actions'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { TrustCategoryBadge } from '@/components/profile/TrustCategoryBadge'
 import { formatTND } from '@/lib/format'
+import type { TrustCategory } from '@/lib/trust'
 
 interface TripMatchCardProps {
   requestId: string
@@ -15,7 +17,11 @@ interface TripMatchCardProps {
   travelDate: string
   availableWeightKg: number
   indicativePrice: number | null
-  score: number
+  // Sans le bonus Trust Score (date + poids seuls) — pilote uniquement le
+  // badge "Très bonne correspondance" ci-dessous. `score` (avec trust)
+  // pilote déjà le tri côté SQL, pas besoin de le recevoir ici.
+  logisticsScore: number
+  trustCategory: TrustCategory
 }
 
 // Bouton "Signaler mon intérêt" — ne crée PAS de travel_proposals (le
@@ -30,7 +36,8 @@ export function TripMatchCard({
   travelDate,
   availableWeightKg,
   indicativePrice,
-  score,
+  logisticsScore,
+  trustCategory,
 }: TripMatchCardProps) {
   const [isPending, startTransition] = useTransition()
   const [sent, setSent] = useState(false)
@@ -60,7 +67,12 @@ export function TripMatchCard({
             </span>
             {indicativePrice !== null && <> · {formatTND(indicativePrice)} indicatif</>}
           </p>
-          {score >= 90 && <p className="mt-0.5 text-xs font-medium text-brand-600">Très bonne correspondance</p>}
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {logisticsScore >= 90 && (
+              <p className="text-xs font-medium text-brand-600">Très bonne correspondance</p>
+            )}
+            <TrustCategoryBadge category={trustCategory} />
+          </div>
         </div>
       </div>
 

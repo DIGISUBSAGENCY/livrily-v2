@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { TripMatchCard } from '@/components/travel/TripMatchCard'
 import { Card } from '@/components/ui/Card'
+import type { TrustCategory } from '@/lib/trust'
 
 // RECOMMANDATION SEULEMENT — get_trip_matches_for_request() n'écrit rien,
 // juste un score calculé à la lecture (cf. schema.sql). Affiché uniquement
@@ -31,7 +32,8 @@ export async function TripMatchesPanel({ requestId }: { requestId: string }) {
             travelDate={match.travel_date}
             availableWeightKg={match.available_weight_kg}
             indicativePrice={match.indicative_price}
-            score={match.score}
+            logisticsScore={match.logistics_score}
+            trustCategory={match.trust_category as TrustCategory}
           />
         ))}
       </div>
