@@ -63,6 +63,14 @@ export async function Header() {
               Trips
             </Link>
           )}
+          {showJibli && (
+            <Link
+              href="/jibli/offres"
+              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-brand-700 sm:inline-block"
+            >
+              Offres
+            </Link>
+          )}
           <Link
             href="/comment-ca-marche"
             className="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-brand-700 sm:inline-block"
