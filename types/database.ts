@@ -620,6 +620,13 @@ export interface Database {
         Args: { p_profile_ids: string[] }
         Returns: { id: string; full_name: string | null; avatar_url: string | null }[]
       }
+      // Compteur "Membres Livrily" (page d'accueil publique) — profiles
+      // n'est pas lisible par un visiteur anonyme (profiles_select_own_or_admin),
+      // cf. app/(client)/page.tsx.
+      get_platform_member_count: {
+        Args: Record<string, never>
+        Returns: number
+      }
       travel_voyageur_balance: {
         Args: { p_voyageur_id: string }
         Returns: number

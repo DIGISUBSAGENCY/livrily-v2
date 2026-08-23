@@ -35,9 +35,13 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const [{ count: openRequests }, { count: membersCount }, { data: latestRequests }] = await Promise.all([
+  // membersCount via get_platform_member_count() : profiles n'est pas
+  // lisible par un visiteur anonyme (profiles_select_own_or_admin, cf.
+  // schema.sql) — un select count direct renvoyait toujours 0 pour
+  // n'importe qui hors session, bug trouvé et vérifié en direct.
+  const [{ count: openRequests }, { data: membersCount }, { data: latestRequests }] = await Promise.all([
     supabase.from('travel_requests').select('id', { count: 'exact', head: true }).eq('status', 'open'),
-    supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'client'),
+    supabase.rpc('get_platform_member_count'),
     supabase.from('travel_requests').select('*').eq('status', 'open').order('created_at', { ascending: false }).limit(10),
   ])
 

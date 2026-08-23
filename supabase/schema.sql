@@ -3271,6 +3271,36 @@ grant execute on function public.get_public_profile_summaries(uuid[]) to authent
 grant execute on function public.get_public_profile_summaries(uuid[]) to anon;
 
 -- ============================================================================
+-- get_platform_member_count() — nombre total de comptes client, pour le
+-- compteur "Membres Livrily" de la page d'accueil publique
+-- (app/(client)/page.tsx). BUG trouvé et vérifié en direct : la query
+-- d'origine (select count sur profiles, client RLS-bound normal) renvoie
+-- toujours 0 pour un visiteur anonyme — profiles_select_own_or_admin
+-- (id = auth.uid() or is_admin()) ne laisse jamais rien passer sans
+-- session, alors que l'accueil est justement consultée sans connexion la
+-- plupart du temps. Confirmé : 21 profils role='client' réels vus en
+-- service_role, 0 vus par le même query exécutée en anon.
+--
+-- RPC étroite (un seul entier, aucune ligne individuelle de profiles
+-- exposée) plutôt qu'un élargissement de profiles_select_own_or_admin —
+-- même discipline que get_profile_rating()/get_trust_score()/
+-- get_public_profile_summaries() plus haut. Pas createAdminClient() côté
+-- TypeScript non plus : explicitement documenté (lib/supabase/server.ts)
+-- comme réservé aux opérations administratives, pas à un compteur public.
+create or replace function public.get_platform_member_count()
+returns int
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select count(*)::int from public.profiles where role = 'client';
+$$;
+
+grant execute on function public.get_platform_member_count() to authenticated;
+grant execute on function public.get_platform_member_count() to anon;
+
+-- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,
 -- catalogue, livraison zone tarifée — a existé puis a été retiré
 -- intégralement, cf. tête de fichier).
