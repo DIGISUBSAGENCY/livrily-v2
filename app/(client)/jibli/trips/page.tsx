@@ -6,6 +6,7 @@ import { TripCard } from '@/components/travel/TripCard'
 import { TripFilters, type TripSort } from '@/components/travel/TripFilters'
 import { Button } from '@/components/ui/Button'
 import { pageMetadata } from '@/lib/seo'
+import { getPublicProfileSummaries } from '@/lib/profiles'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Trips',
@@ -24,7 +25,12 @@ export default async function TripsPage({ searchParams }: TripsPageProps) {
   const sort: TripSort = sortParam === 'date_asc' ? sortParam : 'recent'
   const supabase = await createClient()
 
-  let query = supabase.from('trips').select('*').eq('status', 'open')
+  // 'open' + 'matched' : un trip pris reste visible avec son statut à jour
+  // (badge "Mis en relation" sur TripCard) plutôt que de disparaître —
+  // 'completed'/'cancelled' restent filtrés, bruit pas utile à la
+  // découverte au quotidien (RLS elle-même n'impose plus cette limite,
+  // cf. schema.sql : choix de cette page, pas une contrainte de sécurité).
+  let query = supabase.from('trips').select('*').in('status', ['open', 'matched'])
 
   if (origin) query = query.ilike('origin_country', `%${origin}%`)
   if (destination) query = query.ilike('destination_city', `%${destination}%`)
@@ -34,6 +40,10 @@ export default async function TripsPage({ searchParams }: TripsPageProps) {
   else query = query.order('created_at', { ascending: false })
 
   const { data: trips, error } = await query
+
+  // Un seul appel batché pour toute la page (get_public_profile_summaries),
+  // pas un par carte — cf. lib/profiles.ts.
+  const profiles = await getPublicProfileSummaries(supabase, (trips ?? []).map((t) => t.voyageur_id))
 
   const hasActiveFilters = Boolean(origin || destination || before)
 
@@ -98,7 +108,12 @@ export default async function TripsPage({ searchParams }: TripsPageProps) {
       {!error && trips && trips.length > 0 && (
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {trips.map((trip) => (
-            <TripCard key={trip.id} trip={trip} />
+            <TripCard
+              key={trip.id}
+              trip={trip}
+              ownerName={profiles.get(trip.voyageur_id)?.fullName ?? null}
+              ownerAvatarUrl={profiles.get(trip.voyageur_id)?.avatarUrl ?? null}
+            />
           ))}
         </div>
       )}

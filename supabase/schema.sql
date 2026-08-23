@@ -2588,41 +2588,27 @@ alter table public.travel_requests add column if not exists item_weight_kg numer
 
 alter table public.trips enable row level security;
 
--- CORRECTIF trouvé en testant en direct (pas une régression, un vrai
--- oubli du design initial) : un trip qui quitte 'open' (donc 'matched' —
--- le moment précis où il devient intéressant à consulter) devenait
--- invisible pour le client dont la proposition acceptée l'a justement
--- fait passer à 'matched' — 404 sur /jibli/trips/[id] après acceptation.
--- Même pattern que owns_travel_request/is_accepted_voyageur_for_request
--- (fonction SECURITY DEFINER plutôt qu'une sous-requête brute dans la
--- policy, pour éviter toute récursion d'évaluation de policy).
-create or replace function public.is_client_of_matched_trip(p_trip_id uuid)
-returns boolean
-language plpgsql
-security definer
-set search_path = public
-stable
-as $$
-begin
-  return exists (
-    select 1 from public.travel_proposals tp
-    join public.travel_requests tr on tr.id = tp.request_id
-    where tp.source_trip_id = p_trip_id
-      and tr.accepted_proposal_id = tp.id
-      and tr.client_id = auth.uid()
-  );
-end;
-$$;
-
+-- Historique : un premier correctif (is_client_of_matched_trip(), trouvé
+-- en testant en direct) avait élargi la visibilité SELECT au client dont
+-- la proposition acceptée venait de faire passer CE trip précis à
+-- 'matched' — sans quoi il avait un 404 juste après acceptation. Remplacé
+-- ici par une visibilité publique totale (/jibli/trips doit maintenant
+-- garder un trip visible avec son statut à jour, pas le faire disparaître,
+-- même demande que pour product_offers plus bas) : aucune colonne
+-- sensible dans cette table (voyageur_id est juste un uuid, pas de PII —
+-- le nom du voyageur reste dans profiles, séparément protégé), donc rien
+-- à perdre à l'ouvrir. is_client_of_matched_trip() devient inutile
+-- (aucune autre policy/fonction ne la référence, vérifié) — supprimée
+-- plutôt que laissée comme code mort trompeur (son commentaire décrirait
+-- un trou qui n'existe plus). DROP POLICY avant DROP FUNCTION : la policy
+-- existante référence encore la fonction, la supprimer dans l'autre ordre
+-- échoue ("cannot drop function ... because other objects depend on it").
 drop policy if exists "trips_select_open_or_involved" on public.trips;
+drop function if exists public.is_client_of_matched_trip(uuid);
+
 create policy "trips_select_open_or_involved"
   on public.trips for select
-  using (
-    status = 'open'
-    or voyageur_id = auth.uid()
-    or public.is_admin()
-    or public.is_client_of_matched_trip(id)
-  );
+  using (true);
 
 drop policy if exists "trips_insert_own" on public.trips;
 create policy "trips_insert_own"
@@ -3064,6 +3050,225 @@ $$;
 revoke execute on function public.get_trust_badges(uuid) from public;
 revoke execute on function public.get_trust_badges(uuid) from anon;
 grant execute on function public.get_trust_badges(uuid) to authenticated;
+
+-- ============================================================================
+-- Table: product_offers (Phase 3, brique 4/N — "Offres")
+-- Troisième parcours voyageur, autonome : le voyageur annonce un PRODUIT
+-- PRÉCIS à un prix déjà fixé (ex: "iPhone 16, 1500 DT, Paris → Tunis,
+-- disponible le 20/09"), AVANT qu'un client n'ait exprimé de demande —
+-- distinct de trips (disponibilité générique, sans produit ni prix) et de
+-- la négociation classique (le client publie la demande en premier).
+--
+-- item_price + delivery_fee séparés (pas un seul champ "prix") : mirror
+-- exact de travel_proposals, pour que accept_travel_proposal() calcule la
+-- commission sur delivery_fee sans aucune nouvelle logique — le voyageur
+-- remplit les deux mêmes champs qu'il remplirait pour une proposition
+-- classique (cf. ProposalAmounts.tsx : item_price remboursé au voyageur,
+-- delivery_fee seul montant commissionnable).
+-- ============================================================================
+do $$ begin
+  create type public.product_offer_status as enum ('open', 'matched', 'completed', 'cancelled');
+exception when duplicate_object then null; end $$;
+
+create table if not exists public.product_offers (
+  id uuid primary key default gen_random_uuid(),
+  voyageur_id uuid not null references public.profiles(id),
+  item_description text not null,
+  item_photo_url text, -- même bucket que travel_requests (travel-request-photos), même usage
+  origin_country text not null,
+  destination_city text not null,
+  travel_date date not null, -- date de disponibilité du produit
+  item_price numeric(10,3) not null check (item_price >= 0),
+  delivery_fee numeric(10,3) not null check (delivery_fee >= 0),
+  status public.product_offer_status not null default 'open',
+  -- Posé uniquement par take_product_offer() ci-dessous — seule trace de
+  -- "cette offre a été prise", même principe que trips.matched_proposal_id.
+  matched_proposal_id uuid references public.travel_proposals(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists product_offers_status_idx on public.product_offers(status);
+create index if not exists product_offers_voyageur_idx on public.product_offers(voyageur_id);
+create index if not exists product_offers_route_idx on public.product_offers(origin_country, destination_city);
+
+drop trigger if exists trg_product_offers_updated_at on public.product_offers;
+create trigger trg_product_offers_updated_at
+  before update on public.product_offers
+  for each row execute function public.set_updated_at();
+
+-- Lien optionnel vers l'offre d'origine d'une proposition — même rôle que
+-- travel_proposals.source_trip_id (permet à accept_travel_proposal() de
+-- savoir quelle logique appliquer), mais PAS le même moment de flip (cf.
+-- take_product_offer() plus bas pour la justification : contrairement à
+-- un trip, une offre représente une ressource UNIQUE — le flip doit
+-- arriver à la prise, pas à l'acceptation, pour empêcher une double vente).
+alter table public.travel_proposals add column if not exists source_offer_id uuid references public.product_offers(id);
+
+alter table public.product_offers enable row level security;
+
+-- Historique : is_client_of_matched_offer() avait été construite dès ce
+-- chantier (anticipant le même trou déjà rencontré sur Trips) pour que le
+-- client qui vient de prendre une offre puisse la revoir une fois
+-- 'matched'. Remplacé par une visibilité publique totale : /jibli/offres
+-- doit garder une offre visible avec son statut à jour ("Prise") au
+-- lieu de la faire disparaître, pour n'importe quel visiteur, pas
+-- seulement les parties impliquées — même changement que trips plus haut,
+-- même raison (aucune colonne sensible : voyageur_id est un uuid, pas de
+-- PII). is_client_of_matched_offer() devient inutile (aucune autre
+-- policy/fonction ne la référence, vérifié) — supprimée plutôt que
+-- laissée comme code mort trompeur. DROP POLICY avant DROP FUNCTION :
+-- même raison que trips plus haut (dépendance policy -> fonction).
+drop policy if exists "product_offers_select_open_or_involved" on public.product_offers;
+drop function if exists public.is_client_of_matched_offer(uuid);
+
+create policy "product_offers_select_open_or_involved"
+  on public.product_offers for select
+  using (true);
+
+drop policy if exists "product_offers_insert_own" on public.product_offers;
+create policy "product_offers_insert_own"
+  on public.product_offers for insert
+  with check (voyageur_id = auth.uid() and public.is_client());
+  -- Vérification KYC (identity_verifications) faite côté Server Action,
+  -- pas ici — même convention que trips_insert_own/travel_requests_insert_client,
+  -- aucune des deux n'embarque ce contrôle en RLS non plus.
+
+drop policy if exists "product_offers_update_own_or_admin" on public.product_offers;
+create policy "product_offers_update_own_or_admin"
+  on public.product_offers for update
+  using (voyageur_id = auth.uid() or public.is_admin());
+  -- Couvre l'annulation manuelle par le voyageur (page "Mes offres").
+  -- take_product_offer() ci-dessous, SECURITY DEFINER, n'a pas besoin
+  -- d'une policy pour flip le statut : elle s'exécute avec les privilèges
+  -- du propriétaire de la fonction, hors RLS, même principe que
+  -- accept_travel_proposal() écrivant déjà dans trips/travel_payments/
+  -- notifications à travers des frontières de propriété.
+
+-- Prise d'une offre par un client — SECURITY DEFINER car le client ne
+-- PEUT PAS créer de travel_proposals lui-même (RLS : voyageur_id =
+-- auth.uid() uniquement, cf. travel_proposals_insert_client_not_own_request)
+-- ; contrairement à "Signaler mon intérêt" sur un trip (qui se contente de
+-- notifier, laissant le VOYAGEUR créer la proposition), une offre doit
+-- pouvoir être prise en un clic par le CLIENT — la RLS l'interdit
+-- structurellement sans cette fonction.
+--
+-- Flip 'open' -> 'matched' ICI (à la prise), pas dans accept_travel_proposal()
+-- comme pour les trips : une offre représente une ressource UNIQUE (un
+-- seul iPhone précis), alors qu'un trip n'est qu'une capacité générique
+-- réutilisable pour plusieurs négociations en parallèle jusqu'à
+-- acceptation. Flip tardif (à l'acceptation) laisserait une fenêtre où
+-- deux clients différents pourraient chacun prendre l'offre, créer leur
+-- propre demande/proposition, et faire escrower des fonds séparément pour
+-- le MÊME produit physique — une double vente, pas juste un
+-- sur-engagement de capacité comme pour un trip. `for update` verrouille
+-- la ligne le temps de la transaction : la 2e prise concurrente échoue
+-- proprement (statut déjà 'matched') avant même de créer quoi que ce soit.
+--
+-- Compromis assumé pour la v1 : si le client abandonne le paiement entre
+-- take_product_offer() et l'appel à accept_travel_proposal() qui suit
+-- (même Server Action, mais 2 appels distincts), l'offre reste 'matched'
+-- sans jamais être payée — récupération manuelle (admin) pour l'instant,
+-- pas de nettoyage automatique. Risque jugé mineur : empêcher la double
+-- vente prime sur ce cas plus rare et moins grave.
+create or replace function public.take_product_offer(p_offer_id uuid)
+returns table (request_id uuid, proposal_id uuid)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  -- Variables scalaires plutôt qu'un seul `record` : un `select ... into`
+  -- sur un `record` qui ne trouve aucune ligne laisse la variable "non
+  -- assignée" (record "v_offer" is not assigned yet dès qu'on référence
+  -- un champ) au lieu de simplement mettre ses champs à NULL — piège
+  -- plpgsql réel, évité ici en suivant le même motif que
+  -- accept_travel_proposal() ci-dessus (variables scalaires + `if v_x is
+  -- null then raise exception`).
+  v_status public.product_offer_status;
+  v_voyageur_id uuid;
+  v_item_description text;
+  v_item_photo_url text;
+  v_origin_country text;
+  v_destination_city text;
+  v_travel_date date;
+  v_item_price numeric(10,3);
+  v_delivery_fee numeric(10,3);
+  v_request_id uuid;
+  v_proposal_id uuid;
+begin
+  select status, voyageur_id, item_description, item_photo_url, origin_country, destination_city, travel_date, item_price, delivery_fee
+    into v_status, v_voyageur_id, v_item_description, v_item_photo_url, v_origin_country, v_destination_city, v_travel_date, v_item_price, v_delivery_fee
+  from public.product_offers
+  where id = p_offer_id
+  for update;
+
+  if v_voyageur_id is null then
+    raise exception 'Offre introuvable.';
+  end if;
+  if v_status <> 'open' then
+    raise exception 'Cette offre n''est plus disponible.';
+  end if;
+  if v_voyageur_id = auth.uid() then
+    raise exception 'Impossible de prendre sa propre offre.';
+  end if;
+
+  insert into public.travel_requests (
+    client_id, item_description, item_photo_url, origin_country, destination_city, budget_max, needed_by
+  ) values (
+    auth.uid(), v_item_description, v_item_photo_url, v_origin_country, v_destination_city,
+    v_item_price + v_delivery_fee, v_travel_date
+  ) returning id into v_request_id;
+
+  insert into public.travel_proposals (
+    request_id, voyageur_id, item_price, delivery_fee, travel_date, source_offer_id
+  ) values (
+    v_request_id, v_voyageur_id, v_item_price, v_delivery_fee, v_travel_date, p_offer_id
+  ) returning id into v_proposal_id;
+
+  update public.product_offers set status = 'matched', matched_proposal_id = v_proposal_id where id = p_offer_id;
+
+  request_id := v_request_id;
+  proposal_id := v_proposal_id;
+  return next;
+end;
+$$;
+
+grant execute on function public.take_product_offer(uuid) to authenticated;
+
+-- ============================================================================
+-- get_public_profile_summaries() — nom + avatar publics, pour les cartes
+-- de listing (TripCard/ProductOfferCard/RequestCard). Champs volontairement
+-- réduits au strict nécessaire (full_name, avatar_url) — jamais phone/
+-- address/country/profession/email : profiles_select_own_or_admin/
+-- profiles_select_travel_counterparties restent inchangées et continuent
+-- de protéger la ligne complète (aucune des deux ne couvre "un visiteur
+-- qui parcourt une liste publique, sans relation encore établie avec le
+-- voyageur/client" — c'est précisément le trou que cette RPC comble, sans
+-- élargir profiles lui-même). Même discipline que get_profile_rating()/
+-- get_trust_score() : une RPC étroite plutôt qu'un accès table élargi.
+--
+-- Batchée (tableau d'ids, pas un id) : une page de listing affiche
+-- plusieurs cartes, un appel unique évite N appels RPC séparés.
+--
+-- Grantée à anon en plus de authenticated : les 3 listings (trips,
+-- product_offers, travel_requests 'open') sont déjà visibles par tous
+-- (using(true)/status='open' public) — pas de raison de réserver juste le
+-- nom/avatar aux connectés alors que le reste de la carte est déjà public.
+create or replace function public.get_public_profile_summaries(p_profile_ids uuid[])
+returns table (id uuid, full_name text, avatar_url text)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select p.id, p.full_name, p.avatar_url
+  from public.profiles p
+  where p.id = any(p_profile_ids);
+$$;
+
+grant execute on function public.get_public_profile_summaries(uuid[]) to authenticated;
+grant execute on function public.get_public_profile_summaries(uuid[]) to anon;
 
 -- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,

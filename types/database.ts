@@ -51,6 +51,8 @@ export type NotificationRelatedObjectType = 'travel_request' | 'travel_payment' 
 
 export type TripStatus = 'open' | 'matched' | 'completed' | 'cancelled'
 
+export type ProductOfferStatus = 'open' | 'matched' | 'completed' | 'cancelled'
+
 export interface Database {
   public: {
     Tables: {
@@ -229,6 +231,12 @@ export interface Database {
           // proposition créée normalement (voyageur parcourant une demande
           // directement) — comportement inchangé.
           source_trip_id: string | null
+          // Non nul quand cette proposition vient de take_product_offer()
+          // ("Offres" — Phase 3, brique 4/N). Mutuellement exclusif avec
+          // source_trip_id en pratique (une proposition vient d'au plus un
+          // chemin), mais pas contraint en base — les deux restent
+          // simplement nuls pour une proposition créée normalement.
+          source_offer_id: string | null
           created_at: string
           updated_at: string
         }
@@ -247,6 +255,7 @@ export interface Database {
           terms_confirmed_by?: string | null
           terms_confirmed_at?: string | null
           source_trip_id?: string | null
+          source_offer_id?: string | null
         }
         Update: Partial<Database['public']['Tables']['travel_proposals']['Insert']>
         Relationships: []
@@ -283,6 +292,38 @@ export interface Database {
           expires_at?: string | null
         }
         Update: Partial<Database['public']['Tables']['trips']['Insert']>
+        Relationships: []
+      }
+      product_offers: {
+        Row: {
+          id: string
+          voyageur_id: string
+          item_description: string
+          item_photo_url: string | null
+          origin_country: string
+          destination_city: string
+          travel_date: string
+          item_price: number
+          delivery_fee: number
+          status: ProductOfferStatus
+          matched_proposal_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          voyageur_id: string
+          item_description: string
+          item_photo_url?: string | null
+          origin_country: string
+          destination_city: string
+          travel_date: string
+          item_price: number
+          delivery_fee: number
+          status?: ProductOfferStatus
+          matched_proposal_id?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['product_offers']['Insert']>
         Relationships: []
       }
       travel_proposal_offers: {
@@ -564,6 +605,21 @@ export interface Database {
         Args: { p_request_id: string }
         Returns: undefined
       }
+      // "Offres" (Phase 3, brique 4/N). Crée travel_requests +
+      // travel_proposals à partir d'une offre à prix fixe et flip l'offre
+      // à 'matched' — le client appelle ensuite accept_travel_proposal()
+      // (existante, inchangée) avec proposal_id pour finaliser le paiement.
+      take_product_offer: {
+        Args: { p_offer_id: string }
+        Returns: { request_id: string; proposal_id: string }[]
+      }
+      // Nom + avatar publics uniquement (jamais phone/address/country/
+      // profession/email) — pour les cartes de listing (TripCard/
+      // ProductOfferCard/RequestCard). Batchée, cf. lib/profiles.ts.
+      get_public_profile_summaries: {
+        Args: { p_profile_ids: string[] }
+        Returns: { id: string; full_name: string | null; avatar_url: string | null }[]
+      }
       travel_voyageur_balance: {
         Args: { p_voyageur_id: string }
         Returns: number
@@ -673,6 +729,7 @@ export type IdentityVerification = Database['public']['Tables']['identity_verifi
 export type TravelRequest = Database['public']['Tables']['travel_requests']['Row']
 export type TravelProposal = Database['public']['Tables']['travel_proposals']['Row']
 export type Trip = Database['public']['Tables']['trips']['Row']
+export type ProductOffer = Database['public']['Tables']['product_offers']['Row']
 export type TravelProposalOffer = Database['public']['Tables']['travel_proposal_offers']['Row']
 export type TravelPayment = Database['public']['Tables']['travel_payments']['Row']
 export type WithdrawalRequest = Database['public']['Tables']['withdrawal_requests']['Row']

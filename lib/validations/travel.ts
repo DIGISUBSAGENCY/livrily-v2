@@ -60,6 +60,20 @@ export const tripSchema = z.object({
     .or(z.literal('').transform(() => undefined)),
 })
 
+// Offres (Phase 3, brique 4/N) — publication d'un PRODUIT PRÉCIS à un prix
+// déjà fixé par le voyageur, avant qu'un client n'ait exprimé de demande.
+// item_price + delivery_fee séparés (pas un seul champ "prix") : mêmes deux
+// champs que travelProposalSchema, pour que take_product_offer() alimente
+// accept_travel_proposal() sans transformation (cf. schema.sql).
+export const productOfferSchema = z.object({
+  item_description: z.string().trim().min(5, "Décris le produit (au moins 5 caractères)."),
+  origin_country: z.string().trim().min(2, "Pays d'origine requis."),
+  destination_city: z.string().trim().min(2, 'Ville de destination requise.'),
+  travel_date: z.string().trim().min(1, 'Date de disponibilité requise.'),
+  item_price: z.coerce.number().min(0, "Le prix de l'objet doit être positif."),
+  delivery_fee: z.coerce.number().min(0, 'Les frais de service doivent être positifs.'),
+})
+
 // Durées de validité proposées côté formulaire (dropdown) — converties en
 // expires_at (timestamp absolu) côté serveur. Purement informatif pour
 // l'instant : rien ne retire automatiquement la proposition à l'échéance.
