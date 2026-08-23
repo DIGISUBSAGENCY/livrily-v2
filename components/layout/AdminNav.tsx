@@ -30,6 +30,7 @@ function isGroup(item: NavItem): item is NavGroup {
 const items: NavItem[] = [
   { href: '/admin', label: 'Tableau de bord' },
   { href: '/admin/demandes', label: 'Demandes' },
+  { href: '/admin/marketplace', label: 'Marketplace' },
   { href: '/admin/utilisateurs', label: 'Utilisateurs' },
   { href: '/admin/verifications', label: 'Vérifications' },
   { href: '/admin/litiges', label: 'Litiges' },
