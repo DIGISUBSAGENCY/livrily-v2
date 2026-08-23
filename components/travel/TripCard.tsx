@@ -1,14 +1,24 @@
 import Link from 'next/link'
 import { Plane, Weight } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
+import { Avatar } from '@/components/ui/Avatar'
 import { TripStatusBadge } from '@/components/travel/TripStatusBadge'
 import { formatTND } from '@/lib/format'
 import type { Trip } from '@/types/database'
 
+interface TripCardProps {
+  trip: Trip
+  // Récupérés en un seul appel batché par la page listing
+  // (get_public_profile_summaries), pas par carte — cf.
+  // app/(client)/jibli/trips/page.tsx.
+  ownerName: string | null
+  ownerAvatarUrl: string | null
+}
+
 // Pas de photo/estimation de gain contrairement à RequestCard — un trip
 // n'a pas ces concepts (pas d'objet précis tant qu'aucune mise en
 // relation n'existe).
-export function TripCard({ trip }: { trip: Trip }) {
+export function TripCard({ trip, ownerName, ownerAvatarUrl }: TripCardProps) {
   return (
     <Link href={`/jibli/trips/${trip.id}`} className="group block h-full">
       <Card interactive className="flex h-full flex-col gap-2">
@@ -20,6 +30,10 @@ export function TripCard({ trip }: { trip: Trip }) {
             </p>
           </div>
           {trip.status !== 'open' && <TripStatusBadge status={trip.status} />}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Avatar fullName={ownerName} avatarUrl={ownerAvatarUrl} size="sm" />
+          <p className="truncate text-sm text-slate-600">{ownerName ?? 'Voyageur'}</p>
         </div>
         <p className="text-sm text-slate-500">{new Date(trip.travel_date).toLocaleDateString('fr-TN')}</p>
         <p className="flex items-center gap-1.5 text-sm text-slate-500">

@@ -6,6 +6,7 @@ import { TripCard } from '@/components/travel/TripCard'
 import { TripFilters, type TripSort } from '@/components/travel/TripFilters'
 import { Button } from '@/components/ui/Button'
 import { pageMetadata } from '@/lib/seo'
+import { getPublicProfileSummaries } from '@/lib/profiles'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Trips',
@@ -39,6 +40,10 @@ export default async function TripsPage({ searchParams }: TripsPageProps) {
   else query = query.order('created_at', { ascending: false })
 
   const { data: trips, error } = await query
+
+  // Un seul appel batché pour toute la page (get_public_profile_summaries),
+  // pas un par carte — cf. lib/profiles.ts.
+  const profiles = await getPublicProfileSummaries(supabase, (trips ?? []).map((t) => t.voyageur_id))
 
   const hasActiveFilters = Boolean(origin || destination || before)
 
@@ -103,7 +108,12 @@ export default async function TripsPage({ searchParams }: TripsPageProps) {
       {!error && trips && trips.length > 0 && (
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {trips.map((trip) => (
-            <TripCard key={trip.id} trip={trip} />
+            <TripCard
+              key={trip.id}
+              trip={trip}
+              ownerName={profiles.get(trip.voyageur_id)?.fullName ?? null}
+              ownerAvatarUrl={profiles.get(trip.voyageur_id)?.avatarUrl ?? null}
+            />
           ))}
         </div>
       )}

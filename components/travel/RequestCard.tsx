@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { TrendingUp } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
+import { Avatar } from '@/components/ui/Avatar'
 import { RequestPhotoPlaceholder } from '@/components/travel/RequestPhotoPlaceholder'
 import { getPublicStorageUrl } from '@/lib/storage'
 import { formatTND } from '@/lib/format'
@@ -13,9 +14,15 @@ interface RequestCardProps {
   // cette demande (cf. RLS : impossible de voir celles des autres) — dans
   // ce cas le badge affiche son gain réel plutôt qu'une suggestion.
   ownProposal?: { item_price: number; delivery_fee: number } | null
+  // Récupérés en un seul appel batché par la page listing
+  // (get_public_profile_summaries), pas par carte — cf.
+  // app/(client)/jibli/page.tsx. Propriétaire = le CLIENT ici (contrairement
+  // à TripCard/ProductOfferCard où c'est le voyageur).
+  ownerName: string | null
+  ownerAvatarUrl: string | null
 }
 
-export function RequestCard({ request, ownProposal }: RequestCardProps) {
+export function RequestCard({ request, ownProposal, ownerName, ownerAvatarUrl }: RequestCardProps) {
   const gain = ownProposal
     ? actualGainFromProposal(ownProposal.item_price, ownProposal.delivery_fee)
     : estimateSuggestedGain(request.budget_max)
@@ -39,6 +46,10 @@ export function RequestCard({ request, ownProposal }: RequestCardProps) {
           <p className="line-clamp-2 font-medium text-slate-900 transition-colors group-hover:text-brand-700">
             {request.item_description}
           </p>
+          <div className="mt-1 flex items-center gap-1.5">
+            <Avatar fullName={ownerName} avatarUrl={ownerAvatarUrl} size="sm" />
+            <p className="truncate text-sm text-slate-600">{ownerName ?? 'Client'}</p>
+          </div>
           <p className="mt-1 text-sm text-slate-500">
             {request.origin_country} → {request.destination_city}
           </p>

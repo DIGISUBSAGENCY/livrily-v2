@@ -3237,6 +3237,40 @@ $$;
 grant execute on function public.take_product_offer(uuid) to authenticated;
 
 -- ============================================================================
+-- get_public_profile_summaries() — nom + avatar publics, pour les cartes
+-- de listing (TripCard/ProductOfferCard/RequestCard). Champs volontairement
+-- réduits au strict nécessaire (full_name, avatar_url) — jamais phone/
+-- address/country/profession/email : profiles_select_own_or_admin/
+-- profiles_select_travel_counterparties restent inchangées et continuent
+-- de protéger la ligne complète (aucune des deux ne couvre "un visiteur
+-- qui parcourt une liste publique, sans relation encore établie avec le
+-- voyageur/client" — c'est précisément le trou que cette RPC comble, sans
+-- élargir profiles lui-même). Même discipline que get_profile_rating()/
+-- get_trust_score() : une RPC étroite plutôt qu'un accès table élargi.
+--
+-- Batchée (tableau d'ids, pas un id) : une page de listing affiche
+-- plusieurs cartes, un appel unique évite N appels RPC séparés.
+--
+-- Grantée à anon en plus de authenticated : les 3 listings (trips,
+-- product_offers, travel_requests 'open') sont déjà visibles par tous
+-- (using(true)/status='open' public) — pas de raison de réserver juste le
+-- nom/avatar aux connectés alors que le reste de la carte est déjà public.
+create or replace function public.get_public_profile_summaries(p_profile_ids uuid[])
+returns table (id uuid, full_name text, avatar_url text)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select p.id, p.full_name, p.avatar_url
+  from public.profiles p
+  where p.id = any(p_profile_ids);
+$$;
+
+grant execute on function public.get_public_profile_summaries(uuid[]) to authenticated;
+grant execute on function public.get_public_profile_summaries(uuid[]) to anon;
+
+-- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,
 -- catalogue, livraison zone tarifée — a existé puis a été retiré
 -- intégralement, cf. tête de fichier).

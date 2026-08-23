@@ -1,16 +1,26 @@
 import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
+import { Avatar } from '@/components/ui/Avatar'
 import { RequestPhotoPlaceholder } from '@/components/travel/RequestPhotoPlaceholder'
 import { ProductOfferStatusBadge } from '@/components/travel/ProductOfferStatusBadge'
 import { getPublicStorageUrl } from '@/lib/storage'
 import { formatTND } from '@/lib/format'
 import type { ProductOffer } from '@/types/database'
 
+interface ProductOfferCardProps {
+  offer: ProductOffer
+  // Récupérés en un seul appel batché par la page listing
+  // (get_public_profile_summaries), pas par carte — cf.
+  // app/(client)/jibli/offres/page.tsx.
+  ownerName: string | null
+  ownerAvatarUrl: string | null
+}
+
 // Mirror de RequestCard (photo, description, route) + TripCard (date) —
 // contrairement aux deux, le prix affiché est FIXE, pas une estimation ni
 // un point de départ : item_price + delivery_fee, jamais fusionnés en un
 // total qui masquerait la répartition (même principe que ProposalAmounts).
-export function ProductOfferCard({ offer }: { offer: ProductOffer }) {
+export function ProductOfferCard({ offer, ownerName, ownerAvatarUrl }: ProductOfferCardProps) {
   const total = offer.item_price + offer.delivery_fee
 
   return (
@@ -34,6 +44,10 @@ export function ProductOfferCard({ offer }: { offer: ProductOffer }) {
               {offer.item_description}
             </p>
             {offer.status !== 'open' && <ProductOfferStatusBadge status={offer.status} />}
+          </div>
+          <div className="mt-1 flex items-center gap-1.5">
+            <Avatar fullName={ownerName} avatarUrl={ownerAvatarUrl} size="sm" />
+            <p className="truncate text-sm text-slate-600">{ownerName ?? 'Voyageur'}</p>
           </div>
           <p className="mt-1 text-sm text-slate-500">
             {offer.origin_country} → {offer.destination_city}

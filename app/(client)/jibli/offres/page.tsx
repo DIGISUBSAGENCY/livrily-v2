@@ -6,6 +6,7 @@ import { ProductOfferCard } from '@/components/travel/ProductOfferCard'
 import { ProductOfferFilters, type ProductOfferSort } from '@/components/travel/ProductOfferFilters'
 import { Button } from '@/components/ui/Button'
 import { pageMetadata } from '@/lib/seo'
+import { getPublicProfileSummaries } from '@/lib/profiles'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Offres',
@@ -36,6 +37,10 @@ export default async function ProductOffersPage({ searchParams }: ProductOffersP
   else query = query.order('created_at', { ascending: false })
 
   const { data: offers, error } = await query
+
+  // Un seul appel batché pour toute la page (get_public_profile_summaries),
+  // pas un par carte — cf. lib/profiles.ts.
+  const profiles = await getPublicProfileSummaries(supabase, (offers ?? []).map((o) => o.voyageur_id))
 
   const hasActiveFilters = Boolean(origin || destination)
 
@@ -95,7 +100,12 @@ export default async function ProductOffersPage({ searchParams }: ProductOffersP
       {!error && offers && offers.length > 0 && (
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {offers.map((offer) => (
-            <ProductOfferCard key={offer.id} offer={offer} />
+            <ProductOfferCard
+              key={offer.id}
+              offer={offer}
+              ownerName={profiles.get(offer.voyageur_id)?.fullName ?? null}
+              ownerAvatarUrl={profiles.get(offer.voyageur_id)?.avatarUrl ?? null}
+            />
           ))}
         </div>
       )}

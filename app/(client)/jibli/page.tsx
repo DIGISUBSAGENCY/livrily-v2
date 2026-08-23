@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { IdentityBanner } from '@/components/account/IdentityBanner'
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour'
 import { getIdentityStatus } from '@/lib/identity'
+import { getPublicProfileSummaries } from '@/lib/profiles'
 import { pageMetadata } from '@/lib/seo'
 import type { TravelRequest, TravelProposal, TravelRequestStatus } from '@/types/database'
 
@@ -75,6 +76,15 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
   else query = query.order('created_at', { ascending: false })
 
   const { data: requests, error } = await query
+
+  // Un seul appel batché pour toute la grille marketplace
+  // (get_public_profile_summaries), pas un par carte — cf. lib/profiles.ts.
+  // Propriétaire = le CLIENT ici (contrairement à Trips/Offres où c'est le
+  // voyageur). Distinct de receivedVoyageurNames plus bas (déjà couvert
+  // par profiles_select_travel_counterparties, contreparties déjà en
+  // relation — pas besoin de la nouvelle RPC là où l'accès direct marche
+  // déjà).
+  const requestOwners = await getPublicProfileSummaries(supabase, (requests ?? []).map((r) => r.client_id))
 
   const hasActiveFilters = Boolean(
     origin || destination || soon === '1' || goodPrice === '1' || budgetMin || budgetMax || neededBefore
@@ -295,6 +305,8 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
               key={request.id}
               request={request}
               ownProposal={ownProposalsByRequest.get(request.id) ?? null}
+              ownerName={requestOwners.get(request.client_id)?.fullName ?? null}
+              ownerAvatarUrl={requestOwners.get(request.client_id)?.avatarUrl ?? null}
             />
           ))}
         </div>

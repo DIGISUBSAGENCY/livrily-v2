@@ -613,6 +613,13 @@ export interface Database {
         Args: { p_offer_id: string }
         Returns: { request_id: string; proposal_id: string }[]
       }
+      // Nom + avatar publics uniquement (jamais phone/address/country/
+      // profession/email) — pour les cartes de listing (TripCard/
+      // ProductOfferCard/RequestCard). Batchée, cf. lib/profiles.ts.
+      get_public_profile_summaries: {
+        Args: { p_profile_ids: string[] }
+        Returns: { id: string; full_name: string | null; avatar_url: string | null }[]
+      }
       travel_voyageur_balance: {
         Args: { p_voyageur_id: string }
         Returns: number
