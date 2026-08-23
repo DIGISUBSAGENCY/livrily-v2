@@ -46,11 +46,14 @@ export function RequestCard({ request, ownProposal, ownerName, ownerAvatarUrl }:
           <p className="line-clamp-2 font-medium text-slate-900 transition-colors group-hover:text-brand-700">
             {request.item_description}
           </p>
-          <div className="mt-1 flex items-center gap-1.5">
+          {/* Groupé avec le titre (mt-0.5, serré) : signature "qui demande"
+              directement sous le titre — séparé du bloc route/budget/gain
+              par mt-2.5 ci-dessous, pas la même cadence que le reste. */}
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
             <Avatar fullName={ownerName} avatarUrl={ownerAvatarUrl} size="sm" />
-            <p className="truncate text-sm text-slate-600">{ownerName ?? 'Client'}</p>
+            <p className="min-w-0 truncate text-sm text-slate-600">{ownerName ?? 'Client'}</p>
           </div>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-2.5 text-sm text-slate-500">
             {request.origin_country} → {request.destination_city}
           </p>
           <p className="mt-1 text-sm font-medium text-brand-700">

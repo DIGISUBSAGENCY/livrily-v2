@@ -45,11 +45,14 @@ export function ProductOfferCard({ offer, ownerName, ownerAvatarUrl }: ProductOf
             </p>
             {offer.status !== 'open' && <ProductOfferStatusBadge status={offer.status} />}
           </div>
-          <div className="mt-1 flex items-center gap-1.5">
+          {/* Groupé avec le titre (mt-0.5, serré) : signature "qui propose"
+              directement sous le titre — séparé du bloc route/date/prix par
+              mt-2.5 ci-dessous, pas la même cadence que le reste. */}
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
             <Avatar fullName={ownerName} avatarUrl={ownerAvatarUrl} size="sm" />
-            <p className="truncate text-sm text-slate-600">{ownerName ?? 'Voyageur'}</p>
+            <p className="min-w-0 truncate text-sm text-slate-600">{ownerName ?? 'Voyageur'}</p>
           </div>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-2.5 text-sm text-slate-500">
             {offer.origin_country} → {offer.destination_city}
           </p>
           <p className="text-sm text-slate-500">{new Date(offer.travel_date).toLocaleDateString('fr-TN')}</p>
