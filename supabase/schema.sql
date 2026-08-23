@@ -2588,41 +2588,27 @@ alter table public.travel_requests add column if not exists item_weight_kg numer
 
 alter table public.trips enable row level security;
 
--- CORRECTIF trouvé en testant en direct (pas une régression, un vrai
--- oubli du design initial) : un trip qui quitte 'open' (donc 'matched' —
--- le moment précis où il devient intéressant à consulter) devenait
--- invisible pour le client dont la proposition acceptée l'a justement
--- fait passer à 'matched' — 404 sur /jibli/trips/[id] après acceptation.
--- Même pattern que owns_travel_request/is_accepted_voyageur_for_request
--- (fonction SECURITY DEFINER plutôt qu'une sous-requête brute dans la
--- policy, pour éviter toute récursion d'évaluation de policy).
-create or replace function public.is_client_of_matched_trip(p_trip_id uuid)
-returns boolean
-language plpgsql
-security definer
-set search_path = public
-stable
-as $$
-begin
-  return exists (
-    select 1 from public.travel_proposals tp
-    join public.travel_requests tr on tr.id = tp.request_id
-    where tp.source_trip_id = p_trip_id
-      and tr.accepted_proposal_id = tp.id
-      and tr.client_id = auth.uid()
-  );
-end;
-$$;
-
+-- Historique : un premier correctif (is_client_of_matched_trip(), trouvé
+-- en testant en direct) avait élargi la visibilité SELECT au client dont
+-- la proposition acceptée venait de faire passer CE trip précis à
+-- 'matched' — sans quoi il avait un 404 juste après acceptation. Remplacé
+-- ici par une visibilité publique totale (/jibli/trips doit maintenant
+-- garder un trip visible avec son statut à jour, pas le faire disparaître,
+-- même demande que pour product_offers plus bas) : aucune colonne
+-- sensible dans cette table (voyageur_id est juste un uuid, pas de PII —
+-- le nom du voyageur reste dans profiles, séparément protégé), donc rien
+-- à perdre à l'ouvrir. is_client_of_matched_trip() devient inutile
+-- (aucune autre policy/fonction ne la référence, vérifié) — supprimée
+-- plutôt que laissée comme code mort trompeur (son commentaire décrirait
+-- un trou qui n'existe plus). DROP POLICY avant DROP FUNCTION : la policy
+-- existante référence encore la fonction, la supprimer dans l'autre ordre
+-- échoue ("cannot drop function ... because other objects depend on it").
 drop policy if exists "trips_select_open_or_involved" on public.trips;
+drop function if exists public.is_client_of_matched_trip(uuid);
+
 create policy "trips_select_open_or_involved"
   on public.trips for select
-  using (
-    status = 'open'
-    or voyageur_id = auth.uid()
-    or public.is_admin()
-    or public.is_client_of_matched_trip(id)
-  );
+  using (true);
 
 drop policy if exists "trips_insert_own" on public.trips;
 create policy "trips_insert_own"
@@ -3121,38 +3107,24 @@ alter table public.travel_proposals add column if not exists source_offer_id uui
 
 alter table public.product_offers enable row level security;
 
--- Même pattern que is_client_of_matched_trip() (trips, plus haut) —
--- construit dès ce chantier plutôt que redécouvert en testant en direct :
--- une offre qui quitte 'open' (donc 'matched', le moment précis où le
--- client qui vient de la prendre a besoin de la revoir) deviendrait sinon
--- invisible pour lui, 404 sur /jibli/offres/[id] juste après la prise.
-create or replace function public.is_client_of_matched_offer(p_offer_id uuid)
-returns boolean
-language plpgsql
-security definer
-set search_path = public
-stable
-as $$
-begin
-  return exists (
-    select 1 from public.travel_proposals tp
-    join public.travel_requests tr on tr.id = tp.request_id
-    where tp.source_offer_id = p_offer_id
-      and tr.accepted_proposal_id = tp.id
-      and tr.client_id = auth.uid()
-  );
-end;
-$$;
-
+-- Historique : is_client_of_matched_offer() avait été construite dès ce
+-- chantier (anticipant le même trou déjà rencontré sur Trips) pour que le
+-- client qui vient de prendre une offre puisse la revoir une fois
+-- 'matched'. Remplacé par une visibilité publique totale : /jibli/offres
+-- doit garder une offre visible avec son statut à jour ("Prise") au
+-- lieu de la faire disparaître, pour n'importe quel visiteur, pas
+-- seulement les parties impliquées — même changement que trips plus haut,
+-- même raison (aucune colonne sensible : voyageur_id est un uuid, pas de
+-- PII). is_client_of_matched_offer() devient inutile (aucune autre
+-- policy/fonction ne la référence, vérifié) — supprimée plutôt que
+-- laissée comme code mort trompeur. DROP POLICY avant DROP FUNCTION :
+-- même raison que trips plus haut (dépendance policy -> fonction).
 drop policy if exists "product_offers_select_open_or_involved" on public.product_offers;
+drop function if exists public.is_client_of_matched_offer(uuid);
+
 create policy "product_offers_select_open_or_involved"
   on public.product_offers for select
-  using (
-    status = 'open'
-    or voyageur_id = auth.uid()
-    or public.is_admin()
-    or public.is_client_of_matched_offer(id)
-  );
+  using (true);
 
 drop policy if exists "product_offers_insert_own" on public.product_offers;
 create policy "product_offers_insert_own"

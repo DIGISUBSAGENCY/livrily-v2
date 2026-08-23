@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
 import { RequestPhotoPlaceholder } from '@/components/travel/RequestPhotoPlaceholder'
+import { ProductOfferStatusBadge } from '@/components/travel/ProductOfferStatusBadge'
 import { getPublicStorageUrl } from '@/lib/storage'
 import { formatTND } from '@/lib/format'
 import type { ProductOffer } from '@/types/database'
@@ -28,9 +29,12 @@ export function ProductOfferCard({ offer }: { offer: ProductOffer }) {
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 font-medium text-slate-900 transition-colors group-hover:text-brand-700">
-            {offer.item_description}
-          </p>
+          <div className="flex items-start justify-between gap-2">
+            <p className="line-clamp-2 font-medium text-slate-900 transition-colors group-hover:text-brand-700">
+              {offer.item_description}
+            </p>
+            {offer.status !== 'open' && <ProductOfferStatusBadge status={offer.status} />}
+          </div>
           <p className="mt-1 text-sm text-slate-500">
             {offer.origin_country} → {offer.destination_city}
           </p>

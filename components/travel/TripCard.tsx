@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Plane, Weight } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
+import { TripStatusBadge } from '@/components/travel/TripStatusBadge'
 import { formatTND } from '@/lib/format'
 import type { Trip } from '@/types/database'
 
@@ -11,11 +12,14 @@ export function TripCard({ trip }: { trip: Trip }) {
   return (
     <Link href={`/jibli/trips/${trip.id}`} className="group block h-full">
       <Card interactive className="flex h-full flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <Plane className="h-4 w-4 flex-shrink-0 text-brand-600" aria-hidden />
-          <p className="font-medium text-slate-900 transition-colors group-hover:text-brand-700">
-            {trip.origin_country} → {trip.destination_city}
-          </p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Plane className="h-4 w-4 flex-shrink-0 text-brand-600" aria-hidden />
+            <p className="font-medium text-slate-900 transition-colors group-hover:text-brand-700">
+              {trip.origin_country} → {trip.destination_city}
+            </p>
+          </div>
+          {trip.status !== 'open' && <TripStatusBadge status={trip.status} />}
         </div>
         <p className="text-sm text-slate-500">{new Date(trip.travel_date).toLocaleDateString('fr-TN')}</p>
         <p className="flex items-center gap-1.5 text-sm text-slate-500">

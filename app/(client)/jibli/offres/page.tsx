@@ -23,7 +23,11 @@ export default async function ProductOffersPage({ searchParams }: ProductOffersP
   const sort: ProductOfferSort = sortParam === 'date_asc' ? sortParam : 'recent'
   const supabase = await createClient()
 
-  let query = supabase.from('product_offers').select('*').eq('status', 'open')
+  // 'open' + 'matched' : une offre prise reste visible avec son statut à
+  // jour (badge "Prise" sur ProductOfferCard) plutôt que de disparaître —
+  // 'completed'/'cancelled' restent filtrés, mêmes raisons que
+  // /jibli/trips/page.tsx (bruit pas utile à la découverte au quotidien).
+  let query = supabase.from('product_offers').select('*').in('status', ['open', 'matched'])
 
   if (origin) query = query.ilike('origin_country', `%${origin}%`)
   if (destination) query = query.ilike('destination_city', `%${destination}%`)

@@ -24,7 +24,12 @@ export default async function TripsPage({ searchParams }: TripsPageProps) {
   const sort: TripSort = sortParam === 'date_asc' ? sortParam : 'recent'
   const supabase = await createClient()
 
-  let query = supabase.from('trips').select('*').eq('status', 'open')
+  // 'open' + 'matched' : un trip pris reste visible avec son statut à jour
+  // (badge "Mis en relation" sur TripCard) plutôt que de disparaître —
+  // 'completed'/'cancelled' restent filtrés, bruit pas utile à la
+  // découverte au quotidien (RLS elle-même n'impose plus cette limite,
+  // cf. schema.sql : choix de cette page, pas une contrainte de sécurité).
+  let query = supabase.from('trips').select('*').in('status', ['open', 'matched'])
 
   if (origin) query = query.ilike('origin_country', `%${origin}%`)
   if (destination) query = query.ilike('destination_city', `%${destination}%`)
