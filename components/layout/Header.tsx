@@ -52,7 +52,7 @@ export async function Header() {
               href="/jibli"
               className="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-brand-700 sm:inline-block"
             >
-              Voyages
+              Demandes
             </Link>
           )}
           {showJibli && (

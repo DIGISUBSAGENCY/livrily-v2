@@ -16,7 +16,7 @@ const SOCIAL_LINKS = {
 }
 
 const quickLinks = [
-  { href: '/jibli', label: 'Voyages' },
+  { href: '/jibli', label: 'Demandes' },
   { href: '/comment-ca-marche', label: 'Comment ça marche' },
   { href: '/parrainage', label: 'Parrainage' },
 ]
