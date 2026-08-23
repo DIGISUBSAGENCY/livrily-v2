@@ -15,7 +15,7 @@ interface MobileNavProps {
 
 // Visible uniquement < sm (le bouton burger lui-même est `sm:hidden`) —
 // sur desktop, Header.tsx affiche déjà ces liens directement. Avant ce
-// composant, "Voyages"/"Parrainage" étaient simplement `hidden` sur mobile
+// composant, "Demandes"/"Parrainage" étaient simplement `hidden` sur mobile
 // (cf. Header.tsx), sans aucun moyen d'y accéder — pas un menu à
 // "simplifier", un menu à construire.
 export function MobileNav({ showJibli, showParrainage, isLoggedIn, displayName }: MobileNavProps) {
@@ -48,7 +48,7 @@ export function MobileNav({ showJibli, showParrainage, isLoggedIn, displayName }
                 onClick={() => setIsOpen(false)}
                 className="rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
-                Voyages
+                Demandes
               </Link>
             )}
             {showJibli && (
