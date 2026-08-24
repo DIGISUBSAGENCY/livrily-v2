@@ -9,9 +9,11 @@ import { CountryFlowSection } from '@/components/travel/CountryFlowSection'
 import { MyRequestsPreview } from '@/components/travel/MyRequestsPreview'
 import { MyOffersPreview } from '@/components/travel/MyOffersPreview'
 import { MyProposalsPreview } from '@/components/travel/MyProposalsPreview'
+import { RecentActivity } from '@/components/notifications/RecentActivity'
 import { Button } from '@/components/ui/Button'
 import { pageMetadata } from '@/lib/seo'
 import { aggregateByCountry } from '@/lib/countryGeo'
+import { getRecentNotifications } from '@/lib/notifications/actions'
 import type { TravelRequestStatus } from '@/types/database'
 
 export const metadata: Metadata = pageMetadata({
@@ -52,6 +54,11 @@ export default async function DashboardPage() {
   ])
   const identityStatus = verification?.status ?? 'unverified'
   const identityRejectionReason = verification?.rejection_reason ?? null
+
+  // "Activité récente" — réutilise getRecentNotifications() telle quelle
+  // (déjà en prod, cf. NotificationBell.tsx), pas un nouveau flux. Elle
+  // renvoie déjà les 20 dernières triées ; 5 suffisent pour un aperçu.
+  const recentNotifications = (await getRecentNotifications()).slice(0, 5)
 
   // Lignes complètes (pas juste un count) pour alimenter à la fois les
   // compteurs de l'en-tête ET les aperçus "Mes X" plus bas — même pattern
@@ -162,6 +169,8 @@ export default async function DashboardPage() {
         <MyOffersPreview offers={myOffersPreview} totalCount={offersCount} />
         <MyProposalsPreview proposals={myProposalsPreview} requestById={myProposalsRequestById} totalCount={sentProposalsCount} />
       </div>
+
+      <RecentActivity notifications={recentNotifications} />
     </main>
   )
 }
