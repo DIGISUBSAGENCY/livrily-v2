@@ -17,9 +17,12 @@ import { formatTND } from '@/lib/format'
 import { pageMetadata } from '@/lib/seo'
 import { getIdentityStatus } from '@/lib/identity'
 import { getTrustScore } from '@/lib/trust'
-import type { BankTransferInfo } from '@/types/database'
+import type { BankTransferInfo, BoostPricingTier } from '@/types/database'
 
 type PlatformPaymentInfo = Pick<BankTransferInfo, 'bank_name' | 'account_holder' | 'rib' | 'flouci_phone'>
+// Forme renvoyée par get_boost_pricing_tiers() (RPC), pas la ligne de table
+// complète (pas de updated_at/updated_by ici).
+type BoostTier = Pick<BoostPricingTier, 'duration_days' | 'price_tnd'>
 
 interface ProductOfferPageProps {
   params: Promise<{ id: string }>
@@ -81,13 +84,12 @@ export default async function ProductOfferPage({ params }: ProductOfferPageProps
     identityStatus = await getIdentityStatus(supabase, user.id)
   }
 
-  let boostPriceTnd = 0
-  let boostDurationDays = 0
+  let boostTiers: BoostTier[] = []
   if (canBoost) {
-    // platform_settings est admin-only en RLS — cf. trips/[id]/page.tsx.
-    const { data: pricing } = await supabase.rpc('get_boost_pricing')
-    boostPriceTnd = pricing?.[0]?.boost_price_tnd ?? 0
-    boostDurationDays = pricing?.[0]?.boost_duration_days ?? 0
+    // platform_settings/boost_pricing_tiers sont admin-only en RLS — cf.
+    // trips/[id]/page.tsx.
+    const { data: pricing } = await supabase.rpc('get_boost_pricing_tiers')
+    boostTiers = pricing ?? []
   }
 
   const trustScore = await getTrustScore(supabase, offer.voyageur_id)
@@ -153,8 +155,7 @@ export default async function ProductOfferPage({ params }: ProductOfferPageProps
                 itemType="offer"
                 itemId={offer.id}
                 bankInfo={bankInfo}
-                priceTnd={boostPriceTnd}
-                durationDays={boostDurationDays}
+                tiers={boostTiers}
                 currentBoostedUntil={isBoosted(offer.boosted_until) ? offer.boosted_until : null}
               />
             </div>

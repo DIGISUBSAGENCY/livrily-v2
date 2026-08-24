@@ -29,6 +29,11 @@ function listingPath(itemType: BoostItemType): string {
 // virement de mission, un boost peut être racheté plusieurs fois pour le
 // même item : chaque achat garde SA preuve propre dans boost_payments
 // (historique conservé, cf. schema.sql).
+//
+// Appelle exclusivement la surcharge 4-arg de purchase_boost_virement()
+// (tarification par palier, Phase 3 brique 6/N) — l'ancienne 3-arg reste
+// intacte côté base (rien ne l'appelle plus depuis ce composant, mais elle
+// n'est pas supprimée ici ; cf. schema.sql pour le raisonnement additif).
 export async function purchaseBoostVirement(
   itemType: BoostItemType,
   itemId: string,
@@ -42,6 +47,16 @@ export async function purchaseBoostVirement(
   } = await supabase.auth.getUser()
 
   if (!user) redirect(`/login?next=${detailPath(itemType, itemId)}`)
+
+  // Défense en profondeur : la RPC valide de toute façon la durée (grille
+  // 1-7 jours), mais un message clair ici évite de laisser remonter une
+  // erreur SQL brute si le champ manque/n'est pas numérique (select
+  // manipulé côté client, JS désactivé...).
+  const durationDaysRaw = formData.get('duration_days')
+  const durationDays = Number(durationDaysRaw)
+  if (!durationDaysRaw || !Number.isInteger(durationDays) || durationDays < 1) {
+    return { error: 'Choisis une durée de mise en avant valide.' }
+  }
 
   const proofFile = formData.get('payment_proof')
   if (!(proofFile instanceof File) || proofFile.size === 0) {
@@ -61,6 +76,7 @@ export async function purchaseBoostVirement(
     p_item_type: itemType,
     p_item_id: itemId,
     p_payment_proof_url: path,
+    p_duration_days: durationDays,
   })
 
   if (error) {

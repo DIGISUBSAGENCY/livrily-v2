@@ -10,9 +10,12 @@ import { BoostPayment } from '@/components/travel/BoostPayment'
 import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
 import { formatTND } from '@/lib/format'
-import type { BankTransferInfo } from '@/types/database'
+import type { BankTransferInfo, BoostPricingTier } from '@/types/database'
 
 type PlatformPaymentInfo = Pick<BankTransferInfo, 'bank_name' | 'account_holder' | 'rib'>
+// Forme renvoyée par get_boost_pricing_tiers() (RPC), pas la ligne de table
+// complète (pas de updated_at/updated_by ici).
+type BoostTier = Pick<BoostPricingTier, 'duration_days' | 'price_tnd'>
 
 interface TripPageProps {
   params: Promise<{ id: string }>
@@ -49,19 +52,18 @@ export default async function TripPage({ params }: TripPageProps) {
   const canBoost = isOwner && trip.status === 'open'
 
   let bankInfo: PlatformPaymentInfo | null = null
-  let boostPriceTnd = 0
-  let boostDurationDays = 0
+  let boostTiers: BoostTier[] = []
   if (canBoost) {
-    // platform_settings est admin-only en RLS (expose aussi
-    // travel_commission_rate) — get_boost_pricing() (RPC étroite) plutôt
-    // qu'une lecture directe qui reviendrait toujours vide ici.
+    // platform_settings/boost_pricing_tiers sont admin-only en RLS (expose
+    // aussi travel_commission_rate) — get_boost_pricing_tiers() (RPC
+    // étroite, grille complète 1-7j) plutôt qu'une lecture directe qui
+    // reviendrait toujours vide ici.
     const [{ data: activeBankInfo }, { data: pricing }] = await Promise.all([
       supabase.from('bank_transfer_info').select('bank_name, account_holder, rib').eq('is_active', true).limit(1).maybeSingle(),
-      supabase.rpc('get_boost_pricing'),
+      supabase.rpc('get_boost_pricing_tiers'),
     ])
     bankInfo = activeBankInfo
-    boostPriceTnd = pricing?.[0]?.boost_price_tnd ?? 0
-    boostDurationDays = pricing?.[0]?.boost_duration_days ?? 0
+    boostTiers = pricing ?? []
   }
 
   return (
@@ -124,8 +126,7 @@ export default async function TripPage({ params }: TripPageProps) {
             itemType="trip"
             itemId={trip.id}
             bankInfo={bankInfo}
-            priceTnd={boostPriceTnd}
-            durationDays={boostDurationDays}
+            tiers={boostTiers}
             currentBoostedUntil={isBoosted(trip.boosted_until) ? trip.boosted_until : null}
           />
         </div>
