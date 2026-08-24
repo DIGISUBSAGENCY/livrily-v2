@@ -3372,14 +3372,24 @@ create trigger trg_boost_payments_updated_at
 
 alter table public.boost_payments enable row level security;
 
--- Lecture : le voyageur concerné ou un admin. Aucune policy INSERT/UPDATE
--- pour authenticated — même principe que wallet_credits/
--- travel_proposal_offers : toute écriture passe exclusivement par une RPC
--- SECURITY DEFINER, jamais en libre-service.
+-- Lecture : le voyageur concerné ou un admin. Aucune policy INSERT pour
+-- authenticated — même principe que wallet_credits/travel_proposal_offers :
+-- la création passe exclusivement par purchase_boost_virement()
+-- (SECURITY DEFINER), jamais en libre-service. UPDATE réservé à l'admin
+-- (mirror exact de travel_payments_update_admin_only) : seul usage,
+-- /admin/boost-paiements qui repasse awaiting_verification -> 'paid' —
+-- un rapprochement comptable a posteriori, jamais un gate d'activation
+-- (boosted_until est déjà posé depuis l'achat, cf. purchase_boost_virement
+-- ci-dessous).
 drop policy if exists "boost_payments_select_own_or_admin" on public.boost_payments;
 create policy "boost_payments_select_own_or_admin"
   on public.boost_payments for select
   using (voyageur_id = auth.uid() or public.is_admin());
+
+drop policy if exists "boost_payments_update_admin_only" on public.boost_payments;
+create policy "boost_payments_update_admin_only"
+  on public.boost_payments for update
+  using (public.is_admin());
 
 alter table public.trips add column if not exists boosted_until timestamptz;
 alter table public.product_offers add column if not exists boosted_until timestamptz;
@@ -3498,6 +3508,25 @@ $$;
 revoke execute on function public.purchase_boost_virement(text, uuid, text) from public;
 revoke execute on function public.purchase_boost_virement(text, uuid, text) from anon;
 grant execute on function public.purchase_boost_virement(text, uuid, text) to authenticated;
+
+-- SELECT sur platform_settings est admin-only (platform_settings_select_admin_only,
+-- expose aussi travel_commission_rate, plus sensible) — un propriétaire de
+-- trip/offre a besoin de connaître le prix/durée du boost pour afficher le
+-- CTA (BoostPayment.tsx). RPC étroite plutôt que d'élargir cette policy,
+-- même raisonnement que get_public_profile_summaries().
+create or replace function public.get_boost_pricing()
+returns table (boost_price_tnd numeric, boost_duration_days integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select boost_price_tnd, boost_duration_days from public.platform_settings where id = true;
+$$;
+
+revoke execute on function public.get_boost_pricing() from public;
+revoke execute on function public.get_boost_pricing() from anon;
+grant execute on function public.get_boost_pricing() to authenticated;
 
 -- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,

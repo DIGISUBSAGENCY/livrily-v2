@@ -5,7 +5,9 @@ import { Tag } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { ProductOfferStatusBadge } from '@/components/travel/ProductOfferStatusBadge'
 import { CancelOfferButton } from '@/components/travel/CancelOfferButton'
+import { BoostBadge, isBoosted } from '@/components/travel/BoostBadge'
 import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 import { formatTND } from '@/lib/format'
 import { pageMetadata } from '@/lib/seo'
 
@@ -62,8 +64,21 @@ export default async function MyProductOffersPage() {
                 </p>
               </Link>
               <div className="flex flex-shrink-0 items-center gap-2">
+                {isBoosted(offer.boosted_until) && <BoostBadge />}
                 <ProductOfferStatusBadge status={offer.status} />
-                {offer.status === 'open' && <CancelOfferButton offerId={offer.id} />}
+                {offer.status === 'open' && (
+                  <>
+                    {/* Bonus (pas une dépendance bloquante, cf. plan validé)
+                        — mène à la fiche détail, où vit le formulaire
+                        d'achat complet (BoostPayment), pas dupliqué ici. */}
+                    <Link href={`/jibli/offres/${offer.id}`}>
+                      <Button size="sm" variant="secondary">
+                        Booster
+                      </Button>
+                    </Link>
+                    <CancelOfferButton offerId={offer.id} />
+                  </>
+                )}
               </div>
             </Card>
           ))}

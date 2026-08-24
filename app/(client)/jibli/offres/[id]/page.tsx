@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/server'
 import { ProductOfferStatusBadge } from '@/components/travel/ProductOfferStatusBadge'
 import { TakeProductOfferPayment } from '@/components/travel/TakeProductOfferPayment'
 import { CancelOfferButton } from '@/components/travel/CancelOfferButton'
+import { BoostBadge, isBoosted } from '@/components/travel/BoostBadge'
+import { BoostPayment } from '@/components/travel/BoostPayment'
 import { TrustCategoryBadge } from '@/components/profile/TrustCategoryBadge'
 import { IdentityProgressBar } from '@/components/account/IdentityProgressBar'
 import { RequestPhotoPlaceholder } from '@/components/travel/RequestPhotoPlaceholder'
@@ -62,11 +64,11 @@ export default async function ProductOfferPage({ params }: ProductOfferPageProps
 
   const isOwner = user?.id === offer.voyageur_id
   const canTake = !isOwner && offer.status === 'open'
+  const canBoost = isOwner && offer.status === 'open'
 
   let identityStatus = null
   let bankInfo: PlatformPaymentInfo | null = null
-  if (user && canTake) {
-    identityStatus = await getIdentityStatus(supabase, user.id)
+  if (user && (canTake || canBoost)) {
     const { data: activeBankInfo } = await supabase
       .from('bank_transfer_info')
       .select('bank_name, account_holder, rib, flouci_phone')
@@ -74,6 +76,18 @@ export default async function ProductOfferPage({ params }: ProductOfferPageProps
       .limit(1)
       .maybeSingle()
     bankInfo = activeBankInfo
+  }
+  if (user && canTake) {
+    identityStatus = await getIdentityStatus(supabase, user.id)
+  }
+
+  let boostPriceTnd = 0
+  let boostDurationDays = 0
+  if (canBoost) {
+    // platform_settings est admin-only en RLS — cf. trips/[id]/page.tsx.
+    const { data: pricing } = await supabase.rpc('get_boost_pricing')
+    boostPriceTnd = pricing?.[0]?.boost_price_tnd ?? 0
+    boostDurationDays = pricing?.[0]?.boost_duration_days ?? 0
   }
 
   const trustScore = await getTrustScore(supabase, offer.voyageur_id)
@@ -106,7 +120,10 @@ export default async function ProductOfferPage({ params }: ProductOfferPageProps
               <Tag className="h-5 w-5 flex-shrink-0 text-brand-600" aria-hidden />
               <h1 className="text-xl font-bold text-slate-900">{offer.item_description}</h1>
             </div>
-            <ProductOfferStatusBadge status={offer.status} />
+            <div className="flex flex-shrink-0 items-center gap-1.5">
+              {isBoosted(offer.boosted_until) && <BoostBadge />}
+              <ProductOfferStatusBadge status={offer.status} />
+            </div>
           </div>
 
           <p className="mt-2 text-sm text-slate-500">
@@ -129,6 +146,19 @@ export default async function ProductOfferPage({ params }: ProductOfferPageProps
             </div>
           </div>
           <p className="mt-2 text-sm font-medium text-brand-700">Total : {formatTND(total)}</p>
+
+          {canBoost && (
+            <div className="mt-5">
+              <BoostPayment
+                itemType="offer"
+                itemId={offer.id}
+                bankInfo={bankInfo}
+                priceTnd={boostPriceTnd}
+                durationDays={boostDurationDays}
+                currentBoostedUntil={isBoosted(offer.boosted_until) ? offer.boosted_until : null}
+              />
+            </div>
+          )}
 
           {isOwner && offer.status === 'open' && (
             <div className="mt-5">

@@ -3,6 +3,7 @@ import { Plane, Weight } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Avatar } from '@/components/ui/Avatar'
 import { TripStatusBadge } from '@/components/travel/TripStatusBadge'
+import { BoostBadge, isBoosted } from '@/components/travel/BoostBadge'
 import { formatTND } from '@/lib/format'
 import type { Trip } from '@/types/database'
 
@@ -34,7 +35,10 @@ export function TripCard({ trip, ownerName, ownerAvatarUrl }: TripCardProps) {
                 {trip.origin_country} → {trip.destination_city}
               </p>
             </div>
-            {trip.status !== 'open' && <TripStatusBadge status={trip.status} />}
+            <div className="flex flex-shrink-0 items-center gap-1.5">
+              {isBoosted(trip.boosted_until) && <BoostBadge />}
+              {trip.status !== 'open' && <TripStatusBadge status={trip.status} />}
+            </div>
           </div>
           <div className="flex min-w-0 items-center gap-1.5">
             <Avatar fullName={ownerName} avatarUrl={ownerAvatarUrl} size="sm" />

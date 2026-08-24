@@ -38,6 +38,7 @@ const items: NavItem[] = [
     label: 'Paiements',
     links: [
       { href: '/admin/jibli-paiements', label: 'Paiements Jibli' },
+      { href: '/admin/boost-paiements', label: 'Paiements Boost' },
       { href: '/admin/retraits', label: 'Retraits' },
       { href: '/admin/flouci-incidents', label: 'Paiements Flouci orphelins' },
     ],
