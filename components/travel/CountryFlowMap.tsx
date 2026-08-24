@@ -29,8 +29,13 @@ export function CountryFlowMap({ rows }: CountryFlowMapProps) {
 
   return (
     <Map
-      style={{ width: '100%', height: '320px' }}
-      className="overflow-hidden rounded-lg border border-slate-200"
+      // La hauteur DOIT passer par className, pas par style : le composant
+      // Map de @vis.gl/react-google-maps ignore totalement `style` dès
+      // qu'un `className` est aussi fourni (`style: className ? undefined
+      // : combinedStyle` dans sa source) — trouvé en creusant pourquoi la
+      // carte restait invisible malgré un SDK chargé avec succès (le
+      // conteneur se retrouvait sans hauteur du tout, silencieusement).
+      className="relative h-80 w-full overflow-hidden rounded-lg border border-slate-200"
       defaultCenter={{ lat: 30, lng: 20 }}
       defaultZoom={2}
       gestureHandling="cooperative"

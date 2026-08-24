@@ -146,7 +146,7 @@ async function run() {
   console.log('\n=== 3. Carte : conteneur présent quand la clé Google Maps est configurée ===')
   const mapsConfigured = Boolean(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)
   if (mapsConfigured) {
-    check('un conteneur de carte est rendu (classe attendue de CountryFlowMap)', body.includes('overflow-hidden rounded-lg border border-slate-200'))
+    check('un conteneur de carte est rendu (classe attendue de CountryFlowMap)', body.includes('h-80 w-full overflow-hidden rounded-lg border border-slate-200'))
   } else {
     console.log('  (clé Google Maps non configurée dans cet environnement — carte non rendue, comportement attendu, non testé)')
   }
