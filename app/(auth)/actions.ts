@@ -3,61 +3,21 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { signInSchema, signUpSchema } from '@/lib/validations/auth'
+import { signUpSchema } from '@/lib/validations/auth'
 import { getSiteUrl } from '@/lib/site'
-import type { UserRole } from '@/types/database'
 
 export interface AuthFormState {
   error: string | null
 }
 
-function roleHome(role: UserRole): string {
-  if (role === 'admin') return '/admin'
-  return '/'
-}
-
-export async function signIn(_prevState: AuthFormState, formData: FormData): Promise<AuthFormState> {
-  const parsed = signInSchema.safeParse({
-    email: formData.get('email'),
-    password: formData.get('password'),
-  })
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? 'Formulaire invalide.' }
-  }
-
-  const supabase = await createClient()
-  const { data, error } = await supabase.auth.signInWithPassword(parsed.data)
-
-  if (error) {
-    return { error: 'Email ou mot de passe incorrect.' }
-  }
-  if (!data.user) {
-    return { error: 'Connexion impossible, réessaie.' }
-  }
-
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('role, full_name, phone, address, country, is_active')
-    .eq('id', data.user.id)
-    .single()
-
-  if (profileError || !profile) {
-    return { error: 'Impossible de récupérer ton profil. Réessaie ou contacte le support.' }
-  }
-
-  if (!profile.is_active) {
-    await supabase.auth.signOut()
-    return { error: 'Ce compte a été désactivé. Contacte le support Livrily.' }
-  }
-
-  // Même condition que /auth/callback (flux Google/confirmation email) : ne
-  // vérifiait auparavant que full_name, ce qui laissait passer un compte
-  // créé par mot de passe sans jamais lui demander téléphone/adresse/pays.
-  const profileComplete = Boolean(profile.full_name && profile.phone && profile.address && profile.country)
-
-  revalidatePath('/', 'layout')
-  redirect(profileComplete ? roleHome(profile.role) : '/profil/completer')
-}
+// signIn() (email/mot de passe côté client) a été retirée d'ici : la
+// connexion tourne maintenant 100% côté navigateur (components/auth/
+// LoginForm.tsx, createBrowserClient) pour que auth.sessions.ip/user_agent
+// reflètent le vrai appareil de l'utilisateur — nécessaire pour "Appareils
+// connectés" (list_my_sessions/revoke_my_session). /admin/login, le 2FA
+// admin, les flux de récupération de mot de passe et signUp() ci-dessous
+// restent des Server Actions inchangées, aucun autre chemin de connexion
+// n'est concerné par ce chantier.
 
 export async function signUp(_prevState: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const parsed = signUpSchema.safeParse({
