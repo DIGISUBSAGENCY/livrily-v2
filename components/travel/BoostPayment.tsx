@@ -35,6 +35,10 @@ interface BoostPaymentProps {
   // purchase_boost_virement() côté base, cf. schema.sql — greatest()),
   // quelle que soit la durée choisie ici.
   currentBoostedUntil: string | null
+  // Où revenir après l'achat — undefined sur les fiches détail (comportement
+  // historique, revient sur l'item lui-même) ; '/profil/mes-boosts' depuis
+  // la page centralisée, pour ne pas éjecter l'utilisateur de la liste.
+  redirectTo?: string
 }
 
 const initialState: BoostActionState = { error: null }
@@ -47,14 +51,14 @@ const DEFAULT_DURATION_DAYS = 3 // ancien palier unique — reste le choix pré-
 // composant dédié plutôt qu'une réutilisation des deux autres : le fond
 // (upload preuve, formulaire) est un mirror volontaire, mais le sujet
 // (booster un item déjà publié, pas payer une mission) est différent.
-export function BoostPayment({ itemType, itemId, bankInfo, tiers, currentBoostedUntil }: BoostPaymentProps) {
+export function BoostPayment({ itemType, itemId, bankInfo, tiers, currentBoostedUntil, redirectTo }: BoostPaymentProps) {
   const sortedTiers = useMemo(() => [...tiers].sort((a, b) => a.duration_days - b.duration_days), [tiers])
   const [durationDays, setDurationDays] = useState(
     () => sortedTiers.find((t) => t.duration_days === DEFAULT_DURATION_DAYS)?.duration_days ?? sortedTiers[0]?.duration_days ?? 1
   )
   const selectedTier = sortedTiers.find((t) => t.duration_days === durationDays) ?? sortedTiers[0]
 
-  const action = purchaseBoostVirement.bind(null, itemType, itemId)
+  const action = purchaseBoostVirement.bind(null, itemType, itemId, redirectTo)
   const [state, formAction] = useFormState(action, initialState)
 
   if (sortedTiers.length === 0) {

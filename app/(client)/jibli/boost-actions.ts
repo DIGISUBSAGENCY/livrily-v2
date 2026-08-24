@@ -8,14 +8,21 @@ export interface BoostActionState {
   error: string | null
 }
 
-export type BoostItemType = 'trip' | 'offer'
+// 'request' (Phase 3, brique 6/N) : boost sur une demande (travel_requests)
+// 'open' — cf. schema.sql pour pourquoi 'matched' est exclu (plus listée
+// nulle part).
+export type BoostItemType = 'trip' | 'offer' | 'request'
 
 function detailPath(itemType: BoostItemType, itemId: string): string {
-  return itemType === 'trip' ? `/jibli/trips/${itemId}` : `/jibli/offres/${itemId}`
+  if (itemType === 'trip') return `/jibli/trips/${itemId}`
+  if (itemType === 'offer') return `/jibli/offres/${itemId}`
+  return `/jibli/${itemId}`
 }
 
 function listingPath(itemType: BoostItemType): string {
-  return itemType === 'trip' ? '/jibli/trips' : '/jibli/offres'
+  if (itemType === 'trip') return '/jibli/trips'
+  if (itemType === 'offer') return '/jibli/offres'
+  return '/jibli'
 }
 
 // Achat d'un boost par virement — un seul point d'entrée pour trip ET
@@ -34,9 +41,17 @@ function listingPath(itemType: BoostItemType): string {
 // (tarification par palier, Phase 3 brique 6/N) — l'ancienne 3-arg reste
 // intacte côté base (rien ne l'appelle plus depuis ce composant, mais elle
 // n'est pas supprimée ici ; cf. schema.sql pour le raisonnement additif).
+//
+// redirectTo (Phase 3, brique 7/N) : où revenir après l'achat. undefined
+// sur les fiches détail (comportement inchangé, revient sur l'item
+// lui-même) ; explicitement '/profil/mes-boosts' depuis la page
+// centralisée — sans ça, un achat depuis cette page éjecterait
+// l'utilisateur vers la fiche détail de CET item au lieu de le laisser sur
+// la liste complète.
 export async function purchaseBoostVirement(
   itemType: BoostItemType,
   itemId: string,
+  redirectTo: string | undefined,
   _prev: BoostActionState,
   formData: FormData
 ): Promise<BoostActionState> {
@@ -46,7 +61,7 @@ export async function purchaseBoostVirement(
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user) redirect(`/login?next=${detailPath(itemType, itemId)}`)
+  if (!user) redirect(`/login?next=${redirectTo ?? detailPath(itemType, itemId)}`)
 
   // Défense en profondeur : la RPC valide de toute façon la durée (grille
   // 1-7 jours), mais un message clair ici évite de laisser remonter une
@@ -84,5 +99,6 @@ export async function purchaseBoostVirement(
   }
 
   revalidatePath(listingPath(itemType))
-  redirect(detailPath(itemType, itemId))
+  revalidatePath('/profil/mes-boosts')
+  redirect(redirectTo ?? detailPath(itemType, itemId))
 }
