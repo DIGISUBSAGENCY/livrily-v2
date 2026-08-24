@@ -956,12 +956,20 @@ create table if not exists public.platform_settings (
   -- éditable depuis /admin/parametres/liberation-automatique — même logique
   -- que travel_commission_rate : configurable plutôt que câblé en dur.
   auto_release_delay_days integer not null default 7 check (auto_release_delay_days > 0),
+  -- Boost payant (Phase 3, brique 5/N) — un seul palier configurable pour
+  -- la v1 (pas de paliers 1/3/7 jours : rien à ce jour pour calibrer
+  -- lequel aurait du sens, ajoutable plus tard sans réécriture de schéma),
+  -- même logique que travel_commission_rate/auto_release_delay_days.
+  boost_price_tnd numeric(10,3) not null default 5 check (boost_price_tnd >= 0),
+  boost_duration_days integer not null default 3 check (boost_duration_days > 0),
   updated_at timestamptz not null default now(),
   updated_by uuid references public.profiles(id),
   constraint platform_settings_singleton check (id)
 );
 
 alter table public.platform_settings add column if not exists auto_release_delay_days integer not null default 7 check (auto_release_delay_days > 0);
+alter table public.platform_settings add column if not exists boost_price_tnd numeric(10,3) not null default 5 check (boost_price_tnd >= 0);
+alter table public.platform_settings add column if not exists boost_duration_days integer not null default 3 check (boost_duration_days > 0);
 
 insert into public.platform_settings (id, travel_commission_rate)
 values (true, 0.10)
@@ -3299,6 +3307,226 @@ $$;
 
 grant execute on function public.get_platform_member_count() to authenticated;
 grant execute on function public.get_platform_member_count() to anon;
+
+-- ============================================================================
+-- Boost payant (Phase 3, brique 5/N) — mise en avant temporaire d'un trip
+-- ou d'une offre dans les listings, contre paiement. trips.boosted_until/
+-- product_offers.boosted_until pilotent le tri (priorité au boost, pas un
+-- remplacement du tri existant) et le badge visuel côté TypeScript ; cette
+-- colonne n'est JAMAIS écrite directement par un client, même si RLS le
+-- permettrait techniquement (trips_update_own_or_admin/
+-- product_offers_update_own_or_admin n'ont qu'un USING, sans WITH CHECK
+-- explicite — Postgres réutilise alors USING comme WITH CHECK, donc rien
+-- n'empêcherait un client d'écrire boosted_until à la main sans jamais
+-- payer). Seule purchase_boost_virement() ci-dessous (SECURITY DEFINER)
+-- a le droit de la modifier — même discipline que matched_proposal_id sur
+-- product_offers, jamais écrit directement malgré une policy UPDATE
+-- permissive sur le reste de la ligne.
+--
+-- boost_payments : table séparée plutôt qu'une simple colonne, même
+-- raisonnement que travel_payments vs travel_requests — de l'argent réel,
+-- une trace d'audit indépendante, et la donnée nécessaire à un futur
+-- reporting (revenu boost, durée moyenne achetée) qu'un simple
+-- boosted_until écraserait à chaque nouvel achat. trip_id/product_offer_id
+-- : mirror du pattern source_trip_id/source_offer_id (travel_proposals),
+-- mais la contrainte d'exclusivité mutuelle est ici imposée en base (pas
+-- juste documentée) — de l'argent réel, pas seulement un lien de
+-- traçabilité.
+--
+-- Statuts volontairement plus simples que travel_payment_status : pas
+-- d'escrow/libération ici, un boost est une prestation consommée
+-- immédiatement, pas retenue puis "livrée" à une contrepartie.
+do $$ begin
+  create type public.boost_payment_status as enum ('awaiting_verification', 'paid');
+exception when duplicate_object then null; end $$;
+
+create table if not exists public.boost_payments (
+  id uuid primary key default gen_random_uuid(),
+  voyageur_id uuid not null references public.profiles(id),
+  trip_id uuid references public.trips(id),
+  product_offer_id uuid references public.product_offers(id),
+  payment_method public.payment_method not null,
+  payment_proof_url text,
+  payment_ref text,
+  amount numeric(10,3) not null check (amount >= 0),
+  duration_days integer not null check (duration_days > 0),
+  status public.boost_payment_status not null default 'awaiting_verification',
+  verified_by uuid references public.profiles(id),
+  verified_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint boost_payments_exactly_one_item check (
+    ((trip_id is not null)::int + (product_offer_id is not null)::int) = 1
+  )
+);
+
+create index if not exists boost_payments_trip_idx on public.boost_payments(trip_id);
+create index if not exists boost_payments_offer_idx on public.boost_payments(product_offer_id);
+create index if not exists boost_payments_voyageur_idx on public.boost_payments(voyageur_id);
+create index if not exists boost_payments_status_idx on public.boost_payments(status);
+
+drop trigger if exists trg_boost_payments_updated_at on public.boost_payments;
+create trigger trg_boost_payments_updated_at
+  before update on public.boost_payments
+  for each row execute function public.set_updated_at();
+
+alter table public.boost_payments enable row level security;
+
+-- Lecture : le voyageur concerné ou un admin. Aucune policy INSERT pour
+-- authenticated — même principe que wallet_credits/travel_proposal_offers :
+-- la création passe exclusivement par purchase_boost_virement()
+-- (SECURITY DEFINER), jamais en libre-service. UPDATE réservé à l'admin
+-- (mirror exact de travel_payments_update_admin_only) : seul usage,
+-- /admin/boost-paiements qui repasse awaiting_verification -> 'paid' —
+-- un rapprochement comptable a posteriori, jamais un gate d'activation
+-- (boosted_until est déjà posé depuis l'achat, cf. purchase_boost_virement
+-- ci-dessous).
+drop policy if exists "boost_payments_select_own_or_admin" on public.boost_payments;
+create policy "boost_payments_select_own_or_admin"
+  on public.boost_payments for select
+  using (voyageur_id = auth.uid() or public.is_admin());
+
+drop policy if exists "boost_payments_update_admin_only" on public.boost_payments;
+create policy "boost_payments_update_admin_only"
+  on public.boost_payments for update
+  using (public.is_admin());
+
+alter table public.trips add column if not exists boosted_until timestamptz;
+alter table public.product_offers add column if not exists boosted_until timestamptz;
+
+create index if not exists trips_boosted_until_idx on public.trips(boosted_until);
+create index if not exists product_offers_boosted_until_idx on public.product_offers(boosted_until);
+
+-- Achat d'un boost par virement — active boosted_until IMMÉDIATEMENT à
+-- l'achat, même logique que le reste du système pour le virement (ex:
+-- accept_travel_proposal : la mission passe à 'matched' tout de suite,
+-- seul le paiement reste 'awaiting_verification' jusqu'à vérification
+-- admin a posteriori) : le client n'attend jamais l'admin pour que son
+-- achat prenne effet. La transition awaiting_verification -> 'paid' est
+-- un rapprochement comptable a posteriori, jamais un gate d'activation.
+--
+-- Cumul : si l'item a déjà un boost actif, la nouvelle durée s'ajoute à la
+-- fin du boost en cours plutôt que de repartir de maintenant (greatest())
+-- — un ré-achat pendant un boost encore actif ne doit jamais "gaspiller"
+-- du temps déjà payé.
+--
+-- RPC polymorphe (p_item_type) plutôt que deux RPC dupliquées par type :
+-- contrairement à get_trip_matches_for_request/get_request_matches_for_trip
+-- (colonnes de retour différentes, dupliquées à dessein), l'opération ici
+-- est réellement identique à un nom de table près — un seul corps de
+-- fonction, pas une duplication sans gain.
+-- DROP FUNCTION d'abord : returns table modifié (boosted_until ->
+-- new_boosted_until, cf. correctif ci-dessous), Postgres refuse un
+-- changement de type de retour via create or replace. Aucune autre
+-- fonction/policy ne référence purchase_boost_virement() (vérifié) — sûr.
+drop function if exists public.purchase_boost_virement(text, uuid, text);
+
+-- CORRECTIF trouvé en testant en direct (pas une régression, un vrai bug
+-- de la première version) : la colonne de sortie s'appelait boosted_until,
+-- exactement comme les colonnes trips.boosted_until/
+-- product_offers.boosted_until référencées dans le corps de la fonction —
+-- Postgres ne peut alors plus distinguer "le paramètre de sortie" de "la
+-- colonne de table" dans les select/update qui suivent ("column reference
+-- boosted_until is ambiguous", confirmé en exécutant). Renommée en
+-- new_boosted_until pour lever toute ambiguïté.
+create or replace function public.purchase_boost_virement(
+  p_item_type text,
+  p_item_id uuid,
+  p_payment_proof_url text
+)
+returns table (payment_id uuid, new_boosted_until timestamptz)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_voyageur_id uuid;
+  v_status text;
+  v_current_boosted_until timestamptz;
+  v_price numeric(10,3);
+  v_duration_days integer;
+  v_new_boosted_until timestamptz;
+  v_payment_id uuid;
+begin
+  if p_item_type not in ('trip', 'offer') then
+    raise exception 'Type d''item invalide : %.', p_item_type;
+  end if;
+  if p_payment_proof_url is null then
+    raise exception 'Preuve de virement manquante.';
+  end if;
+
+  if p_item_type = 'trip' then
+    select voyageur_id, status, boosted_until
+      into v_voyageur_id, v_status, v_current_boosted_until
+    from public.trips
+    where id = p_item_id
+    for update;
+  else
+    select voyageur_id, status, boosted_until
+      into v_voyageur_id, v_status, v_current_boosted_until
+    from public.product_offers
+    where id = p_item_id
+    for update;
+  end if;
+
+  if v_voyageur_id is null then
+    raise exception 'Introuvable.';
+  end if;
+  if v_voyageur_id <> auth.uid() then
+    raise exception 'Seul le propriétaire peut booster cet item.';
+  end if;
+  if v_status <> 'open' then
+    raise exception 'Seul un item disponible (''open'') peut être boosté.';
+  end if;
+
+  select boost_price_tnd, boost_duration_days into v_price, v_duration_days
+  from public.platform_settings where id = true;
+
+  v_new_boosted_until := greatest(coalesce(v_current_boosted_until, now()), now()) + (v_duration_days || ' days')::interval;
+
+  insert into public.boost_payments (
+    voyageur_id, trip_id, product_offer_id, payment_method, payment_proof_url, amount, duration_days
+  ) values (
+    auth.uid(),
+    case when p_item_type = 'trip' then p_item_id else null end,
+    case when p_item_type = 'offer' then p_item_id else null end,
+    'virement', p_payment_proof_url, v_price, v_duration_days
+  ) returning id into v_payment_id;
+
+  if p_item_type = 'trip' then
+    update public.trips set boosted_until = v_new_boosted_until where id = p_item_id;
+  else
+    update public.product_offers set boosted_until = v_new_boosted_until where id = p_item_id;
+  end if;
+
+  payment_id := v_payment_id;
+  new_boosted_until := v_new_boosted_until;
+  return next;
+end;
+$$;
+
+revoke execute on function public.purchase_boost_virement(text, uuid, text) from public;
+revoke execute on function public.purchase_boost_virement(text, uuid, text) from anon;
+grant execute on function public.purchase_boost_virement(text, uuid, text) to authenticated;
+
+-- SELECT sur platform_settings est admin-only (platform_settings_select_admin_only,
+-- expose aussi travel_commission_rate, plus sensible) — un propriétaire de
+-- trip/offre a besoin de connaître le prix/durée du boost pour afficher le
+-- CTA (BoostPayment.tsx). RPC étroite plutôt que d'élargir cette policy,
+-- même raisonnement que get_public_profile_summaries().
+create or replace function public.get_boost_pricing()
+returns table (boost_price_tnd numeric, boost_duration_days integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select boost_price_tnd, boost_duration_days from public.platform_settings where id = true;
+$$;
+
+revoke execute on function public.get_boost_pricing() from public;
+revoke execute on function public.get_boost_pricing() from anon;
+grant execute on function public.get_boost_pricing() to authenticated;
 
 -- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,

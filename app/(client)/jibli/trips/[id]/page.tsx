@@ -5,9 +5,14 @@ import { Plane, Weight, Wallet, CalendarDays } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { TripStatusBadge } from '@/components/travel/TripStatusBadge'
 import { RequestMatchesPanel } from '@/components/travel/RequestMatchesPanel'
+import { BoostBadge, isBoosted } from '@/components/travel/BoostBadge'
+import { BoostPayment } from '@/components/travel/BoostPayment'
 import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
 import { formatTND } from '@/lib/format'
+import type { BankTransferInfo } from '@/types/database'
+
+type PlatformPaymentInfo = Pick<BankTransferInfo, 'bank_name' | 'account_holder' | 'rib'>
 
 interface TripPageProps {
   params: Promise<{ id: string }>
@@ -41,6 +46,23 @@ export default async function TripPage({ params }: TripPageProps) {
     data: { user },
   } = await supabase.auth.getUser()
   const isOwner = user?.id === trip.voyageur_id
+  const canBoost = isOwner && trip.status === 'open'
+
+  let bankInfo: PlatformPaymentInfo | null = null
+  let boostPriceTnd = 0
+  let boostDurationDays = 0
+  if (canBoost) {
+    // platform_settings est admin-only en RLS (expose aussi
+    // travel_commission_rate) — get_boost_pricing() (RPC étroite) plutôt
+    // qu'une lecture directe qui reviendrait toujours vide ici.
+    const [{ data: activeBankInfo }, { data: pricing }] = await Promise.all([
+      supabase.from('bank_transfer_info').select('bank_name, account_holder, rib').eq('is_active', true).limit(1).maybeSingle(),
+      supabase.rpc('get_boost_pricing'),
+    ])
+    bankInfo = activeBankInfo
+    boostPriceTnd = pricing?.[0]?.boost_price_tnd ?? 0
+    boostDurationDays = pricing?.[0]?.boost_duration_days ?? 0
+  }
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
@@ -53,7 +75,10 @@ export default async function TripPage({ params }: TripPageProps) {
           <Plane className="h-6 w-6 text-brand-600" aria-hidden />
           {trip.origin_country} → {trip.destination_city}
         </h1>
-        <TripStatusBadge status={trip.status} />
+        <div className="flex items-center gap-1.5">
+          {isBoosted(trip.boosted_until) && <BoostBadge />}
+          <TripStatusBadge status={trip.status} />
+        </div>
       </div>
 
       <Card className="mt-6">
@@ -92,6 +117,19 @@ export default async function TripPage({ params }: TripPageProps) {
           <p className="mt-4 whitespace-pre-wrap border-t border-slate-100 pt-4 text-sm text-slate-700">{trip.message}</p>
         )}
       </Card>
+
+      {canBoost && (
+        <div className="mt-6">
+          <BoostPayment
+            itemType="trip"
+            itemId={trip.id}
+            bankInfo={bankInfo}
+            priceTnd={boostPriceTnd}
+            durationDays={boostDurationDays}
+            currentBoostedUntil={isBoosted(trip.boosted_until) ? trip.boosted_until : null}
+          />
+        </div>
+      )}
 
       {isOwner && trip.status === 'open' && <RequestMatchesPanel tripId={trip.id} />}
     </main>

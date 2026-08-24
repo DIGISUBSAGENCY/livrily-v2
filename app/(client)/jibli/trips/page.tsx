@@ -4,6 +4,7 @@ import { Plane, Luggage } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { TripCard } from '@/components/travel/TripCard'
 import { TripFilters, type TripSort } from '@/components/travel/TripFilters'
+import { isBoosted } from '@/components/travel/BoostBadge'
 import { Button } from '@/components/ui/Button'
 import { pageMetadata } from '@/lib/seo'
 import { getPublicProfileSummaries } from '@/lib/profiles'
@@ -39,7 +40,15 @@ export default async function TripsPage({ searchParams }: TripsPageProps) {
   if (sort === 'date_asc') query = query.order('travel_date', { ascending: true })
   else query = query.order('created_at', { ascending: false })
 
-  const { data: trips, error } = await query
+  const { data: rawTrips, error } = await query
+
+  // Boostés en premier, tri existant conservé en second — calculé ici
+  // plutôt qu'en SQL (order by côté PostgREST ne sait pas exprimer
+  // "boosted_until > now()" facilement) : Array.prototype.sort est stable
+  // (ES2019+), donc l'ordre de la requête SQL ci-dessus sert de
+  // départage naturel au sein de chaque groupe. Volume trop faible pour
+  // justifier une RPC dédiée.
+  const trips = rawTrips ? [...rawTrips].sort((a, b) => Number(isBoosted(b.boosted_until)) - Number(isBoosted(a.boosted_until))) : rawTrips
 
   // Un seul appel batché pour toute la page (get_public_profile_summaries),
   // pas un par carte — cf. lib/profiles.ts.

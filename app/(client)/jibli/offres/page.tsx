@@ -4,6 +4,7 @@ import { Tag, Luggage } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { ProductOfferCard } from '@/components/travel/ProductOfferCard'
 import { ProductOfferFilters, type ProductOfferSort } from '@/components/travel/ProductOfferFilters'
+import { isBoosted } from '@/components/travel/BoostBadge'
 import { Button } from '@/components/ui/Button'
 import { pageMetadata } from '@/lib/seo'
 import { getPublicProfileSummaries } from '@/lib/profiles'
@@ -36,7 +37,13 @@ export default async function ProductOffersPage({ searchParams }: ProductOffersP
   if (sort === 'date_asc') query = query.order('travel_date', { ascending: true })
   else query = query.order('created_at', { ascending: false })
 
-  const { data: offers, error } = await query
+  const { data: rawOffers, error } = await query
+
+  // Boostées en premier, tri existant conservé en second — même raisonnement
+  // que /jibli/trips/page.tsx.
+  const offers = rawOffers
+    ? [...rawOffers].sort((a, b) => Number(isBoosted(b.boosted_until)) - Number(isBoosted(a.boosted_until)))
+    : rawOffers
 
   // Un seul appel batché pour toute la page (get_public_profile_summaries),
   // pas un par carte — cf. lib/profiles.ts.

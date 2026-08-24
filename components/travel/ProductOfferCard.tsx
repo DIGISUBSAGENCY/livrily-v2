@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/Card'
 import { Avatar } from '@/components/ui/Avatar'
 import { RequestPhotoPlaceholder } from '@/components/travel/RequestPhotoPlaceholder'
 import { ProductOfferStatusBadge } from '@/components/travel/ProductOfferStatusBadge'
+import { BoostBadge, isBoosted } from '@/components/travel/BoostBadge'
 import { getPublicStorageUrl } from '@/lib/storage'
 import { formatTND } from '@/lib/format'
 import type { ProductOffer } from '@/types/database'
@@ -43,7 +44,10 @@ export function ProductOfferCard({ offer, ownerName, ownerAvatarUrl }: ProductOf
             <p className="line-clamp-2 font-medium text-slate-900 transition-colors group-hover:text-brand-700">
               {offer.item_description}
             </p>
-            {offer.status !== 'open' && <ProductOfferStatusBadge status={offer.status} />}
+            <div className="flex flex-shrink-0 items-center gap-1.5">
+              {isBoosted(offer.boosted_until) && <BoostBadge />}
+              {offer.status !== 'open' && <ProductOfferStatusBadge status={offer.status} />}
+            </div>
           </div>
           {/* Groupé avec le titre (mt-0.5, serré) : signature "qui propose"
               directement sous le titre — séparé du bloc route/date/prix par

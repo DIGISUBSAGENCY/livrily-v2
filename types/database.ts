@@ -53,6 +53,11 @@ export type TripStatus = 'open' | 'matched' | 'completed' | 'cancelled'
 
 export type ProductOfferStatus = 'open' | 'matched' | 'completed' | 'cancelled'
 
+// Boost payant (Phase 3, brique 5/N) — pas de lifecycle escrow/libération
+// contrairement à TravelPaymentStatus : un boost est consommé
+// immédiatement, jamais retenu puis "livré" à une contrepartie.
+export type BoostPaymentStatus = 'awaiting_verification' | 'paid'
+
 export interface Database {
   public: {
     Tables: {
@@ -159,6 +164,8 @@ export interface Database {
           id: boolean
           travel_commission_rate: number
           auto_release_delay_days: number
+          boost_price_tnd: number
+          boost_duration_days: number
           updated_at: string
           updated_by: string | null
         }
@@ -166,6 +173,8 @@ export interface Database {
           id?: boolean
           travel_commission_rate?: number
           auto_release_delay_days?: number
+          boost_price_tnd?: number
+          boost_duration_days?: number
           updated_by?: string | null
         }
         Update: Partial<Database['public']['Tables']['platform_settings']['Insert']>
@@ -274,6 +283,11 @@ export interface Database {
           status: TripStatus
           matched_proposal_id: string | null
           expires_at: string | null
+          // Boost payant (Phase 3, brique 5/N) — jamais écrit directement
+          // par un client (RLS le permettrait techniquement mais aucun flux
+          // ne le fait), seule purchase_boost_virement() (SECURITY DEFINER)
+          // la modifie. cf. schema.sql.
+          boosted_until: string | null
           created_at: string
           updated_at: string
         }
@@ -290,6 +304,7 @@ export interface Database {
           status?: TripStatus
           matched_proposal_id?: string | null
           expires_at?: string | null
+          boosted_until?: string | null
         }
         Update: Partial<Database['public']['Tables']['trips']['Insert']>
         Relationships: []
@@ -307,6 +322,8 @@ export interface Database {
           delivery_fee: number
           status: ProductOfferStatus
           matched_proposal_id: string | null
+          // cf. trips.boosted_until ci-dessus, même discipline.
+          boosted_until: string | null
           created_at: string
           updated_at: string
         }
@@ -322,8 +339,43 @@ export interface Database {
           delivery_fee: number
           status?: ProductOfferStatus
           matched_proposal_id?: string | null
+          boosted_until?: string | null
         }
         Update: Partial<Database['public']['Tables']['product_offers']['Insert']>
+        Relationships: []
+      }
+      boost_payments: {
+        Row: {
+          id: string
+          voyageur_id: string
+          trip_id: string | null
+          product_offer_id: string | null
+          payment_method: PaymentMethod
+          payment_proof_url: string | null
+          payment_ref: string | null
+          amount: number
+          duration_days: number
+          status: BoostPaymentStatus
+          verified_by: string | null
+          verified_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          voyageur_id: string
+          trip_id?: string | null
+          product_offer_id?: string | null
+          payment_method: PaymentMethod
+          payment_proof_url?: string | null
+          payment_ref?: string | null
+          amount: number
+          duration_days: number
+          status?: BoostPaymentStatus
+          verified_by?: string | null
+          verified_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['boost_payments']['Insert']>
         Relationships: []
       }
       travel_proposal_offers: {
@@ -709,6 +761,21 @@ export interface Database {
         Args: { p_dispute_id: string; p_note: string }
         Returns: undefined
       }
+      // Boost payant (Phase 3, brique 5/N) — RPC polymorphe (p_item_type),
+      // cf. schema.sql pour le raisonnement. new_boosted_until (pas
+      // boosted_until) : nom distinct des colonnes trips/product_offers
+      // référencées dans le corps de la fonction, cf. commentaire schema.sql
+      // sur le bug d'ambiguïté trouvé en testant.
+      purchase_boost_virement: {
+        Args: { p_item_type: 'trip' | 'offer'; p_item_id: string; p_payment_proof_url: string }
+        Returns: { payment_id: string; new_boosted_until: string }[]
+      }
+      // platform_settings est admin-only en RLS — seul moyen pour un
+      // propriétaire de trip/offre de connaître le prix/durée du boost.
+      get_boost_pricing: {
+        Args: Record<string, never>
+        Returns: { boost_price_tnd: number; boost_duration_days: number }[]
+      }
       // Non exposée à `authenticated` côté DB (revoke explicite) — appelable
       // uniquement via le client service_role (createAdminClient()). Gardée
       // ici pour le typage de ce client-là, comme les autres fonctions.
@@ -743,3 +810,4 @@ export type WithdrawalRequest = Database['public']['Tables']['withdrawal_request
 export type Dispute = Database['public']['Tables']['disputes']['Row']
 export type FlouciPaymentIncident = Database['public']['Tables']['flouci_payment_incidents']['Row']
 export type TravelReview = Database['public']['Tables']['travel_reviews']['Row']
+export type BoostPayment = Database['public']['Tables']['boost_payments']['Row']
