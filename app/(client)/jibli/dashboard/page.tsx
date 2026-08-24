@@ -5,8 +5,10 @@ import { ClipboardList, Tag, ArrowLeftRight, PlusCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { IdentityBanner } from '@/components/account/IdentityBanner'
 import { DashboardStatCard } from '@/components/travel/DashboardStatCard'
+import { CountryFlowSection } from '@/components/travel/CountryFlowSection'
 import { Button } from '@/components/ui/Button'
 import { pageMetadata } from '@/lib/seo'
+import { aggregateByCountry } from '@/lib/countryGeo'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Tableau de bord',
@@ -73,6 +75,16 @@ export default async function DashboardPage() {
   // des 2 compteurs séparés déjà affichés sur /jibli.
   const proposalsCount = (sentProposalsCount ?? 0) + receivedProposalsCount
 
+  // "Activité en direct" — product_offers/travel_requests 'open' sont déjà
+  // publiquement lisibles par RLS (using(true) / status='open'), pas besoin
+  // d'un accès élevé. Agrégation par pays faite en JS (cf. lib/countryGeo.ts).
+  const [{ data: openOffersOrigins }, { data: openRequestsOrigins }] = await Promise.all([
+    supabase.from('product_offers').select('origin_country').eq('status', 'open'),
+    supabase.from('travel_requests').select('origin_country').eq('status', 'open'),
+  ])
+  const articlesFlow = aggregateByCountry((openOffersOrigins ?? []).map((o) => o.origin_country))
+  const demandesFlow = aggregateByCountry((openRequestsOrigins ?? []).map((r) => r.origin_country))
+
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
       <h1 className="text-2xl font-bold tracking-tight text-slate-900">
@@ -114,6 +126,8 @@ export default async function DashboardPage() {
           </Button>
         </Link>
       </div>
+
+      <CountryFlowSection articles={articlesFlow} demandes={demandesFlow} />
     </main>
   )
 }
