@@ -3529,6 +3529,212 @@ revoke execute on function public.get_boost_pricing() from anon;
 grant execute on function public.get_boost_pricing() to authenticated;
 
 -- ============================================================================
+-- Boost payant — tarification par palier (Phase 3, brique 6/N)
+-- ============================================================================
+-- Remplace le palier fixe unique (platform_settings.boost_price_tnd/
+-- boost_duration_days) par une grille 1-7 jours, chaque durée son propre
+-- prix. ADDITIF UNIQUEMENT dans cette brique : boost_price_tnd/
+-- boost_duration_days, get_boost_pricing() et purchase_boost_virement(text,
+-- uuid, text) restent intacts et pleinement fonctionnels — le frontend
+-- actuellement en prod (feat/boost-payant, déjà mergé) continue de tourner
+-- sans interruption sur l'ancienne forme le temps que le nouveau
+-- TypeScript (brique suivante) se déploie et bascule dessus. Une brique de
+-- nettoyage ultérieure supprimera l'ancienne forme une fois confirmé que
+-- plus rien ne l'appelle.
+create table if not exists public.boost_pricing_tiers (
+  duration_days integer primary key check (duration_days between 1 and 7),
+  price_tnd numeric(10,3) not null check (price_tnd >= 0),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references public.profiles(id)
+);
+
+drop trigger if exists trg_boost_pricing_tiers_updated_at on public.boost_pricing_tiers;
+create trigger trg_boost_pricing_tiers_updated_at
+  before update on public.boost_pricing_tiers
+  for each row execute function public.set_updated_at();
+
+alter table public.boost_pricing_tiers enable row level security;
+
+-- Même discipline que platform_settings : lecture directe admin-only
+-- (get_boost_pricing_tiers() ci-dessous est le seul chemin pour un client),
+-- écriture admin-only (pas d'UI admin dans cette brique — ajoutable plus
+-- tard sur ce même modèle, cf. /admin/parametres/commission — mais la
+-- policy est posée dès maintenant pour ne pas avoir à y revenir).
+drop policy if exists "boost_pricing_tiers_select_admin_only" on public.boost_pricing_tiers;
+create policy "boost_pricing_tiers_select_admin_only"
+  on public.boost_pricing_tiers for select
+  using (public.is_admin());
+
+drop policy if exists "boost_pricing_tiers_write_admin_only" on public.boost_pricing_tiers;
+create policy "boost_pricing_tiers_write_admin_only"
+  on public.boost_pricing_tiers for insert
+  with check (public.is_admin());
+
+drop policy if exists "boost_pricing_tiers_update_admin_only" on public.boost_pricing_tiers;
+create policy "boost_pricing_tiers_update_admin_only"
+  on public.boost_pricing_tiers for update
+  using (public.is_admin());
+
+-- Grille de départ (à ajuster plus tard via SQL direct ou une future UI
+-- admin) — dégressive au jour, ancrée sur le point actuel (5 TND/3j).
+-- on conflict do nothing : ré-exécution de ce script sans effet si déjà
+-- seedé, jamais d'écrasement d'une grille déjà ajustée manuellement.
+insert into public.boost_pricing_tiers (duration_days, price_tnd) values
+  (1, 2.000),
+  (2, 3.500),
+  (3, 5.000),
+  (4, 6.000),
+  (5, 7.000),
+  (6, 8.000),
+  (7, 9.000)
+on conflict (duration_days) do nothing;
+
+-- Grille complète pour un client authentifié — cf. get_boost_pricing() plus
+-- haut pour le même raisonnement (platform_settings/boost_pricing_tiers
+-- admin-only en RLS).
+create or replace function public.get_boost_pricing_tiers()
+returns table (duration_days integer, price_tnd numeric)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select duration_days, price_tnd from public.boost_pricing_tiers order by duration_days;
+$$;
+
+revoke execute on function public.get_boost_pricing_tiers() from public;
+revoke execute on function public.get_boost_pricing_tiers() from anon;
+grant execute on function public.get_boost_pricing_tiers() to authenticated;
+
+-- Boost sur les demandes (travel_requests) — même discipline que
+-- trips.boosted_until/product_offers.boosted_until : jamais écrit
+-- directement par un client (travel_requests_update_involved n'a qu'un
+-- USING, pas de WITH CHECK explicite — même gap latent que sur
+-- trips/product_offers, déjà documenté là-bas), seule la RPC
+-- purchase_boost_virement() ci-dessous la modifie. Uniquement pertinent
+-- pour status='open' : 'matched' n'est plus listé nulle part
+-- (app/(client)/jibli/page.tsx filtre sur 'open' uniquement, jamais
+-- élargi contrairement à Trips/Offres) — booster une demande matched
+-- n'aurait aucun effet visible, la RPC le refuse explicitement plus bas.
+alter table public.travel_requests add column if not exists boosted_until timestamptz;
+create index if not exists travel_requests_boosted_until_idx on public.travel_requests(boosted_until);
+
+-- boost_payments : 3e origine possible (request_id), en plus de trip_id/
+-- product_offer_id. La contrainte d'exclusivité mutuelle est étendue aux 3
+-- colonnes plutôt que remplacée, même raisonnement qu'à sa création.
+alter table public.boost_payments add column if not exists request_id uuid references public.travel_requests(id);
+create index if not exists boost_payments_request_idx on public.boost_payments(request_id);
+
+alter table public.boost_payments drop constraint if exists boost_payments_exactly_one_item;
+alter table public.boost_payments add constraint boost_payments_exactly_one_item check (
+  ((trip_id is not null)::int + (product_offer_id is not null)::int + (request_id is not null)::int) = 1
+);
+
+-- Achat d'un boost avec durée choisie (1-7j) — SURCHARGE de
+-- purchase_boost_virement (4 arguments, p_duration_days en plus), PAS un
+-- remplacement de la version 3-arg ci-dessus : Postgres/PostgREST
+-- distinguent les deux par arité, aucune ambiguïté, aucun DROP nécessaire.
+-- p_item_type accepte maintenant 'request' en plus de 'trip'/'offer' — le
+-- propriétaire est client_id (pas voyageur_id) dans ce cas, boost_payments
+-- .voyageur_id reste renseigné avec ce même id malgré son nom (la colonne
+-- désignait déjà "le profil qui a payé", pas un rôle distinct — ce projet
+-- n'a que 2 rôles, client et admin, cf. types/database.ts).
+--
+-- Prix calculé ICI à partir de p_duration_days (jamais un prix envoyé par
+-- le client) — si aucune ligne boost_pricing_tiers ne correspond, rejeté
+-- explicitement (durée hors grille 1-7).
+create or replace function public.purchase_boost_virement(
+  p_item_type text,
+  p_item_id uuid,
+  p_payment_proof_url text,
+  p_duration_days integer
+)
+returns table (payment_id uuid, new_boosted_until timestamptz)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_owner_id uuid;
+  v_status text;
+  v_current_boosted_until timestamptz;
+  v_price numeric(10,3);
+  v_new_boosted_until timestamptz;
+  v_payment_id uuid;
+begin
+  if p_item_type not in ('trip', 'offer', 'request') then
+    raise exception 'Type d''item invalide : %.', p_item_type;
+  end if;
+  if p_payment_proof_url is null then
+    raise exception 'Preuve de virement manquante.';
+  end if;
+
+  select price_tnd into v_price from public.boost_pricing_tiers where duration_days = p_duration_days;
+  if v_price is null then
+    raise exception 'Durée invalide : % (doit être entre 1 et 7 jours).', p_duration_days;
+  end if;
+
+  if p_item_type = 'trip' then
+    select voyageur_id, status, boosted_until
+      into v_owner_id, v_status, v_current_boosted_until
+    from public.trips
+    where id = p_item_id
+    for update;
+  elsif p_item_type = 'offer' then
+    select voyageur_id, status, boosted_until
+      into v_owner_id, v_status, v_current_boosted_until
+    from public.product_offers
+    where id = p_item_id
+    for update;
+  else
+    select client_id, status, boosted_until
+      into v_owner_id, v_status, v_current_boosted_until
+    from public.travel_requests
+    where id = p_item_id
+    for update;
+  end if;
+
+  if v_owner_id is null then
+    raise exception 'Introuvable.';
+  end if;
+  if v_owner_id <> auth.uid() then
+    raise exception 'Seul le propriétaire peut booster cet item.';
+  end if;
+  if v_status <> 'open' then
+    raise exception 'Seul un item disponible (''open'') peut être boosté.';
+  end if;
+
+  v_new_boosted_until := greatest(coalesce(v_current_boosted_until, now()), now()) + (p_duration_days || ' days')::interval;
+
+  insert into public.boost_payments (
+    voyageur_id, trip_id, product_offer_id, request_id, payment_method, payment_proof_url, amount, duration_days
+  ) values (
+    auth.uid(),
+    case when p_item_type = 'trip' then p_item_id else null end,
+    case when p_item_type = 'offer' then p_item_id else null end,
+    case when p_item_type = 'request' then p_item_id else null end,
+    'virement', p_payment_proof_url, v_price, p_duration_days
+  ) returning id into v_payment_id;
+
+  if p_item_type = 'trip' then
+    update public.trips set boosted_until = v_new_boosted_until where id = p_item_id;
+  elsif p_item_type = 'offer' then
+    update public.product_offers set boosted_until = v_new_boosted_until where id = p_item_id;
+  else
+    update public.travel_requests set boosted_until = v_new_boosted_until where id = p_item_id;
+  end if;
+
+  payment_id := v_payment_id;
+  new_boosted_until := v_new_boosted_until;
+  return next;
+end;
+$$;
+
+revoke execute on function public.purchase_boost_virement(text, uuid, text, integer) from public;
+revoke execute on function public.purchase_boost_virement(text, uuid, text, integer) from anon;
+grant execute on function public.purchase_boost_virement(text, uuid, text, integer) to authenticated;
+
+-- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,
 -- catalogue, livraison zone tarifée — a existé puis a été retiré
 -- intégralement, cf. tête de fichier).
