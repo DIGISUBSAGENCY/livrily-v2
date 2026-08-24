@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ClipboardList, Sparkles, Bell, ShieldCheck, Laptop2, ShieldAlert } from 'lucide-react'
+import { ClipboardList, Bell, ShieldCheck, Laptop2, ShieldAlert } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getIdentityStatus, isIdentityVerified } from '@/lib/identity'
 import { getMfaStatus } from '@/lib/mfa'
@@ -64,20 +64,12 @@ export default async function ParametresPage() {
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Paramètres du compte</h1>
           <p className="mt-1 text-sm text-slate-500">Identité, informations, sécurité et notifications.</p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/profil/mes-boosts">
-            <Button variant="secondary" size="sm">
-              <Sparkles className="h-3.5 w-3.5" aria-hidden />
-              Mes boosts
-            </Button>
-          </Link>
-          <Link href="/profil">
-            <Button variant="secondary" size="sm">
-              <ClipboardList className="h-3.5 w-3.5" aria-hidden />
-              Mon activité
-            </Button>
-          </Link>
-        </div>
+        <Link href="/profil">
+          <Button variant="secondary" size="sm">
+            <ClipboardList className="h-3.5 w-3.5" aria-hidden />
+            Mon activité
+          </Button>
+        </Link>
       </div>
 
       <div className="mt-6">

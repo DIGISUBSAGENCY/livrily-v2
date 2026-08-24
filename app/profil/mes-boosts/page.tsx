@@ -66,11 +66,10 @@ export default async function MesBoostsPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <Link href="/profil/parametres" className="text-sm text-brand-600 transition-colors hover:text-brand-700 hover:underline">
-        ← Paramètres
-      </Link>
-
-      <h1 className="mt-3 flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+      {/* Pas de lien retour ici — accessible depuis le menu profil
+          (UserMenu.tsx), pas imbriqué sous /profil/parametres, même
+          absence de lien retour que /profil/litiges. */}
+      <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
         <Sparkles className="h-6 w-6 text-brand-600" aria-hidden />
         Mes boosts
       </h1>

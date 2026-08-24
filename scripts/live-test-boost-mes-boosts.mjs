@@ -139,13 +139,22 @@ async function run() {
   check('statut "Boosté jusqu\'au" affiché pour la demande', bodyAfter.includes('Boosté jusqu'))
 
   // ==========================================================================
-  // 3. Lien "Mes boosts" présent sur /profil/parametres
+  // 3. /profil/parametres ne montre plus le lien (repositionné dans UserMenu)
   // ==========================================================================
-  console.log('\n=== 3. Lien depuis /profil/parametres ===')
+  // L'entrée "Mes boosts" vit dans UserMenu.tsx (menu profil déroulant,
+  // items statiques codés dans le composant client, même position que
+  // "Mes litiges") — PAS sur /profil/parametres (retiré, cf. demande de
+  // repositionnement). Son affichage dans le dropdown ouvert n'est pas
+  // vérifiable sans navigateur (contenu qui ne rend qu'après un clic
+  // côté client, jamais dans le HTML SSR brut, même limite que
+  // ConnectedSessions plus tôt dans ce projet) — vérifié par lecture du
+  // code à la place. Ici, juste un garde-fou de non-régression : le lien
+  // ne doit plus traîner sur /profil/parametres.
+  console.log('\n=== 3. /profil/parametres ne montre plus le lien (repositionné dans UserMenu) ===')
   const paramsRes = await fetch(`${BASE}/profil/parametres`, { headers: { cookie: cookieHeader } })
   const paramsBody = await paramsRes.text()
   check('/profil/parametres répond 200', paramsRes.status === 200, { status: paramsRes.status })
-  check('lien vers /profil/mes-boosts présent', paramsBody.includes('href="/profil/mes-boosts"'))
+  check('lien "Mes boosts" absent de /profil/parametres (repositionné)', !paramsBody.includes('href="/profil/mes-boosts"'))
 
   // Cleanup
   for (const id of cleanup.trips) {
