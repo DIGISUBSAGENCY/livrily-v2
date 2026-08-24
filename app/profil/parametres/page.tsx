@@ -13,6 +13,7 @@ import { PersonalInfoSummary } from '@/components/account/PersonalInfoSummary'
 import { SecuritySection } from '@/components/account/SecuritySection'
 import { DangerZone } from '@/components/account/DangerZone'
 import { NotificationToggle } from '@/components/account/NotificationToggle'
+import { ConnectedSessions } from '@/components/account/ConnectedSessions'
 import { CollapsibleSection } from '@/components/ui/CollapsibleSection'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -32,7 +33,7 @@ export default async function ParametresPage() {
 
   if (!user) redirect('/login?next=/profil/parametres')
 
-  const [{ data: profile }, identityStatus, mfaStatus] = await Promise.all([
+  const [{ data: profile }, identityStatus, mfaStatus, { data: sessions }, { data: claimsData }] = await Promise.all([
     supabase
       .from('profiles')
       .select('full_name, phone, country, address, profession, avatar_url, is_active, role')
@@ -40,9 +41,16 @@ export default async function ParametresPage() {
       .single(),
     getIdentityStatus(supabase, user.id),
     getMfaStatus(supabase),
+    supabase.rpc('list_my_sessions'),
+    // session_id n'est pas un champ de premier niveau de Session — c'est
+    // une claim du JWT (RequiredClaims, auth-js), décodée via getClaims()
+    // plutôt que réimplémentée à la main.
+    supabase.auth.getClaims(),
   ])
 
   if (!profile) redirect('/login?next=/profil/parametres')
+
+  const currentSessionId = (claimsData?.claims.session_id as string | undefined) ?? null
 
   const emailVerified = Boolean(user.email_confirmed_at)
   const kycVerified = isIdentityVerified(identityStatus)
@@ -115,18 +123,16 @@ export default async function ParametresPage() {
       </div>
 
       <div className="mt-4">
-        {/* Placeholder délibéré : list_my_sessions()/revoke_my_session() sont
-            écrites, testées et sécurisées (cf. supabase/schema.sql), mais
-            auth.sessions.ip/user_agent ne reflètent que le serveur Vercel qui
-            a fait le signInWithPassword() — jamais le vrai navigateur de
-            l'utilisateur, tant que le login reste en Server Action (cf.
-            app/(auth)/actions.ts, app/(admin-auth)/admin/login/actions.ts,
-            changePassword ci-dessus). Chantier "login côté client" à ouvrir
-            séparément avant de rebrancher ConnectedSessions.tsx ici. */}
-        <CollapsibleSection icon={<Laptop2 className="h-5 w-5" aria-hidden />} title="Appareils connectés" description="Bientôt disponible">
-          <p className="text-sm text-slate-500">
-            Le suivi des sessions actives par appareil arrive dans une prochaine mise à jour.
-          </p>
+        {/* Rebranché : /login tourne maintenant côté navigateur
+            (components/auth/LoginForm.tsx, createBrowserClient), donc
+            auth.sessions.ip/user_agent reflètent enfin le vrai appareil de
+            l'utilisateur pour les connexions email/mot de passe. /admin/*
+            reste en Server Action (hors scope) — un admin qui se connecte
+            n'aura donc pas un ip/user_agent exact ici, sans conséquence :
+            cette page est côté client, jamais visitée par un compte admin
+            dans son usage normal. */}
+        <CollapsibleSection icon={<Laptop2 className="h-5 w-5" aria-hidden />} title="Appareils connectés">
+          <ConnectedSessions initialSessions={sessions ?? []} currentSessionId={currentSessionId} />
         </CollapsibleSection>
       </div>
 
