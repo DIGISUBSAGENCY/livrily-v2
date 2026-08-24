@@ -7,3 +7,21 @@
     text-wrap: balance;
   }
 }
+
+/* Lignes de flux animées (carte "Activité en direct", /jibli/dashboard) —
+   Leaflet rend un Polyline comme un <path> SVG ; la classe passée via
+   pathOptions.className s'applique directement dessus (comportement
+   Leaflet standard), pas de wrapper React à traverser. "Marching ants" :
+   le décalage du pointillé anime en continu vers Tunisie (sens du path,
+   origine → destination). Pas dans @layer utilities : ce n'est pas une
+   classe utilitaire Tailwind, juste une règle CSS ciblée. */
+.jibli-flow-line {
+  stroke-dasharray: 6 10;
+  animation: jibli-flow-dash 1.2s linear infinite;
+}
+
+@keyframes jibli-flow-dash {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
