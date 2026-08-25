@@ -25,3 +25,22 @@
     stroke-dashoffset: -32;
   }
 }
+
+/* Attribution CartoDB/OpenStreetMap plus discrète (carte "Activité en
+   direct") — JAMAIS retirée ni masquée (obligation de licence des tuiles
+   CARTO, cf. TILE_ATTRIBUTION dans CountryFlowMap.tsx) : juste plus petite
+   et semi-transparente au repos, pleinement lisible au survol. Cible la
+   classe native générée par le contrôle d'attribution de Leaflet
+   (.leaflet-control-attribution) — pas de prop react-leaflet pour la
+   styler directement, donc CSS global comme .jibli-flow-line ci-dessus.
+   Portée globale (site entier) : seule cette carte utilise Leaflet
+   aujourd'hui, donc sans effet ailleurs pour l'instant. */
+.leaflet-control-attribution {
+  font-size: 9px;
+  opacity: 0.55;
+  transition: opacity 0.15s ease-out;
+}
+.leaflet-control-attribution:hover,
+.leaflet-control-attribution:focus-within {
+  opacity: 1;
+}
