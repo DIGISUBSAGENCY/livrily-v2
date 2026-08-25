@@ -198,6 +198,12 @@ export interface Database {
           // Optionnel — n'affecte que le score des RPC de matching Trips,
           // aucun flux existant n'en dépend. cf. schema.sql.
           item_weight_kg: number | null
+          // Boost payant (Phase 3, brique 6/N) — uniquement pertinent pour
+          // status='open' (une demande matched n'est plus listée nulle
+          // part). Même discipline que trips/product_offers.boosted_until :
+          // jamais écrit directement, seule purchase_boost_virement() la
+          // modifie. cf. schema.sql.
+          boosted_until: string | null
           created_at: string
           updated_at: string
         }
@@ -216,6 +222,7 @@ export interface Database {
           client_confirmed_at?: string | null
           completed_at?: string | null
           item_weight_kg?: number | null
+          boosted_until?: string | null
         }
         Update: Partial<Database['public']['Tables']['travel_requests']['Insert']>
         Relationships: []
@@ -350,6 +357,9 @@ export interface Database {
           voyageur_id: string
           trip_id: string | null
           product_offer_id: string | null
+          // 3e origine possible (Phase 3, brique 6/N) — cf. schema.sql,
+          // contrainte boost_payments_exactly_one_item étendue aux 3.
+          request_id: string | null
           payment_method: PaymentMethod
           payment_proof_url: string | null
           payment_ref: string | null
@@ -366,6 +376,7 @@ export interface Database {
           voyageur_id: string
           trip_id?: string | null
           product_offer_id?: string | null
+          request_id?: string | null
           payment_method: PaymentMethod
           payment_proof_url?: string | null
           payment_ref?: string | null
@@ -376,6 +387,22 @@ export interface Database {
           verified_at?: string | null
         }
         Update: Partial<Database['public']['Tables']['boost_payments']['Insert']>
+        Relationships: []
+      }
+      // Tarification par palier (Phase 3, brique 6/N) — cf. schema.sql.
+      boost_pricing_tiers: {
+        Row: {
+          duration_days: number
+          price_tnd: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          duration_days: number
+          price_tnd: number
+          updated_by?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['boost_pricing_tiers']['Insert']>
         Relationships: []
       }
       travel_proposal_offers: {
@@ -761,13 +788,20 @@ export interface Database {
         Args: { p_dispute_id: string; p_note: string }
         Returns: undefined
       }
-      // Boost payant (Phase 3, brique 5/N) — RPC polymorphe (p_item_type),
-      // cf. schema.sql pour le raisonnement. new_boosted_until (pas
-      // boosted_until) : nom distinct des colonnes trips/product_offers
-      // référencées dans le corps de la fonction, cf. commentaire schema.sql
-      // sur le bug d'ambiguïté trouvé en testant.
+      // Boost payant (Phase 3, brique 5/N puis 6/N) — RPC polymorphe
+      // (p_item_type), cf. schema.sql pour le raisonnement. new_boosted_until
+      // (pas boosted_until) : nom distinct des colonnes trips/product_offers/
+      // travel_requests référencées dans le corps de la fonction, cf.
+      // commentaire schema.sql sur le bug d'ambiguïté trouvé en testant.
+      //
+      // Cette entrée décrit la surcharge 4-arg (p_duration_days, tarification
+      // par palier) — la seule que ce projet appelle depuis le TypeScript.
+      // La surcharge 3-arg existe toujours côté base (additif, jamais
+      // supprimé) mais n'a plus de type ici : aucun code ne l'appelle plus,
+      // pas besoin de la décrire pour ce client. 'request' (en plus de
+      // 'trip'/'offer') : uniquement pour status='open' (cf. schema.sql).
       purchase_boost_virement: {
-        Args: { p_item_type: 'trip' | 'offer'; p_item_id: string; p_payment_proof_url: string }
+        Args: { p_item_type: 'trip' | 'offer' | 'request'; p_item_id: string; p_payment_proof_url: string; p_duration_days: number }
         Returns: { payment_id: string; new_boosted_until: string }[]
       }
       // platform_settings est admin-only en RLS — seul moyen pour un
@@ -775,6 +809,14 @@ export interface Database {
       get_boost_pricing: {
         Args: Record<string, never>
         Returns: { boost_price_tnd: number; boost_duration_days: number }[]
+      }
+      // Tarification par palier (Phase 3, brique 6/N) — remplace
+      // get_boost_pricing() côté app (celle-ci reste appelable côté base,
+      // additif, mais plus aucun code TypeScript ne l'utilise). Même
+      // raisonnement RLS (platform_settings/boost_pricing_tiers admin-only).
+      get_boost_pricing_tiers: {
+        Args: Record<string, never>
+        Returns: { duration_days: number; price_tnd: number }[]
       }
       // Non exposée à `authenticated` côté DB (revoke explicite) — appelable
       // uniquement via le client service_role (createAdminClient()). Gardée
@@ -811,3 +853,4 @@ export type Dispute = Database['public']['Tables']['disputes']['Row']
 export type FlouciPaymentIncident = Database['public']['Tables']['flouci_payment_incidents']['Row']
 export type TravelReview = Database['public']['Tables']['travel_reviews']['Row']
 export type BoostPayment = Database['public']['Tables']['boost_payments']['Row']
+export type BoostPricingTier = Database['public']['Tables']['boost_pricing_tiers']['Row']

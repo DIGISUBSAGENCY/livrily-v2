@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { User, ClipboardList, Settings, AlertTriangle, LogOut } from 'lucide-react'
+import { User, ClipboardList, Settings, Sparkles, AlertTriangle, LogOut } from 'lucide-react'
 import { signOut } from '@/app/(auth)/actions'
 
 interface UserMenuProps {
@@ -14,6 +14,9 @@ const menuItems = [
   { href: '/profil', label: 'Mon profil', icon: User },
   { href: '/profil/parametres', label: 'Paramètres du compte', icon: Settings },
   { href: '/profil', label: 'Mon activité', icon: ClipboardList },
+  // Même position que "Mes litiges" ci-dessous (menu profil, pas la page
+  // paramètres) — cf. demande explicite de repositionnement.
+  { href: '/profil/mes-boosts', label: 'Mes boosts', icon: Sparkles },
   { href: '/profil/litiges', label: 'Mes litiges', icon: AlertTriangle },
 ]
 
