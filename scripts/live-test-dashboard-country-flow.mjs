@@ -64,12 +64,19 @@ const UNKNOWN_ORIGIN = `Pays-Fictif-${ts}`
 const travelDate = new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString().slice(0, 10)
 const cleanup = { users: [], offers: [], requests: [] }
 
-// Extrait le count affiché sur la ligne "France" (structure exacte du
-// markup de CountryFlowSection.tsx : label puis barre puis compteur).
-// "France" a déjà de vraies données en prod (vu en explorant) — on compare
-// un AVANT/APRÈS plutôt qu'une valeur absolue, jamais fiable ici.
+// Extrait le count affiché sur la pill "France → Tunisie" (structure
+// exacte du markup de CountryFlowSection.tsx, mise à jour après le passage
+// liste-à-barres → pills, cf. chantier Leaflet). "France" a déjà de vraies
+// données en prod (vu en explorant) — on compare un AVANT/APRÈS plutôt
+// qu'une valeur absolue, jamais fiable ici.
 function franceCount(body) {
-  const match = body.match(/>France<\/p>[\s\S]{0,300}?text-slate-900">(\d+)<\/p>/)
+  // <!-- --> : React (SSR streaming) insère ce commentaire entre deux
+  // expressions JSX voisines ("France" et " → Tunisie" sont deux enfants
+  // séparés, cf. CountryFlowSection.tsx : {row.label} → Tunisie) — retiré
+  // avant de chercher la sous-chaîne, sinon faux mismatch sur un rendu
+  // pourtant correct (même artefact que rencontré ailleurs dans ce projet).
+  const flat = body.replace(/<!--\s*-->/g, '')
+  const match = flat.match(/France → Tunisie[\s\S]{0,150}?font-semibold text-white">\s*(\d+)\s*<\/span>/)
   return match ? Number(match[1]) : null
 }
 
@@ -143,13 +150,11 @@ async function run() {
     expectedCountSnippet,
   })
 
-  console.log('\n=== 3. Carte : conteneur présent quand la clé Google Maps est configurée ===')
-  const mapsConfigured = Boolean(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)
-  if (mapsConfigured) {
-    check('un conteneur de carte est rendu (classe attendue de CountryFlowMap)', body.includes('h-80 w-full overflow-hidden rounded-lg border border-slate-200'))
-  } else {
-    console.log('  (clé Google Maps non configurée dans cet environnement — carte non rendue, comportement attendu, non testé)')
-  }
+  // Section 3 (vérif du conteneur carte) retirée d'ici : la carte est
+  // passée de Google Maps à Leaflet (chantier design/leaflet-country-flow-
+  // map) — couverte désormais par scripts/live-test-dashboard-leaflet-map.mjs,
+  // pas dupliquée ici. Ce script-ci reste focalisé sur l'agrégation par
+  // pays (JS, cf. lib/countryGeo.ts), inchangée par ce chantier.
 
   // Cleanup
   for (const id of cleanup.offers) { try { await service.from('product_offers').delete().eq('id', id) } catch {} }

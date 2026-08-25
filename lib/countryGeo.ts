@@ -67,6 +67,17 @@ const ALIASES: Record<string, string> = {
   'pays-bas': 'NL', 'pays bas': 'NL', netherlands: 'NL', hollande: 'NL',
   'etats-unis': 'US', 'etats unis': 'US', usa: 'US', 'united states': 'US',
   turquie: 'TR', turkey: 'TR',
+
+  // Villes (pas des pays) rattachées à leur pays — origin_country étant du
+  // texte libre, un voyageur y tape parfois sa ville plutôt que son pays
+  // ("lyon" au lieu de "France", vu en prod) : sans ça, "lyon" et "France"
+  // ressortaient comme deux pills séparées au lieu de se regrouper. Liste
+  // de départ (grandes villes françaises, les plus probables vu le public
+  // de la plateforme) — à étendre au fil de l'usage réel (autres pays,
+  // autres villes) plutôt que de viser l'exhaustivité dès maintenant.
+  paris: 'FR', lyon: 'FR', marseille: 'FR', toulouse: 'FR', nice: 'FR',
+  nantes: 'FR', strasbourg: 'FR', montpellier: 'FR', bordeaux: 'FR', lille: 'FR',
+  rennes: 'FR', toulon: 'FR', grenoble: 'FR', dijon: 'FR', angers: 'FR',
 }
 
 const ENTRY_BY_CODE = new Map(ENTRIES.map((e) => [e.code, e]))
