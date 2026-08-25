@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/Button'
 interface MobileNavProps {
   showJibli: boolean
   showDashboard: boolean
-  showParrainage: boolean
   isLoggedIn: boolean
   displayName: string | null
 }
@@ -18,8 +17,10 @@ interface MobileNavProps {
 // sur desktop, Header.tsx affiche déjà ces liens directement. Avant ce
 // composant, "Demandes"/"Parrainage" étaient simplement `hidden` sur mobile
 // (cf. Header.tsx), sans aucun moyen d'y accéder — pas un menu à
-// "simplifier", un menu à construire.
-export function MobileNav({ showJibli, showDashboard, showParrainage, isLoggedIn, displayName }: MobileNavProps) {
+// "simplifier", un menu à construire. "Comment ça marche"/"Parrainage"
+// retirés (header + ce menu) : restent UNIQUEMENT dans Footer.tsx, où ils
+// existent déjà (liens secondaires, pas la nav principale).
+export function MobileNav({ showJibli, showDashboard, isLoggedIn, displayName }: MobileNavProps) {
   const [isOpen, setIsOpen] = useState(false)
 
   return (
@@ -79,23 +80,6 @@ export function MobileNav({ showJibli, showDashboard, showParrainage, isLoggedIn
                 Dashboard
               </Link>
             )}
-            <Link
-              href="/comment-ca-marche"
-              onClick={() => setIsOpen(false)}
-              className="rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Comment ça marche
-            </Link>
-            {showParrainage && (
-              <Link
-                href="/parrainage"
-                onClick={() => setIsOpen(false)}
-                className="rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Parrainage
-              </Link>
-            )}
-
             <div className="mt-2 border-t border-slate-100 pt-2">
               {isLoggedIn ? (
                 <div className="flex items-center justify-between px-3 py-2">
