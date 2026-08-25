@@ -3775,6 +3775,115 @@ revoke execute on function public.purchase_boost_virement(text, uuid, text, inte
 revoke execute on function public.purchase_boost_virement(text, uuid, text, integer) from anon;
 grant execute on function public.purchase_boost_virement(text, uuid, text, integer) to authenticated;
 
+-- Notifications boost (chantier notifications+admin pricing), brique 3/3 —
+-- "Boost terminé". boosted_until peut expirer à n'importe quelle heure
+-- (durée en jours, mais posée sur un timestamp précis à l'achat) : pas
+-- assez réactif de réutiliser auto_release_stale_payments (quotidien 3h)
+-- tel quel, cf. le cron horaire dédié plus bas.
+--
+-- boost_expiry_notified_at plutôt qu'un simple "boosted_until < now()" :
+-- idempotence — sans cette colonne, chaque run du cron renotifierait tous
+-- les items déjà expirés depuis le run précédent. Comparée à boosted_until
+-- (pas juste "is not null") pour gérer le re-boost après expiration : un
+-- item déjà notifié une fois, puis re-boosté puis re-expiré, doit
+-- redéclencher une notification (boost_expiry_notified_at < le NOUVEAU
+-- boosted_until, donc plus "à jour").
+alter table public.trips add column if not exists boost_expiry_notified_at timestamptz;
+alter table public.product_offers add column if not exists boost_expiry_notified_at timestamptz;
+alter table public.travel_requests add column if not exists boost_expiry_notified_at timestamptz;
+
+-- returns table (item_type, item_id) plutôt que void : observabilité au
+-- même titre que auto_release_stale_payments (returns table
+-- released_request_id) — permet de vérifier ce qu'un run a traité,
+-- notamment pour le test en direct de ce commit.
+create or replace function public.notify_expired_boosts()
+returns table (item_type text, item_id uuid)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row record;
+begin
+  for v_row in
+    select id, voyageur_id as owner_id from public.trips
+    where boosted_until is not null and boosted_until < now()
+      and (boost_expiry_notified_at is null or boost_expiry_notified_at < boosted_until)
+  loop
+    insert into public.notifications (user_id, type, priority, title, body, related_object_type, related_object_id)
+    values (v_row.owner_id, 'boost_update', 'normal', 'Boost terminé', 'La mise en avant de ton trajet est arrivée à échéance.', 'trip', v_row.id);
+    update public.trips set boost_expiry_notified_at = now() where id = v_row.id;
+    item_type := 'trip'; item_id := v_row.id; return next;
+  end loop;
+
+  for v_row in
+    select id, voyageur_id as owner_id from public.product_offers
+    where boosted_until is not null and boosted_until < now()
+      and (boost_expiry_notified_at is null or boost_expiry_notified_at < boosted_until)
+  loop
+    insert into public.notifications (user_id, type, priority, title, body, related_object_type, related_object_id)
+    values (v_row.owner_id, 'boost_update', 'normal', 'Boost terminé', 'La mise en avant de ton offre est arrivée à échéance.', 'product_offer', v_row.id);
+    update public.product_offers set boost_expiry_notified_at = now() where id = v_row.id;
+    item_type := 'offer'; item_id := v_row.id; return next;
+  end loop;
+
+  -- travel_requests, contrairement à trips/product_offers, a un trigger
+  -- d'invariants (enforce_travel_request_transitions) qui rejette toute
+  -- update venant d'un acteur qui n'est ni le client, ni le voyageur
+  -- accepté, ni admin — SECURITY DEFINER contourne les policies RLS mais
+  -- PAS les triggers (même commentaire déjà posé sur
+  -- enforce_travel_request_transitions ci-dessus). Bypass explicite,
+  -- exactement comme accept_travel_proposal()/auto_release_stale_payments()
+  -- le font déjà pour la même raison — trouvé en testant en direct (bug
+  -- réel : "Non autorisé à modifier cette demande.", pas une régression,
+  -- jamais fonctionné sans ce bypass).
+  perform set_config('jibli.bypass_transition_checks', 'true', true);
+
+  for v_row in
+    select id, client_id as owner_id from public.travel_requests
+    where boosted_until is not null and boosted_until < now()
+      and (boost_expiry_notified_at is null or boost_expiry_notified_at < boosted_until)
+  loop
+    insert into public.notifications (user_id, type, priority, title, body, related_object_type, related_object_id)
+    values (v_row.owner_id, 'boost_update', 'normal', 'Boost terminé', 'La mise en avant de ta demande est arrivée à échéance.', 'travel_request', v_row.id);
+    update public.travel_requests set boost_expiry_notified_at = now() where id = v_row.id;
+    item_type := 'request'; item_id := v_row.id; return next;
+  end loop;
+
+  perform set_config('jibli.bypass_transition_checks', 'false', true);
+end;
+$$;
+
+-- Même posture que create_notification() : SECURITY DEFINER + revoke
+-- explicite des rôles concrets (le grant par défaut à authenticated de ce
+-- projet Supabase n'est pas retiré par un simple revoke from public, cf.
+-- correctif documenté sur create_notification ci-dessus) — cette fonction
+-- écrit des notifications pour n'importe quel utilisateur, jamais
+-- appelable en libre-service. Seul pg_cron (contexte système, hors
+-- rôles PostgREST) et un admin via le SQL Editor peuvent l'invoquer.
+revoke execute on function public.notify_expired_boosts() from public;
+revoke execute on function public.notify_expired_boosts() from authenticated;
+revoke execute on function public.notify_expired_boosts() from anon;
+
+-- pg_cron horaire (contrairement au quotidien 3h de
+-- auto-release-stale-payments, cf. commentaire sur boost_expiry_notified_at
+-- ci-dessus). create extension if not exists : déjà exécuté par le bloc
+-- auto-release-stale-payments plus haut si ce script tourne dans l'ordre,
+-- mais idempotent et sans coût si répété — mêmes garde-fous que là-bas si
+-- jamais exécuté seul.
+create extension if not exists pg_cron;
+
+do $$
+begin
+  if not exists (select 1 from cron.job where jobname = 'notify-expired-boosts') then
+    perform cron.schedule(
+      'notify-expired-boosts',
+      '0 * * * *', -- toutes les heures, à l'heure pile (heure du serveur, généralement UTC)
+      $cron$select public.notify_expired_boosts();$cron$
+    );
+  end if;
+end $$;
+
 -- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,
 -- catalogue, livraison zone tarifée — a existé puis a été retiré
