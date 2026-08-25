@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { requestWalletWithdrawal } from '@/app/(client)/parrainage/actions'
+import { requestWalletWithdrawal } from '@/app/(client)/jibli/dashboard/actions'
 import { Label } from '@/components/ui/Label'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'

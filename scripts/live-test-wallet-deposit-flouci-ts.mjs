@@ -119,7 +119,7 @@ async function run() {
   console.log('\n=== 1. Garde-fous /api/flouci/wallet-callback ===')
 
   const noDepositRes = await fetch(`${BASE}/api/flouci/wallet-callback`, { redirect: 'manual' })
-  check('deposit_id manquant → redirige vers /parrainage?flouci=error', noDepositRes.headers.get('location')?.includes('/parrainage?flouci=error'), { location: noDepositRes.headers.get('location') })
+  check('deposit_id manquant → redirige vers /jibli/dashboard?flouci=error', noDepositRes.headers.get('location')?.includes('/jibli/dashboard?flouci=error'), { location: noDepositRes.headers.get('location') })
 
   const { data: depositForGuards } = await service
     .from('wallet_deposits')
@@ -131,7 +131,7 @@ async function run() {
   check('non authentifié → redirige vers /login', notAuthRes.headers.get('location')?.includes('/login'), { location: notAuthRes.headers.get('location') })
 
   const wrongOwnerRes = await fetch(`${BASE}/api/flouci/wallet-callback?deposit_id=${depositForGuards.id}`, { headers: { cookie: otherCookie }, redirect: 'manual' })
-  check('dépôt d\'un autre utilisateur → redirige flouci=error', wrongOwnerRes.headers.get('location')?.includes('/parrainage?flouci=error'), { location: wrongOwnerRes.headers.get('location') })
+  check('dépôt d\'un autre utilisateur → redirige flouci=error', wrongOwnerRes.headers.get('location')?.includes('/jibli/dashboard?flouci=error'), { location: wrongOwnerRes.headers.get('location') })
   const { data: depositAfterWrongOwner } = await service.from('wallet_deposits').select('status').eq('id', depositForGuards.id).single()
   check('statut inchangé après tentative par un autre utilisateur', depositAfterWrongOwner?.status === 'awaiting_verification', { depositAfterWrongOwner })
 
@@ -146,7 +146,7 @@ async function run() {
   cleanup.deposits.push(depositFail.id)
 
   const failRes = await fetch(`${BASE}/api/flouci/wallet-callback?deposit_id=${depositFail.id}&result=failed`, { headers: { cookie: clientCookie }, redirect: 'manual' })
-  check('result=failed → redirige flouci=failed', failRes.headers.get('location')?.includes('/parrainage?flouci=failed'), { location: failRes.headers.get('location') })
+  check('result=failed → redirige flouci=failed', failRes.headers.get('location')?.includes('/jibli/dashboard?flouci=failed'), { location: failRes.headers.get('location') })
   const { data: depositAfterFail } = await service.from('wallet_deposits').select('status').eq('id', depositFail.id).single()
   check('statut passé à rejected', depositAfterFail?.status === 'rejected', { depositAfterFail })
 
@@ -162,7 +162,7 @@ async function run() {
   cleanup.deposits.push(depositUnconfigured.id)
 
   const unconfiguredRes = await fetch(`${BASE}/api/flouci/wallet-callback?deposit_id=${depositUnconfigured.id}&payment_id=fake-payment-id`, { headers: { cookie: clientCookie }, redirect: 'manual' })
-  check('payment_id présent mais Flouci non configuré → redirige flouci=error (pas de crash HTTP 500)', unconfiguredRes.headers.get('location')?.includes('/parrainage?flouci=error'), { status: unconfiguredRes.status, location: unconfiguredRes.headers.get('location') })
+  check('payment_id présent mais Flouci non configuré → redirige flouci=error (pas de crash HTTP 500)', unconfiguredRes.headers.get('location')?.includes('/jibli/dashboard?flouci=error'), { status: unconfiguredRes.status, location: unconfiguredRes.headers.get('location') })
   const { data: depositAfterUnconfigured } = await service.from('wallet_deposits').select('status').eq('id', depositUnconfigured.id).single()
   check('statut toujours awaiting_verification (jamais crédité ni rejeté sur une simple erreur de config)', depositAfterUnconfigured?.status === 'awaiting_verification', { depositAfterUnconfigured })
 
@@ -183,19 +183,15 @@ async function run() {
   check('dépôt flouci en attente (30 TND) absent de la liste admin', !adminPageBody.includes('30.000') && !adminPageBody.includes('30,000'), {})
 
   // ==========================================================================
-  // 5. /parrainage : sélecteur de méthode Virement/Flouci présent.
-  //
-  // Chantier brique 4/N (restructuration en onglets) : ce sélecteur vit
-  // dans l'onglet "Portefeuille", pas rendu dans le DOM réel par défaut
-  // (onglet "Parrainage" actif au premier chargement) — ?flouci=success
-  // force ce défaut côté serveur, même mécanique qu'un vrai retour de
-  // paiement Flouci (cf. ParrainageTabs/page.tsx).
+  // 5. /jibli/dashboard : sélecteur de méthode Virement/Flouci présent.
+  //    Section Portefeuille toujours dans le DOM (chantier séparation
+  //    Parrainage/Portefeuille — plus d'onglet caché ici).
   // ==========================================================================
-  console.log('\n=== 5. /parrainage — sélecteur de méthode ===')
-  const parrainageRes = await fetch(`${BASE}/parrainage?flouci=success`, { headers: { cookie: clientCookie } })
-  const parrainageBody = await parrainageRes.text()
-  check('bouton "Virement" présent', parrainageBody.includes('>Virement<'), {})
-  check('bouton "Flouci" présent', parrainageBody.includes('>Flouci<'), {})
+  console.log('\n=== 5. /jibli/dashboard — sélecteur de méthode ===')
+  const dashboardRes = await fetch(`${BASE}/jibli/dashboard`, { headers: { cookie: clientCookie } })
+  const dashboardBody = await dashboardRes.text()
+  check('bouton "Virement" présent', dashboardBody.includes('>Virement<'), {})
+  check('bouton "Flouci" présent', dashboardBody.includes('>Flouci<'), {})
 
   // ==========================================================================
   // 6. Vrai navigateur (Playwright) : clic "Payer avec Flouci" → erreur
@@ -212,11 +208,10 @@ async function run() {
     })
   )
   const page = await context.newPage()
-  await page.goto(`${BASE}/parrainage`, { waitUntil: 'networkidle' })
-  // Chantier brique 4/N (restructuration en onglets) : "Portefeuille" doit
-  // être ouvert AVANT de chercher le formulaire de dépôt (onglet
-  // "Parrainage" actif par défaut sans ?flouci=...).
-  await page.getByRole('button', { name: 'Portefeuille', exact: true }).click()
+  // Section Portefeuille directement sur /jibli/dashboard, plus d'onglet à
+  // ouvrir (chantier séparation Parrainage/Portefeuille — l'ancien
+  // /parrainage à onglets a été supprimé).
+  await page.goto(`${BASE}/jibli/dashboard`, { waitUntil: 'networkidle' })
   // Montant obligatoire AVANT le clic : handleFlouci() valide le montant
   // côté client avant d'appeler la Server Action — sans ça, l'erreur
   // affichée serait "Indique un montant valide.", pas le message "pas
@@ -235,7 +230,7 @@ async function run() {
     flouciPanelVisible = await payFlouciButton.isVisible().catch(() => false)
     if (!flouciPanelVisible) await page.waitForTimeout(1000)
   }
-  check('panneau Flouci visible après clic sur l\'onglet (avec ré-essai hydratation)', flouciPanelVisible, {})
+  check('panneau Flouci visible après clic sur le bouton de méthode (avec ré-essai hydratation)', flouciPanelVisible, {})
 
   await payFlouciButton.click()
   const errorLocator = page.getByText("Le paiement Flouci n'est pas encore configuré")

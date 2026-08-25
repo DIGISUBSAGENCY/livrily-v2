@@ -1,5 +1,7 @@
 // Test en direct du commit 3 (portefeuille — retrait), couche TypeScript.
-// Couvre : rendu du formulaire/historique sur /parrainage, page admin
+// Couvre : rendu du formulaire/historique sur /jibli/dashboard (section
+// Portefeuille — déménagée depuis /parrainage, chantier séparation
+// Parrainage/Portefeuille), page admin
 // /admin/portefeuille-retraits (liste + boutons), blocage non-admin, lien
 // AdminNav (vérification source, même raisonnement que le commit 1 —
 // dropdown fermé par défaut, jamais dans le HTML initial). requestWalletWithdrawal
@@ -106,17 +108,14 @@ async function run() {
   await service.from('profiles').update({ wallet_balance: 100 }).eq('id', clientId)
 
   // ==========================================================================
-  // 1. /parrainage : formulaire de retrait + solde.
-  //
-  // Chantier brique 4/N (restructuration en onglets) : ce formulaire vit
-  // dans l'onglet "Portefeuille", pas rendu dans le DOM réel par défaut —
-  // ?flouci=success force ce défaut côté serveur (cf. ParrainageTabs/
-  // page.tsx), même mécanique qu'un vrai retour de paiement Flouci.
+  // 1. /jibli/dashboard : formulaire de retrait + solde. Section
+  //    Portefeuille toujours dans le DOM (chantier séparation Parrainage/
+  //    Portefeuille — plus d'onglet caché ici).
   // ==========================================================================
-  console.log('\n=== 1. /parrainage — formulaire de retrait ===')
-  const pageRes = await fetch(`${BASE}/parrainage?flouci=success`, { headers: { cookie: clientCookie } })
+  console.log('\n=== 1. /jibli/dashboard — formulaire de retrait ===')
+  const pageRes = await fetch(`${BASE}/jibli/dashboard`, { headers: { cookie: clientCookie } })
   const pageBody = (await pageRes.text()).replace(/<!--\s*-->/g, '')
-  check('GET /parrainage → 200', pageRes.status === 200, { status: pageRes.status })
+  check('GET /jibli/dashboard → 200', pageRes.status === 200, { status: pageRes.status })
   check('formulaire de retrait présent (input withdrawal_amount)', pageBody.includes('id="withdrawal_amount"'), {})
   check('bouton "Demander le retrait" présent', pageBody.includes('Demander le retrait'), {})
   check('solde de 100 affiché', pageBody.includes('100.000') || pageBody.includes('100,000'), {})
@@ -134,11 +133,7 @@ async function run() {
     })
   )
   const page = await context.newPage()
-  await page.goto(`${BASE}/parrainage`, { waitUntil: 'networkidle' })
-  // Chantier brique 4/N (restructuration en onglets) : "Portefeuille" doit
-  // être ouvert AVANT de chercher le formulaire de retrait (onglet
-  // "Parrainage" actif par défaut sans ?flouci=...).
-  await page.getByRole('button', { name: 'Portefeuille', exact: true }).click()
+  await page.goto(`${BASE}/jibli/dashboard`, { waitUntil: 'networkidle' })
   await page.getByLabel('Montant à retirer (TND)').fill('35')
   const requestButton = page.getByRole('button', { name: 'Demander le retrait' })
   await requestButton.click()

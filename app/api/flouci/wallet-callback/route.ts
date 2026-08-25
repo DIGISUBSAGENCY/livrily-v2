@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   const result = searchParams.get('result')
 
   if (!depositId) {
-    return NextResponse.redirect(`${origin}/parrainage?flouci=error`)
+    return NextResponse.redirect(`${origin}/jibli/dashboard?flouci=error`)
   }
 
   const supabase = await createClient()
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    return NextResponse.redirect(`${origin}/login?next=/parrainage`)
+    return NextResponse.redirect(`${origin}/login?next=/jibli/dashboard`)
   }
 
   // Lecture via la session RÉELLE de l'utilisateur (RLS
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     .maybeSingle()
 
   if (!deposit || deposit.profile_id !== user.id || deposit.payment_method !== 'flouci') {
-    return NextResponse.redirect(`${origin}/parrainage?flouci=error`)
+    return NextResponse.redirect(`${origin}/jibli/dashboard?flouci=error`)
   }
 
   const admin = createAdminClient()
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
         code: error.code,
       })
     }
-    return NextResponse.redirect(`${origin}/parrainage?flouci=failed`)
+    return NextResponse.redirect(`${origin}/jibli/dashboard?flouci=failed`)
   }
 
   try {
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
 
     if (!success) {
       await admin.rpc('reject_wallet_deposit_flouci', { p_deposit_id: depositId, p_profile_id: user.id })
-      return NextResponse.redirect(`${origin}/parrainage?flouci=failed`)
+      return NextResponse.redirect(`${origin}/jibli/dashboard?flouci=failed`)
     }
 
     const { error } = await admin.rpc('credit_wallet_deposit_flouci', {
@@ -91,12 +91,12 @@ export async function GET(request: Request) {
         depositId,
         paymentId,
       })
-      return NextResponse.redirect(`${origin}/parrainage?flouci=error`)
+      return NextResponse.redirect(`${origin}/jibli/dashboard?flouci=error`)
     }
 
-    return NextResponse.redirect(`${origin}/parrainage?flouci=success`)
+    return NextResponse.redirect(`${origin}/jibli/dashboard?flouci=success`)
   } catch (err) {
     const isKnownError = err instanceof FlouciApiError || err instanceof FlouciConfigError
-    return NextResponse.redirect(`${origin}/parrainage?flouci=${isKnownError ? 'error' : 'unknown'}`)
+    return NextResponse.redirect(`${origin}/jibli/dashboard?flouci=${isKnownError ? 'error' : 'unknown'}`)
   }
 }
