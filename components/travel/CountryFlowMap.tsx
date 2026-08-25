@@ -25,22 +25,52 @@ const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r
 const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener noreferrer">CARTO</a>'
 
+// row.label peut venir du texte libre saisi par un voyageur (repli non
+// reconnu, cf. lib/countryGeo.ts) — jamais interpolé tel quel dans du HTML
+// brut (L.divIcon assigne `html` en innerHTML, sans échappement). Seul
+// point de ce fichier qui interpole du texte utilisateur (totalCount est
+// un nombre, pas un risque).
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 // DivIcon = HTML brut injecté par Leaflet hors de l'arbre React — les
 // classes Tailwind s'appliquent quand même (la feuille de style compilée
 // est globale, pas liée au rendu React). animate-ping = animation Tailwind
-// native pour le halo pulsant, pas de CSS custom nécessaire pour ça. Pas de
-// chiffre sur ce point (contrairement au hub Tunisie, cf. hubDivIcon) —
-// juste le halo, le compte par pays vit déjà dans les pills sous la carte
-// (cf. CountryFlowSection.tsx), pas la peine de le répéter sur un cercle de
-// 16px. Vérifié : aucun texte interpolé ici (aucun `${...}` dans ce html),
-// donc pas le même risque de débordement que hubDivIcon — rien à corriger
-// sur ce marqueur.
-function countryDivIcon(): L.DivIcon {
+// native pour le halo pulsant, pas de CSS custom nécessaire pour ça.
+//
+// Étiquette du pays (nom) : intégrée directement dans ce HTML plutôt qu'un
+// <Tooltip permanent> Leaflet séparé — cohérent avec le pattern déjà en
+// place ici (halo et badge hub sont déjà du HTML custom dans le même
+// divIcon), évite d'introduire un nouveau primitif Leaflet et sa propre
+// classe CSS globale à thémer. Positionnée en `absolute`, EN DEHORS de la
+// boîte nominale 16×16 (iconSize/iconAnchor inchangés, donc le point
+// d'ancrage géographique du cercle ne bouge pas) — Leaflet ne rogne pas ce
+// dépassement (vérifié : pas de overflow:hidden sur .leaflet-marker-icon
+// dans son CSS).
+//
+// placeAbove : au-dessus si le hub Tunisie est en dessous de ce marqueur
+// (pays à une latitude ≥ Tunisie), en dessous sinon — évite que le label
+// empiète sur le badge du hub pour les pays proches de la Tunisie
+// (Algérie/Libye/Mauritanie/Golfe, au sud de la Tunisie). Approximation
+// sur lat/lng bruts (pas la précision pixel-projeté de AnimatedFlowArrow) :
+// suffisant ici, il s'agit juste d'éloigner le label du hub, pas de le
+// superposer exactement à un tracé. Chevauchement ENTRE deux labels de
+// pays proches l'un de l'autre (pas du hub) non traité — volume de pays
+// actuel trop faible pour justifier un algorithme de placement générique.
+function countryDivIcon(label: string, placeAbove: boolean): L.DivIcon {
+  const labelPositionClass = placeAbove ? 'bottom-full mb-1' : 'top-full mt-1'
   return L.divIcon({
     html: `
       <span class="relative flex h-4 w-4">
         <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-75"></span>
         <span class="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-brand-600 ring-2 ring-white"></span>
+        <span class="absolute left-1/2 ${labelPositionClass} -translate-x-1/2 whitespace-nowrap rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 shadow-sm">${escapeHtml(label)}</span>
       </span>
     `,
     className: '', // vide : sans ça Leaflet ajoute sa propre classe par défaut (fond blanc, bordure) par-dessus notre HTML
@@ -215,7 +245,7 @@ export function CountryFlowMap({ rows, totalCount }: CountryFlowMapProps) {
         <Marker
           key={`marker-${row.label}`}
           position={[row.lat as number, row.lng as number]}
-          icon={countryDivIcon()}
+          icon={countryDivIcon(row.label, (row.lat as number) >= TUNISIA[0])}
           alt={`${row.label} — ${row.count} annonce${row.count > 1 ? 's' : ''}`}
         />
       ))}
