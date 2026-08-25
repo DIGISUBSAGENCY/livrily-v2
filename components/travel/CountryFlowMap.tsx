@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef } from 'react'
-import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { CountryFlowRow } from '@/lib/countryGeo'
@@ -32,7 +32,9 @@ const TILE_ATTRIBUTION =
 // chiffre sur ce point (contrairement au hub Tunisie, cf. hubDivIcon) —
 // juste le halo, le compte par pays vit déjà dans les pills sous la carte
 // (cf. CountryFlowSection.tsx), pas la peine de le répéter sur un cercle de
-// 16px.
+// 16px. Vérifié : aucun texte interpolé ici (aucun `${...}` dans ce html),
+// donc pas le même risque de débordement que hubDivIcon — rien à corriger
+// sur ce marqueur.
 function countryDivIcon(): L.DivIcon {
   return L.divIcon({
     html: `
@@ -48,13 +50,21 @@ function countryDivIcon(): L.DivIcon {
 }
 
 // Hub Tunisie : même traitement mais plus grand, avec le badge du total —
-// interpolé directement dans le HTML (re-généré si totalCount change).
+// interpolé directement dans le HTML (re-généré si totalCount change). Le
+// CERCLE (h-11 w-11, iconSize) reste fixe quel que soit le nombre de
+// chiffres — seul le texte s'adapte (overflow-hidden + font-size réduite à
+// partir de 3 chiffres) : sans ça, "201" en text-sm déborde visiblement du
+// cercle de 44px et donne l'impression que le badge entier grandit, alors
+// que le cercle lui-même ne bougeait déjà pas (bug trouvé en le signalant :
+// c'est bien le TEXTE qui débordait, pas le conteneur qui grandissait).
 function hubDivIcon(totalCount: number): L.DivIcon {
+  const digits = String(totalCount).length
+  const textSizeClass = digits >= 3 ? 'text-xs' : 'text-sm'
   return L.divIcon({
     html: `
       <span class="relative flex h-11 w-11 items-center justify-center">
         <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-60"></span>
-        <span class="relative flex h-11 w-11 items-center justify-center rounded-full bg-brand-700 text-sm font-bold text-white ring-4 ring-white shadow-soft-lg">
+        <span class="relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-brand-700 ${textSizeClass} font-bold leading-none text-white ring-4 ring-white shadow-soft-lg">
           ${totalCount}
         </span>
       </span>
@@ -75,15 +85,6 @@ function hubDivIcon(totalCount: number): L.DivIcon {
 // re-render à chaque frame (coûteux avec plusieurs pays affichés à la
 // fois).
 const ARROW_CYCLE_MS = 2600
-
-function bearingDegrees(originLat: number, originLng: number, destLat: number, destLng: number): number {
-  // atan2(Δlng, Δlat) : 0° = vers le haut (nord), sens horaire — correspond
-  // directement à une rotation CSS classique (transform: rotate()).
-  // Approximation planaire, cohérente avec la ligne droite du Polyline
-  // ci-dessous (pas un vrai calcul géodésique, volontairement, même
-  // simplification que la ligne elle-même).
-  return (Math.atan2(destLng - originLng, destLat - originLat) * 180) / Math.PI
-}
 
 function arrowDivIcon(bearingDeg: number): L.DivIcon {
   return L.divIcon({
@@ -113,28 +114,65 @@ interface AnimatedFlowArrowProps {
 // (et nettoie via la fonction de retour de useEffect, pas juste au
 // démontage final de la carte) toute flèche dont le pays n'est plus dans
 // l'onglet actif — vérifié en direct, cf. script de test.
+//
+// Position ET angle calculés en espace ÉCRAN PROJETÉ (map.latLngToLayerPoint),
+// PAS sur les lat/lng bruts — bug trouvé et corrigé : Leaflet dessine le
+// Polyline comme une ligne droite entre les points PROJETÉS (Web Mercator,
+// CRS par défaut, jamais changé sur cette carte), pas entre les lat/lng
+// bruts. Une interpolation/un atan2 sur lat/lng bruts suit donc un tracé ET
+// un angle différents de ce que l'œil voit réellement sur cette carte —
+// visible surtout sur de longues distances/hautes latitudes (Europe →
+// Tunisie, exactement notre cas). En interpolant dans le MÊME espace que
+// celui utilisé pour dessiner la ligne, les deux sont, par construction,
+// rigoureusement superposés à tout instant t.
 function AnimatedFlowArrow({ originLat, originLng }: AnimatedFlowArrowProps) {
+  const map = useMap()
   const markerRef = useRef<L.Marker>(null)
-  const bearing = useMemo(
-    () => bearingDegrees(originLat, originLng, TUNISIA[0], TUNISIA[1]),
-    [originLat, originLng]
-  )
+
+  // L'angle écran entre 2 points PROJETÉS fixes est invariant au zoom
+  // (Web Mercator n'applique qu'une mise à l'échelle isotrope + translation
+  // entre niveaux de zoom — jamais de déformation de l'angle relatif entre
+  // 2 points fixes) : calculé une seule fois, pas recalculé à chaque frame,
+  // contrairement à la position (cf. useEffect ci-dessous).
+  const bearing = useMemo(() => {
+    const originPoint = map.latLngToLayerPoint([originLat, originLng])
+    const destPoint = map.latLngToLayerPoint(TUNISIA)
+    const dx = destPoint.x - originPoint.x
+    const dy = destPoint.y - originPoint.y
+    // En pixels écran, y croît vers le BAS (contraire d'un repère
+    // mathématique standard) — atan2(dx, -dy) donne 0° = vers le haut de
+    // l'écran, cohérent avec l'icône dessinée pointe-en-haut (cf.
+    // arrowDivIcon, path SVG qui pointe vers y=0).
+    return (Math.atan2(dx, -dy) * 180) / Math.PI
+  }, [map, originLat, originLng])
 
   useEffect(() => {
     let frameId: number
     const start = performance.now()
+    const originLatLng = L.latLng(originLat, originLng)
+    const destLatLng = L.latLng(TUNISIA[0], TUNISIA[1])
 
     function tick(now: number) {
       const t = ((now - start) % ARROW_CYCLE_MS) / ARROW_CYCLE_MS
-      const lat = originLat + (TUNISIA[0] - originLat) * t
-      const lng = originLng + (TUNISIA[1] - originLng) * t
-      markerRef.current?.setLatLng([lat, lng])
+
+      // Reprojeté à CHAQUE frame (pas mémorisé) : latLngToLayerPoint
+      // dépend du zoom/pan courants, qui peuvent changer pendant que
+      // l'animation tourne. Interpolation linéaire en pixels (mêmes
+      // points, même méthode que ceux utilisés par le Polyline pour
+      // dessiner la ligne), puis reconversion en lat/lng pour
+      // marker.setLatLng (Leaflet positionne toujours un Marker par
+      // lat/lng, jamais par pixel brut).
+      const originPoint = map.latLngToLayerPoint(originLatLng)
+      const destPoint = map.latLngToLayerPoint(destLatLng)
+      const point = originPoint.add(destPoint.subtract(originPoint).multiplyBy(t))
+      markerRef.current?.setLatLng(map.layerPointToLatLng(point))
+
       frameId = requestAnimationFrame(tick)
     }
     frameId = requestAnimationFrame(tick)
 
     return () => cancelAnimationFrame(frameId)
-  }, [originLat, originLng])
+  }, [map, originLat, originLng])
 
   return (
     <Marker ref={markerRef} position={[originLat, originLng]} icon={arrowDivIcon(bearing)} interactive={false} />

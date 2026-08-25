@@ -79,7 +79,7 @@ async function run() {
   )
   check(
     'le useEffect de l\'animation retourne bien une fonction de cleanup (cancelAnimationFrame)',
-    /useEffect\(\(\) => \{[\s\S]*?return \(\) => cancelAnimationFrame\(frameId\)[\s\S]*?\}, \[originLat, originLng\]\)/.test(mapSource)
+    /useEffect\(\(\) => \{[\s\S]*?return \(\) => cancelAnimationFrame\(frameId\)[\s\S]*?\}, \[map, originLat, originLng\]\)/.test(mapSource)
   )
   check(
     'aucun état d\'animation partagé au niveau module (frameId/start déclarés DANS l\'effet, pas en dehors du composant — pas de fuite croisée entre instances)',
@@ -90,7 +90,31 @@ async function run() {
     mapSource.includes('markerRef.current?.setLatLng(')
   )
 
-  console.log('\n=== 2. Régression : la page continue de fonctionner avec des flèches sur les 2 onglets ===')
+  console.log('\n=== 2. Position/angle en espace écran projeté (pas lat/lng brut) — géométrie vérifiée séparément par scripts/verify-arrow-geometry.mjs avec le vrai moteur Leaflet ===')
+  check(
+    'la position interpolée utilise map.latLngToLayerPoint (même méthode que celle utilisée par Leaflet pour dessiner le Polyline), pas une interpolation lat/lng brute',
+    mapSource.includes('map.latLngToLayerPoint(originLatLng)') && mapSource.includes('map.latLngToLayerPoint(destLatLng)')
+  )
+  check(
+    'reconversion en lat/lng via map.layerPointToLatLng avant setLatLng (Leaflet positionne un Marker par lat/lng, jamais par pixel brut)',
+    mapSource.includes('markerRef.current?.setLatLng(map.layerPointToLatLng(point))')
+  )
+  check(
+    'aucune interpolation/atan2 sur lat/lng brut (ancienne formule buguée) ne subsiste dans le fichier',
+    !mapSource.includes('originLat + (TUNISIA[0] - originLat)') && !/atan2\(destLng - originLng, destLat - originLat\)/.test(mapSource)
+  )
+
+  console.log('\n=== 3. Badge hub Tunisie — taille de cercle fixe quel que soit le nombre de chiffres ===')
+  check(
+    'iconSize reste fixe (44x44) — inchangé par rapport à avant, pas basé sur le contenu',
+    mapSource.includes('iconSize: [44, 44]')
+  )
+  check(
+    'le texte du badge est contraint (overflow-hidden) et sa taille de police s\'adapte au nombre de chiffres, pas le cercle',
+    mapSource.includes('overflow-hidden rounded-full bg-brand-700') && mapSource.includes("digits >= 3 ? 'text-xs' : 'text-sm'")
+  )
+
+  console.log('\n=== 4. Régression : la page continue de fonctionner avec des flèches sur les 2 onglets ===')
   const userId = await makeUser(`arrows-${ts}@example.com`, password)
   cleanup.users.push(userId)
   const { cookieHeader } = await signInSession(`arrows-${ts}@example.com`, password)
