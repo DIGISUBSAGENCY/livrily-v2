@@ -1,12 +1,16 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useFormState } from 'react-dom'
 import { purchaseBoostVirement, type BoostActionState, type BoostItemType } from '@/app/(client)/jibli/boost-actions'
+import { detailPath } from '@/lib/travel/boostPaths'
 import { Label } from '@/components/ui/Label'
 import { Select } from '@/components/ui/Select'
 import { ErrorText } from '@/components/ui/ErrorText'
 import { SubmitButton } from '@/components/ui/SubmitButton'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import type { BankTransferInfo } from '@/types/database'
 
@@ -41,7 +45,7 @@ interface BoostPaymentProps {
   redirectTo?: string
 }
 
-const initialState: BoostActionState = { error: null }
+const initialState: BoostActionState = { error: null, success: false }
 const DEFAULT_DURATION_DAYS = 3 // ancien palier unique — reste le choix pré-sélectionné le plus familier
 
 // Virement uniquement pour l'instant (pas de bascule Flouci comme
@@ -52,6 +56,7 @@ const DEFAULT_DURATION_DAYS = 3 // ancien palier unique — reste le choix pré-
 // (upload preuve, formulaire) est un mirror volontaire, mais le sujet
 // (booster un item déjà publié, pas payer une mission) est différent.
 export function BoostPayment({ itemType, itemId, bankInfo, tiers, currentBoostedUntil, redirectTo }: BoostPaymentProps) {
+  const router = useRouter()
   const sortedTiers = useMemo(() => [...tiers].sort((a, b) => a.duration_days - b.duration_days), [tiers])
   const [durationDays, setDurationDays] = useState(
     () => sortedTiers.find((t) => t.duration_days === DEFAULT_DURATION_DAYS)?.duration_days ?? sortedTiers[0]?.duration_days ?? 1
@@ -60,6 +65,32 @@ export function BoostPayment({ itemType, itemId, bankInfo, tiers, currentBoosted
 
   const action = purchaseBoostVirement.bind(null, itemType, itemId, redirectTo)
   const [state, formAction] = useFormState(action, initialState)
+
+  // Popup de confirmation, état local indépendant de `state` : `state`
+  // reste success:true en mémoire tant qu'une nouvelle soumission n'a pas
+  // eu lieu (useFormState ne "consomme" pas son état), donc gater
+  // directement le rendu de la popup sur state.success la ferait
+  // réapparaître à tort après le router.refresh() déclenché à sa
+  // fermeture. L'effet ne se redéclenche que sur un NOUVEL objet state
+  // (une nouvelle soumission), jamais sur un re-render provoqué par le
+  // refresh qui suit la fermeture.
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false)
+  useEffect(() => {
+    if (state.success) setIsConfirmOpen(true)
+  }, [state])
+
+  function handleCloseConfirm() {
+    setIsConfirmOpen(false)
+    // Plus de redirect() serveur (cf. boost-actions.ts) : navigation
+    // client-side ici, exactement vers la même cible qu'avant ce chantier
+    // (redirectTo si fourni par la page appelante, sinon la fiche détail
+    // de l'item). refresh() en plus du push : redirectTo pointe souvent
+    // vers la page déjà affichée (ex: /profil/mes-boosts), où un push seul
+    // ne re-déclenche pas de re-fetch des données serveur déjà
+    // revalidées (revalidatePath côté action).
+    router.push(redirectTo ?? detailPath(itemType, itemId))
+    router.refresh()
+  }
 
   if (sortedTiers.length === 0) {
     return (
@@ -131,6 +162,29 @@ export function BoostPayment({ itemType, itemId, bankInfo, tiers, currentBoosted
             Confirmer le virement
           </SubmitButton>
         </form>
+      )}
+
+      {isConfirmOpen && (
+        // Même pattern visuel que IdentityRequiredModal (overlay + Card) —
+        // seul modal/dialog existant dans le projet, réutilisé plutôt que
+        // d'en créer un nouveau. Pas de croix de fermeture ni de clic sur
+        // l'overlay pour fermer (contrairement à IdentityRequiredModal) :
+        // un seul bouton "OK", volontairement la seule façon de fermer —
+        // c'est la fermeture qui déclenche la navigation post-achat
+        // (handleCloseConfirm), pas une simple annulation.
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+          <Card className="w-full max-w-sm text-center">
+            <h2 className="text-lg font-bold tracking-tight text-slate-900">Virement envoyé</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Ta mise en avant est active dès maintenant. Le virement sera vérifié sous peu par notre équipe.
+            </p>
+            <div className="mt-6">
+              <Button size="sm" onClick={handleCloseConfirm}>
+                OK
+              </Button>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   )
