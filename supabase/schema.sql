@@ -195,6 +195,18 @@ create trigger trg_profiles_prevent_role_escalation
 -- une connexion service role. grant_referral_reward() (cf. plus haut,
 -- fonction orpheline en attente d'un déclencheur Jibli) suivait la même
 -- logique côté security definer quand son trigger existait encore.
+--
+-- CORRECTIF (chantier portefeuille interne, brique 3/N) : bypass explicite
+-- via jibli.bypass_transition_checks (même flag déjà utilisé par
+-- accept_travel_proposal/auto_release_stale_payments/notify_expired_boosts,
+-- pas un nouveau nom inventé) — trouvé en testant request_wallet_withdrawal()
+-- en direct : SECURITY DEFINER contourne les policies RLS mais PAS les
+-- triggers (même leçon que sur notify_expired_boosts), et ici l'ACTEUR
+-- (auth.uid(), le client qui retire) est le MÊME que la cible (old.id, son
+-- propre profil) — contrairement au crédit d'un dépôt (admin ou
+-- service_role créditent le profil d'un AUTRE utilisateur, jamais bloqués
+-- par ce trigger pour cette raison précise), donc le seul nouveau chemin de
+-- ce chantier qui heurte ce garde-fou.
 create or replace function public.prevent_wallet_self_edit()
 returns trigger
 language plpgsql
@@ -202,6 +214,10 @@ security definer
 set search_path = public
 as $$
 begin
+  if coalesce(current_setting('jibli.bypass_transition_checks', true), 'false') = 'true' then
+    return new;
+  end if;
+
   if auth.uid() = old.id and not public.is_admin() then
     if new.wallet_balance is distinct from old.wallet_balance
        or new.referred_by is distinct from old.referred_by
@@ -3883,6 +3899,384 @@ begin
     );
   end if;
 end $$;
+
+-- ============================================================================
+-- Table: wallet_deposits (chantier portefeuille interne, brique 1/N — dépôt
+-- par virement ; Flouci viendra en brique 2/N)
+--
+-- Journal des dépôts vers profiles.wallet_balance — volontairement SÉPARÉ
+-- de wallet_credits (parrainage, reason contraint à un enum spécifique) et
+-- de wallet_adjustments (ajustements manuels admin) : même raisonnement que
+-- la séparation déjà actée entre ces deux-là (cf. commentaire sur
+-- wallet_adjustments plus haut). wallet_balance reste le solde partagé unique
+-- entre les trois — seuls les JOURNAUX sont distincts.
+--
+-- Contrairement à purchase_boost_virement (qui active le boost IMMÉDIATEMENT
+-- à l'achat, avant toute vérification admin) : créditer wallet_balance sur
+-- une preuve de virement non vérifiée serait de l'argent réellement
+-- dépensable créé à partir d'une preuve falsifiable — un vecteur de fraude
+-- réel, contrairement à quelques heures de mise en avant boost à faible
+-- enjeu. Donc status reste 'awaiting_verification' jusqu'à vérification
+-- admin explicite ; le crédit n'a lieu qu'à ce moment (trigger ci-dessous).
+-- ============================================================================
+do $$ begin
+  create type public.wallet_deposit_status as enum ('awaiting_verification', 'credited', 'rejected');
+exception when duplicate_object then null; end $$;
+
+create table if not exists public.wallet_deposits (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles(id),
+  amount numeric(10,3) not null check (amount > 0),
+  payment_method public.payment_method not null check (payment_method in ('virement', 'flouci')),
+  -- virement uniquement ; contrainte défensive ci-dessous. payment_ref
+  -- (flouci uniquement) reste nullable ici, sans contrainte symétrique :
+  -- la brique 2/N (RPC credit_wallet_deposit_flouci) insère directement en
+  -- 'credited' avec payment_ref déjà posé, jamais une ligne 'awaiting_
+  -- verification' en attente côté flouci (pas de pré-insertion avant
+  -- paiement, même choix que accept_travel_proposal côté flouci : rien
+  -- n'est enregistré avant confirmation réelle de l'API).
+  payment_proof_url text,
+  payment_ref text,
+  status public.wallet_deposit_status not null default 'awaiting_verification',
+  verified_by uuid references public.profiles(id),
+  verified_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint wallet_deposits_virement_has_proof check (payment_method <> 'virement' or payment_proof_url is not null)
+);
+
+create index if not exists wallet_deposits_profile_idx on public.wallet_deposits(profile_id);
+create index if not exists wallet_deposits_status_idx on public.wallet_deposits(status);
+
+drop trigger if exists trg_wallet_deposits_updated_at on public.wallet_deposits;
+create trigger trg_wallet_deposits_updated_at
+  before update on public.wallet_deposits
+  for each row execute function public.set_updated_at();
+
+alter table public.wallet_deposits enable row level security;
+
+drop policy if exists "wallet_deposits_select_own_or_admin" on public.wallet_deposits;
+create policy "wallet_deposits_select_own_or_admin"
+  on public.wallet_deposits for select
+  using (profile_id = auth.uid() or public.is_admin());
+
+-- Insert direct autorisé (contrairement à boost_payments/withdrawal_
+-- requests) : contrairement à purchase_boost_virement, aucun autre effet
+-- de bord n'est nécessaire à la soumission (le crédit n'arrive qu'à la
+-- vérification, cf. trigger plus bas) — pas besoin d'une RPC juste pour un
+-- insert simple. status/payment_method forcés par le WITH CHECK : un
+-- client ne peut jamais insérer directement une ligne déjà 'credited', ni
+-- une ligne 'flouci' (réservé à la RPC de la brique 2/N, SECURITY DEFINER,
+-- qui contourne cette policy).
+drop policy if exists "wallet_deposits_insert_own" on public.wallet_deposits;
+create policy "wallet_deposits_insert_own"
+  on public.wallet_deposits for insert
+  with check (
+    profile_id = auth.uid()
+    and status = 'awaiting_verification'
+    and payment_method = 'virement'
+  );
+
+drop policy if exists "wallet_deposits_update_admin_only" on public.wallet_deposits;
+create policy "wallet_deposits_update_admin_only"
+  on public.wallet_deposits for update
+  using (public.is_admin());
+
+-- Crédite profiles.wallet_balance quand une ligne ARRIVE 'credited' — que ce
+-- soit à l'INSERT (chemin Flouci, brique 2/N : la RPC insère directement en
+-- 'credited', jamais exercé par ce commit) ou à l'UPDATE (chemin virement,
+-- vérification admin ci-dessous, seul chemin réellement actif dans cette
+-- brique). Un seul trigger, un seul endroit qui écrit le solde, pour les
+-- deux méthodes de paiement — jamais deux implémentations du crédit à
+-- maintenir en synchro.
+create or replace function public.credit_wallet_balance_on_deposit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.status = 'credited' and (tg_op = 'INSERT' or old.status is distinct from 'credited') then
+    update public.profiles set wallet_balance = wallet_balance + new.amount where id = new.profile_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_wallet_deposits_credit_balance on public.wallet_deposits;
+create trigger trg_wallet_deposits_credit_balance
+  after insert or update on public.wallet_deposits
+  for each row execute function public.credit_wallet_balance_on_deposit();
+
+-- ============================================================================
+-- Chantier portefeuille interne, brique 2/N — dépôt par Flouci.
+--
+-- Le montant est fixé AVANT le paiement : initiateWalletDepositFlouci (TS,
+-- brique 2/N) insère une ligne 'awaiting_verification' avec le montant
+-- choisi, PUIS redirige vers Flouci pour CE montant exact — jamais repris
+-- depuis les paramètres de l'URL de retour au callback (falsifiables).
+-- Extension de la policy INSERT existante (brique 1/N) pour permettre ce
+-- pré-enregistrement, exactement comme pour le virement.
+-- ============================================================================
+drop policy if exists "wallet_deposits_insert_own" on public.wallet_deposits;
+create policy "wallet_deposits_insert_own"
+  on public.wallet_deposits for insert
+  with check (
+    profile_id = auth.uid()
+    and status = 'awaiting_verification'
+    and payment_method in ('virement', 'flouci')
+  );
+
+-- Anti-rejeu : un même paiement Flouci réel ne doit jamais pouvoir créditer
+-- deux lignes wallet_deposits différentes. NULL (virement, aucune
+-- référence) n'est jamais considéré en conflit avec un autre NULL
+-- (sémantique standard d'UNIQUE en SQL), donc pas besoin d'un index partiel.
+alter table public.wallet_deposits add constraint wallet_deposits_payment_ref_unique unique (payment_ref);
+
+-- SÉCURITÉ — pourquoi ces deux RPC ne sont PAS grant à `authenticated`
+-- (contrairement à purchase_boost_virement/accept_travel_proposal) :
+-- credit_wallet_deposit_flouci ne re-vérifie PAS elle-même le paiement
+-- auprès de Flouci (impossible en plpgsql pur, ça demanderait un appel
+-- HTTP sortant) — elle fait confiance à p_payment_ref tel quel, EXACTEMENT
+-- comme accept_travel_proposal(..., 'flouci', ..., p_payment_ref) le fait
+-- déjà pour l'escrow des missions (grant à authenticated là-bas). Sur
+-- accept_travel_proposal, un client malveillant pourrait en théorie
+-- l'appeler directement avec une référence Flouci fabriquée sans jamais
+-- payer — risque déjà présent en prod, hors périmètre de ce chantier, je
+-- le signale séparément plutôt que d'y toucher ici. Mais un solde de
+-- portefeuille est de l'argent immédiatement liquide/dépensable, sans
+-- filet de rattrapage (pas de litige/contrepartie humaine comme sur une
+-- mission) — donc ICI, posture plus stricte : ni `anon` ni `authenticated`
+-- ne peuvent appeler ces deux RPC. Seul le client service_role peut
+-- (implicite, service_role contourne les grants), exclusivement depuis
+-- /api/flouci/wallet-callback (TS, brique 2/N) — APRÈS que la route ait
+-- déjà appelé verifyFlouciPayment() (vraie vérification HTTP côté API
+-- Flouci) et confirmé que le dépôt appartient bien à l'utilisateur
+-- connecté (via son PROPRE client, RLS wallet_deposits_select_own_or_admin,
+-- avant d'escalader au client admin). p_profile_id (pas auth.uid(), qui
+-- n'existe pas sous service_role) est fourni par la route à partir de CETTE
+-- vérification déjà faite — même modèle de confiance que
+-- create_notification()/notifyUser() plus haut dans ce fichier.
+create or replace function public.credit_wallet_deposit_flouci(
+  p_deposit_id uuid,
+  p_profile_id uuid,
+  p_payment_ref text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_profile_id uuid;
+  v_status public.wallet_deposit_status;
+  v_payment_method public.payment_method;
+begin
+  if p_payment_ref is null or length(trim(p_payment_ref)) = 0 then
+    raise exception 'Référence de paiement manquante.';
+  end if;
+
+  select profile_id, status, payment_method into v_profile_id, v_status, v_payment_method
+  from public.wallet_deposits
+  where id = p_deposit_id
+  for update;
+
+  if v_profile_id is null then
+    raise exception 'Dépôt introuvable.';
+  end if;
+  if v_profile_id <> p_profile_id then
+    raise exception 'Ce dépôt ne correspond pas à cet utilisateur.';
+  end if;
+  if v_payment_method <> 'flouci' then
+    raise exception 'Ce dépôt n''est pas un dépôt Flouci.';
+  end if;
+
+  -- Déjà traité (replay du callback, ex: rafraîchissement de la page de
+  -- retour Flouci) : sortie silencieuse, idempotent, jamais une erreur ni
+  -- un second crédit.
+  if v_status <> 'awaiting_verification' then
+    return;
+  end if;
+
+  update public.wallet_deposits
+  set status = 'credited', payment_ref = p_payment_ref, verified_at = now()
+  where id = p_deposit_id;
+end;
+$$;
+
+revoke execute on function public.credit_wallet_deposit_flouci(uuid, uuid, text) from public;
+revoke execute on function public.credit_wallet_deposit_flouci(uuid, uuid, text) from anon;
+revoke execute on function public.credit_wallet_deposit_flouci(uuid, uuid, text) from authenticated;
+
+-- Marque un dépôt Flouci comme rejeté après un échec/abandon du paiement
+-- (failLink) — sans ça, une ligne 'awaiting_verification' resterait
+-- indéfiniment en attente d'un crédit qui n'arrivera jamais, ET
+-- apparaîtrait à tort dans la file de vérification manuelle admin (filtre
+-- payment_method='virement' ajouté côté TS sur
+-- /admin/portefeuille-paiements). Même posture de sécurité et même
+-- idempotence que credit_wallet_deposit_flouci ci-dessus.
+create or replace function public.reject_wallet_deposit_flouci(
+  p_deposit_id uuid,
+  p_profile_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_profile_id uuid;
+  v_status public.wallet_deposit_status;
+  v_payment_method public.payment_method;
+begin
+  select profile_id, status, payment_method into v_profile_id, v_status, v_payment_method
+  from public.wallet_deposits
+  where id = p_deposit_id
+  for update;
+
+  if v_profile_id is null then
+    raise exception 'Dépôt introuvable.';
+  end if;
+  if v_profile_id <> p_profile_id then
+    raise exception 'Ce dépôt ne correspond pas à cet utilisateur.';
+  end if;
+  if v_payment_method <> 'flouci' then
+    raise exception 'Ce dépôt n''est pas un dépôt Flouci.';
+  end if;
+
+  if v_status <> 'awaiting_verification' then
+    return;
+  end if;
+
+  update public.wallet_deposits set status = 'rejected', verified_at = now() where id = p_deposit_id;
+end;
+$$;
+
+revoke execute on function public.reject_wallet_deposit_flouci(uuid, uuid) from public;
+revoke execute on function public.reject_wallet_deposit_flouci(uuid, uuid) from anon;
+revoke execute on function public.reject_wallet_deposit_flouci(uuid, uuid) from authenticated;
+
+-- ============================================================================
+-- Chantier portefeuille interne, brique 3/N — retrait.
+--
+-- Table séparée de withdrawal_requests (système B, gains voyageur —
+-- intact, jamais touché par ce chantier) : même forme de colonnes, mais
+-- profile_id (pas voyageur_id) puisque n'importe quel profil avec un
+-- wallet_balance peut retirer, pas seulement un voyageur avec des gains de
+-- mission. Réutilise le type withdrawal_status existant (pending/paid/
+-- rejected) plutôt que d'en dupliquer un identique — décision explicite.
+--
+-- Toujours un virement manuel hors app, quelle que soit la méthode de
+-- dépôt d'origine (Flouci n'a pas d'API de payout dans ce projet,
+-- lib/flouci.ts ne fait que générer des liens de collecte) — même
+-- traitement que withdrawal_requests. Montant libre (retrait partiel
+-- autorisé), contrairement à withdrawal_requests qui ne retire que le
+-- solde total : ce solde sert aussi à financer des achats futurs
+-- (hors périmètre de ce chantier), pas seulement à être vidé.
+-- ============================================================================
+create table if not exists public.wallet_withdrawals (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles(id),
+  amount numeric(10,3) not null check (amount > 0),
+  status public.withdrawal_status not null default 'pending',
+  requested_at timestamptz not null default now(),
+  processed_at timestamptz,
+  processed_by uuid references public.profiles(id)
+);
+
+create index if not exists wallet_withdrawals_profile_idx on public.wallet_withdrawals(profile_id);
+create index if not exists wallet_withdrawals_status_idx on public.wallet_withdrawals(status);
+
+alter table public.wallet_withdrawals enable row level security;
+
+drop policy if exists "wallet_withdrawals_select_own_or_admin" on public.wallet_withdrawals;
+create policy "wallet_withdrawals_select_own_or_admin"
+  on public.wallet_withdrawals for select
+  using (profile_id = auth.uid() or public.is_admin());
+
+-- Pas de policy INSERT : contrairement à withdrawal_requests (simple trace,
+-- solde jamais stocké, juste recalculé à la volée), wallet_balance EST un
+-- solde réellement stocké qui doit être débité de façon atomique avec
+-- l'insertion — deux appels client séparés (update solde + insert
+-- historique) ouvriraient une fenêtre de course (double-clic, deux onglets)
+-- où le solde pourrait passer sous zéro. RPC ci-dessous uniquement, même
+-- sûreté que purchase_boost_virement (verrou FOR UPDATE inclus).
+drop policy if exists "wallet_withdrawals_update_admin_only" on public.wallet_withdrawals;
+create policy "wallet_withdrawals_update_admin_only"
+  on public.wallet_withdrawals for update
+  using (public.is_admin());
+
+-- Débite wallet_balance ET insère la demande en une seule transaction
+-- (verrou FOR UPDATE sur profiles). Grant à `authenticated` (contrairement
+-- aux RPC Flouci ci-dessus) : entièrement self-scoped sur auth.uid(), rien
+-- à vérifier auprès d'un tiers — aucune des deux raisons qui justifiaient
+-- la posture service_role-only pour Flouci ne s'applique ici.
+create or replace function public.request_wallet_withdrawal(p_amount numeric)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_balance numeric;
+  v_id uuid;
+begin
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'Montant invalide.';
+  end if;
+
+  select wallet_balance into v_balance from public.profiles where id = auth.uid() for update;
+
+  if v_balance is null then
+    raise exception 'Profil introuvable.';
+  end if;
+  if p_amount > v_balance then
+    raise exception 'Montant demandé (%) supérieur au solde disponible (%).', p_amount, v_balance;
+  end if;
+
+  -- Bypass de prevent_wallet_self_edit (cf. correctif sur cette fonction
+  -- plus haut) : ici, contrairement au crédit d'un dépôt, l'acteur EST la
+  -- cible (le client débite son propre solde) — sans ce bypass explicite,
+  -- le trigger rejette l'update malgré le SECURITY DEFINER.
+  perform set_config('jibli.bypass_transition_checks', 'true', true);
+  update public.profiles set wallet_balance = wallet_balance - p_amount where id = auth.uid();
+  perform set_config('jibli.bypass_transition_checks', 'false', true);
+
+  insert into public.wallet_withdrawals (profile_id, amount) values (auth.uid(), p_amount)
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+revoke execute on function public.request_wallet_withdrawal(numeric) from public;
+revoke execute on function public.request_wallet_withdrawal(numeric) from anon;
+grant execute on function public.request_wallet_withdrawal(numeric) to authenticated;
+
+-- Recrédite automatiquement si l'admin rejette — le montant a déjà été
+-- débité à la demande (RPC ci-dessus), un rejet doit donc le restituer.
+-- old.status is distinct from 'rejected' (pas juste "on update") : un
+-- rejet répété sur une ligne déjà rejected (garde-fou déjà présent côté
+-- Server Action, .eq('status', 'pending')) ne doit jamais recréditer deux
+-- fois, même en cas d'appel direct hors Server Action.
+create or replace function public.refund_wallet_balance_on_withdrawal_reject()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.status = 'rejected' and old.status is distinct from 'rejected' then
+    update public.profiles set wallet_balance = wallet_balance + new.amount where id = new.profile_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_wallet_withdrawals_refund_on_reject on public.wallet_withdrawals;
+create trigger trg_wallet_withdrawals_refund_on_reject
+  after update on public.wallet_withdrawals
+  for each row execute function public.refund_wallet_balance_on_withdrawal_reject();
 
 -- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,

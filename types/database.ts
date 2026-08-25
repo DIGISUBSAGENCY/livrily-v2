@@ -64,6 +64,13 @@ export type ProductOfferStatus = 'open' | 'matched' | 'completed' | 'cancelled'
 // immédiatement, jamais retenu puis "livré" à une contrepartie.
 export type BoostPaymentStatus = 'awaiting_verification' | 'paid'
 
+// Portefeuille interne, brique 1/N — contrairement à BoostPaymentStatus
+// (2 valeurs, jamais de "rejected" : un boost verifié tard reste verifié),
+// un dépôt peut être explicitement rejeté (preuve invalide) sans jamais
+// créditer wallet_balance — cf. schema.sql, trigger
+// credit_wallet_balance_on_deposit.
+export type WalletDepositStatus = 'awaiting_verification' | 'credited' | 'rejected'
+
 export interface Database {
   public: {
     Tables: {
@@ -630,6 +637,66 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['wallet_adjustments']['Insert']>
         Relationships: []
       }
+      // Chantier portefeuille interne, brique 1/N (dépôt virement) — cf.
+      // schema.sql. payment_ref reste nul tant que la brique 2/N (Flouci)
+      // n'existe pas.
+      wallet_deposits: {
+        Row: {
+          id: string
+          profile_id: string
+          amount: number
+          payment_method: PaymentMethod
+          payment_proof_url: string | null
+          payment_ref: string | null
+          status: WalletDepositStatus
+          verified_by: string | null
+          verified_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          profile_id: string
+          amount: number
+          payment_method: PaymentMethod
+          payment_proof_url?: string | null
+          payment_ref?: string | null
+          status?: WalletDepositStatus
+          verified_by?: string | null
+          verified_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['wallet_deposits']['Insert']>
+        Relationships: []
+      }
+      // Chantier portefeuille interne, brique 3/N (retrait) — réutilise
+      // WithdrawalStatus (déjà défini pour withdrawal_requests, système B,
+      // intact) plutôt qu'un type dupliqué identique. Insert typé pour
+      // cohérence avec les autres tables de ce fichier, mais jamais utilisé
+      // directement côté TS : aucune policy INSERT, écriture réservée à
+      // request_wallet_withdrawal() (cf. schema.sql), appelée via .rpc(),
+      // pas .from().insert().
+      wallet_withdrawals: {
+        Row: {
+          id: string
+          profile_id: string
+          amount: number
+          status: WithdrawalStatus
+          requested_at: string
+          processed_at: string | null
+          processed_by: string | null
+        }
+        Insert: {
+          id?: string
+          profile_id: string
+          amount: number
+          status?: WithdrawalStatus
+          requested_at?: string
+          processed_at?: string | null
+          processed_by?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['wallet_withdrawals']['Insert']>
+        Relationships: []
+      }
       identity_verifications: {
         Row: {
           id: string
@@ -839,6 +906,26 @@ export interface Database {
         }
         Returns: string
       }
+      // Chantier portefeuille interne, brique 2/N (dépôt Flouci) — non
+      // exposées à `authenticated` côté DB (revoke explicite, cf. schema.sql
+      // pour le raisonnement sécurité), appelables uniquement via le client
+      // service_role depuis /api/flouci/wallet-callback. Gardées ici pour le
+      // typage de ce client-là, même raisonnement que create_notification.
+      credit_wallet_deposit_flouci: {
+        Args: { p_deposit_id: string; p_profile_id: string; p_payment_ref: string }
+        Returns: undefined
+      }
+      reject_wallet_deposit_flouci: {
+        Args: { p_deposit_id: string; p_profile_id: string }
+        Returns: undefined
+      }
+      // Chantier portefeuille interne, brique 3/N (retrait) — grant à
+      // authenticated (entièrement self-scoped sur auth.uid(), cf.
+      // schema.sql), contrairement aux deux RPC Flouci ci-dessus.
+      request_wallet_withdrawal: {
+        Args: { p_amount: number }
+        Returns: string
+      }
     }
   }
 }
@@ -860,3 +947,5 @@ export type FlouciPaymentIncident = Database['public']['Tables']['flouci_payment
 export type TravelReview = Database['public']['Tables']['travel_reviews']['Row']
 export type BoostPayment = Database['public']['Tables']['boost_payments']['Row']
 export type BoostPricingTier = Database['public']['Tables']['boost_pricing_tiers']['Row']
+export type WalletDeposit = Database['public']['Tables']['wallet_deposits']['Row']
+export type WalletWithdrawal = Database['public']['Tables']['wallet_withdrawals']['Row']
