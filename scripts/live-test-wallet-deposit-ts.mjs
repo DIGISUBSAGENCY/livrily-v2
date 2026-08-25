@@ -1,8 +1,10 @@
 // Test en direct de la couche TypeScript du commit 1 (portefeuille — dépôt
-// virement) : rendu de /parrainage (formulaire + historique), rendu de
-// /admin/portefeuille-paiements (liste + preuve signée), lien AdminNav.
-// La couche SQL (RLS, contrainte, trigger de crédit) est déjà couverte à
-// 16/16 par live-test-wallet-deposit-sql.mjs — pas reproduite ici.
+// virement) : rendu de /jibli/dashboard (formulaire + historique, section
+// Portefeuille — déménagée depuis /parrainage, chantier séparation
+// Parrainage/Portefeuille), rendu de /admin/portefeuille-paiements (liste +
+// preuve signée), lien AdminNav. La couche SQL (RLS, contrainte, trigger de
+// crédit) est déjà couverte à 16/16 par live-test-wallet-deposit-sql.mjs —
+// pas reproduite ici.
 //
 // depositWalletVirement() est une Server Action ('use server',
 // next/headers::cookies() en interne) — non invocable en HTTP brut depuis
@@ -10,7 +12,7 @@
 // plus tôt dans ce projet. Ce script reproduit donc la séquence exacte de
 // l'action (upload storage + insert wallet_deposits) avec la session RÉELLE
 // du client (mêmes appels Supabase, même RLS), puis vérifie via de vrais
-// GET HTTP que /parrainage et /admin/portefeuille-paiements reflètent
+// GET HTTP que /jibli/dashboard et /admin/portefeuille-paiements reflètent
 // correctement ce dépôt.
 import { readFileSync } from 'node:fs'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
@@ -108,28 +110,15 @@ async function run() {
   const adminCookie = adminCookieFn()
 
   // ==========================================================================
-  // 1. /parrainage : formulaire de dépôt visible, coordonnées bancaires
-  //    affichées.
-  //
-  // Chantier brique 4/N (restructuration en onglets) : le contenu de
-  // l'onglet "Portefeuille" n'est rendu dans le DOM réel que si
-  // defaultTab='portefeuille' — sinon ?flouci=success force ce défaut côté
-  // serveur (ParrainageTabs, cf. page.tsx), même mécanique qu'un vrai
-  // retour de paiement Flouci. Sans ce paramètre, un GET nu montre l'onglet
-  // "Parrainage" par défaut, où ce formulaire n'existe pas dans le DOM —
-  // ATTENTION : le payload RSC (flight data) inliné dans le HTML initial
-  // contient quand même le texte des DEUX onglets (nécessaire pour changer
-  // d'onglet sans round-trip serveur), donc une simple recherche de TEXTE
-  // BRUT (ex: "Déposer", le RIB) matcherait à tort même onglet fermé —
-  // seules les recherches sur la SYNTAXE d'attribut HTML réelle
-  // (name="...") sont fiables ici, jamais trouvées dans ce payload encodé
-  // en JSON (name":"..." avec un deux-points, pas un egal). Vérifié en
-  // direct en comparant les deux ce chantier-ci.
+  // 1. /jibli/dashboard : formulaire de dépôt visible, coordonnées
+  //    bancaires affichées. Section Portefeuille toujours dans le DOM
+  //    (pas d'onglet caché ici, contrairement à l'ancien /parrainage à
+  //    onglets — supprimé, chantier séparation Parrainage/Portefeuille).
   // ==========================================================================
-  console.log('\n=== 1. /parrainage — formulaire de dépôt ===')
-  const pageBeforeRes = await fetch(`${BASE}/parrainage?flouci=success`, { headers: { cookie: clientCookie } })
+  console.log('\n=== 1. /jibli/dashboard — formulaire de dépôt ===')
+  const pageBeforeRes = await fetch(`${BASE}/jibli/dashboard`, { headers: { cookie: clientCookie } })
   const pageBeforeBody = await pageBeforeRes.text()
-  check('GET /parrainage → 200', pageBeforeRes.status === 200, { status: pageBeforeRes.status })
+  check('GET /jibli/dashboard → 200', pageBeforeRes.status === 200, { status: pageBeforeRes.status })
   check('formulaire de dépôt présent (input amount)', pageBeforeBody.includes('name="amount"'), {})
   check('champ preuve de virement présent', pageBeforeBody.includes('name="payment_proof"'), {})
   check('RIB de test affiché', pageBeforeBody.includes('00000000000000000000'), {})
@@ -159,10 +148,10 @@ async function run() {
   if (inserted) cleanup.deposits.push(inserted.id)
 
   // ==========================================================================
-  // 3. /parrainage reflète le dépôt (historique + badge).
+  // 3. /jibli/dashboard reflète le dépôt (historique + badge).
   // ==========================================================================
-  console.log('\n=== 3. /parrainage — historique reflète le dépôt ===')
-  const pageAfterRes = await fetch(`${BASE}/parrainage?flouci=success`, { headers: { cookie: clientCookie } })
+  console.log('\n=== 3. /jibli/dashboard — historique reflète le dépôt ===')
+  const pageAfterRes = await fetch(`${BASE}/jibli/dashboard`, { headers: { cookie: clientCookie } })
   const pageAfterBody = (await pageAfterRes.text()).replace(/<!--\s*-->/g, '')
   check('montant du dépôt affiché dans l\'historique', pageAfterBody.includes('42.750') || pageAfterBody.includes('42,750') || pageAfterBody.includes('42.75'), {})
   check('badge "En attente de vérification" affiché', pageAfterBody.includes('En attente de vérification'), {})

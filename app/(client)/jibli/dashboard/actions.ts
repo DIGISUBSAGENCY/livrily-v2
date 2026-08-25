@@ -14,6 +14,11 @@ export interface ActionResult {
   error: string | null
 }
 
+// Déplacé depuis app/(client)/parrainage/actions.ts (chantier portefeuille
+// interne, séparation Parrainage/Portefeuille — le Portefeuille vit
+// maintenant sur le Dashboard, plus sur /parrainage). Toutes les cibles
+// (revalidatePath, redirect) mises à jour en conséquence.
+//
 // Dépôt par virement — chantier portefeuille interne, brique 1/N. Insert
 // direct (pas de RPC) : contrairement à purchaseBoostVirement, aucun autre
 // effet de bord n'est nécessaire à la soumission (le crédit de
@@ -62,14 +67,14 @@ export async function depositWalletVirement(
   })
 
   if (error) {
-    console.error('[parrainage] depositWalletVirement a échoué', {
+    console.error('[jibli/dashboard] depositWalletVirement a échoué', {
       message: error.message,
       code: error.code,
     })
     return { error: "Impossible d'enregistrer ce dépôt, réessaie." }
   }
 
-  revalidatePath('/parrainage')
+  revalidatePath('/jibli/dashboard')
   return { error: null }
 }
 
@@ -93,7 +98,7 @@ export async function initiateWalletDepositFlouci(amount: number): Promise<Actio
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user) redirect('/login?next=/parrainage')
+  if (!user) redirect('/login?next=/jibli/dashboard')
 
   const { data: deposit, error: insertError } = await supabase
     .from('wallet_deposits')
@@ -102,7 +107,7 @@ export async function initiateWalletDepositFlouci(amount: number): Promise<Actio
     .single()
 
   if (insertError || !deposit) {
-    console.error('[parrainage] initiateWalletDepositFlouci (insert) a échoué', {
+    console.error('[jibli/dashboard] initiateWalletDepositFlouci (insert) a échoué', {
       message: insertError?.message,
       code: insertError?.code,
     })
@@ -159,6 +164,6 @@ export async function requestWalletWithdrawal(amount: number): Promise<ActionRes
     return { error: error.message || 'Impossible de créer la demande de retrait, réessaie.' }
   }
 
-  revalidatePath('/parrainage')
+  revalidatePath('/jibli/dashboard')
   return { error: null }
 }

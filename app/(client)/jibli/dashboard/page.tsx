@@ -10,10 +10,16 @@ import { MyRequestsPreview } from '@/components/travel/MyRequestsPreview'
 import { MyOffersPreview } from '@/components/travel/MyOffersPreview'
 import { MyProposalsPreview } from '@/components/travel/MyProposalsPreview'
 import { RecentActivity } from '@/components/notifications/RecentActivity'
+import { WalletDepositForm } from '@/components/account/WalletDepositForm'
+import { WalletDepositStatusBadge } from '@/components/account/WalletDepositStatusBadge'
+import { WalletWithdrawalForm } from '@/components/account/WalletWithdrawalForm'
+import { WithdrawalStatusBadge } from '@/components/travel/WithdrawalStatusBadge'
 import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
 import { aggregateByCountry } from '@/lib/countryGeo'
 import { getRecentNotifications } from '@/lib/notifications/actions'
+import { formatTND } from '@/lib/format'
 import type { TravelRequestStatus } from '@/types/database'
 
 export const metadata: Metadata = pageMetadata({
@@ -21,6 +27,20 @@ export const metadata: Metadata = pageMetadata({
   description: 'Ton activité Jibli en un coup d’œil.',
   noIndex: true,
 })
+
+// Mirror de flouciBannerMessages (jibli/[id]/page.tsx, et ex-/parrainage
+// avant le déménagement du Portefeuille ici) — pas de cas "orphaned" ici :
+// contrairement à accept_travel_proposal (peut échouer après paiement
+// confirmé si la proposition a changé entre-temps), credit_wallet_deposit_
+// flouci n'agit que sur des lignes entièrement contrôlées par ce chantier
+// (wallet_deposits/wallet_balance), aucun état externe ne peut la faire
+// échouer après coup.
+const flouciBannerMessages: Record<string, { text: string; tone: string }> = {
+  success: { text: 'Paiement Flouci confirmé — ton solde a été crédité.', tone: 'bg-brand-50 text-brand-700 border-brand-200' },
+  failed: { text: 'Le paiement Flouci a échoué ou a été annulé.', tone: 'bg-red-50 text-red-700 border-red-200' },
+  error: { text: 'Une erreur est survenue pendant la vérification du paiement Flouci.', tone: 'bg-red-50 text-red-700 border-red-200' },
+  unknown: { text: 'Une erreur est survenue pendant la vérification du paiement Flouci.', tone: 'bg-red-50 text-red-700 border-red-200' },
+}
 
 // Extrait le prénom de full_name ("Amir Ben Salah" → "Amir") — pas de champ
 // first_name/last_name séparé dans profiles (un seul champ full_name), et
@@ -31,13 +51,20 @@ function firstName(fullName: string | null): string {
   return trimmed.split(/\s+/)[0]
 }
 
+interface DashboardPageProps {
+  searchParams: Promise<{ flouci?: string }>
+}
+
 // Nouvelle page dédiée — /jibli garde son bloc dashboard inline existant
 // (IdentityBanner + DashboardStatCard + previews, réutilisés ici tels
 // quels, cf. exploration) pour ne rien casser côté marketplace ; cette
 // page-ci est un point d'entrée supplémentaire, plus complet (flux par
 // pays, sections dédiées aux 3 types d'items, activité récente — briques
 // suivantes de ce chantier).
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+  const { flouci } = await searchParams
+  const flouciBanner = flouci ? flouciBannerMessages[flouci] : null
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -48,9 +75,14 @@ export default async function DashboardPage() {
   // Requête directe (pas getIdentityStatus(), qui ne renvoie que le statut)
   // pour aussi récupérer rejection_reason — IdentityBanner l'affiche déjà
   // pleinement, même requête que le bloc dashboard existant sur /jibli.
-  const [{ data: profile }, { data: verification }] = await Promise.all([
-    supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+  // wallet_balance : chantier séparation Parrainage/Portefeuille — le
+  // Portefeuille (section tout en bas de cette page) en a besoin.
+  const [{ data: profile }, { data: verification }, { data: bankInfo }, { data: deposits }, { data: withdrawals }] = await Promise.all([
+    supabase.from('profiles').select('full_name, wallet_balance').eq('id', user.id).single(),
     supabase.from('identity_verifications').select('status, rejection_reason').eq('profile_id', user.id).maybeSingle(),
+    supabase.from('bank_transfer_info').select('bank_name, account_holder, rib, flouci_phone').eq('is_active', true).limit(1).maybeSingle(),
+    supabase.from('wallet_deposits').select('*').eq('profile_id', user.id).order('created_at', { ascending: false }).limit(20),
+    supabase.from('wallet_withdrawals').select('*').eq('profile_id', user.id).order('requested_at', { ascending: false }).limit(20),
   ])
   const identityStatus = verification?.status ?? 'unverified'
   const identityRejectionReason = verification?.rejection_reason ?? null
@@ -127,6 +159,10 @@ export default async function DashboardPage() {
       </h1>
       <p className="mt-1 text-sm text-slate-500">Ton activité Jibli en un coup d&apos;œil.</p>
 
+      {flouciBanner && (
+        <div className={`mt-4 rounded-lg border p-3 text-sm ${flouciBanner.tone}`}>{flouciBanner.text}</div>
+      )}
+
       <div className="mt-6">
         <IdentityBanner status={identityStatus} rejectionReason={identityRejectionReason} />
       </div>
@@ -171,6 +207,69 @@ export default async function DashboardPage() {
       </div>
 
       <RecentActivity notifications={recentNotifications} />
+
+      {/* Portefeuille — chantier séparation Parrainage/Portefeuille :
+          déménagé depuis /parrainage (qui redevient une page simple, sans
+          onglets). Position basse volontaire : gestion de compte, pas de
+          l'aperçu d'activité comme le reste de cette page — même contenu,
+          mêmes composants (WalletDepositForm/WalletWithdrawalForm) que
+          l'ancien onglet Portefeuille, juste reconnectés aux données de
+          cette page (profile/bankInfo/deposits/withdrawals ci-dessus). */}
+      <div className="mt-8 space-y-4">
+        <h2 className="text-lg font-bold tracking-tight text-slate-900">Portefeuille</h2>
+
+        <Card className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-slate-500">Solde disponible</p>
+            <p className="text-2xl font-bold text-brand-700">{formatTND(profile?.wallet_balance ?? 0)}</p>
+          </div>
+          <p className="max-w-[55%] text-right text-xs text-slate-400">Crédité par parrainage ou par dépôt.</p>
+        </Card>
+
+        <Card>
+          <h3 className="mb-2 font-semibold text-slate-900">Déposer</h3>
+          <WalletDepositForm bankInfo={bankInfo ?? null} />
+        </Card>
+
+        {deposits && deposits.length > 0 && (
+          <Card>
+            <h3 className="mb-2 font-semibold text-slate-900">Historique des dépôts</h3>
+            <ul className="divide-y divide-slate-100">
+              {deposits.map((deposit) => (
+                <li key={deposit.id} className="flex items-center justify-between py-2 text-sm">
+                  <div>
+                    <p className="font-medium text-slate-700">{formatTND(deposit.amount)}</p>
+                    <p className="text-xs text-slate-400">{new Date(deposit.created_at).toLocaleString('fr-TN')}</p>
+                  </div>
+                  <WalletDepositStatusBadge status={deposit.status} />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
+        <Card>
+          <h3 className="mb-2 font-semibold text-slate-900">Retirer</h3>
+          <WalletWithdrawalForm balance={profile?.wallet_balance ?? 0} />
+        </Card>
+
+        {withdrawals && withdrawals.length > 0 && (
+          <Card>
+            <h3 className="mb-2 font-semibold text-slate-900">Historique des retraits</h3>
+            <ul className="divide-y divide-slate-100">
+              {withdrawals.map((withdrawal) => (
+                <li key={withdrawal.id} className="flex items-center justify-between py-2 text-sm">
+                  <div>
+                    <p className="font-medium text-slate-700">{formatTND(withdrawal.amount)}</p>
+                    <p className="text-xs text-slate-400">{new Date(withdrawal.requested_at).toLocaleString('fr-TN')}</p>
+                  </div>
+                  <WithdrawalStatusBadge status={withdrawal.status} />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+      </div>
     </main>
   )
 }

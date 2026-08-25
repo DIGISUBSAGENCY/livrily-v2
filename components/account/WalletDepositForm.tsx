@@ -6,7 +6,7 @@ import {
   depositWalletVirement,
   initiateWalletDepositFlouci,
   type WalletDepositActionState,
-} from '@/app/(client)/parrainage/actions'
+} from '@/app/(client)/jibli/dashboard/actions'
 import { Label } from '@/components/ui/Label'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
