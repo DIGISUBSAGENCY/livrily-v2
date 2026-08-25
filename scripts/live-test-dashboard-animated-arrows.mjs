@@ -105,13 +105,29 @@ async function run() {
   )
 
   console.log('\n=== 3. Badge hub Tunisie — taille de cercle fixe quel que soit le nombre de chiffres ===')
+  // Réduit de 44x44 à 28x28 (chantier taille du hub) — rapproché des
+  // marqueurs pays (16x16) tout en restant identifiable comme point
+  // central. Valeur de référence mise à jour, pas juste re-testée telle
+  // quelle.
   check(
-    'iconSize reste fixe (44x44) — inchangé par rapport à avant, pas basé sur le contenu',
-    mapSource.includes('iconSize: [44, 44]')
+    'iconSize reste fixe (28x28) — pas basé sur le contenu',
+    mapSource.includes('iconSize: [28, 28]')
+  )
+  check(
+    'iconAnchor recentré en conséquence (14,14 = moitié de 28) — sinon le hub se décale visuellement de sa position réelle',
+    mapSource.includes('iconAnchor: [14, 14]')
   )
   check(
     'le texte du badge est contraint (overflow-hidden) et sa taille de police s\'adapte au nombre de chiffres, pas le cercle',
-    mapSource.includes('overflow-hidden rounded-full bg-brand-700') && mapSource.includes("digits >= 3 ? 'text-xs' : 'text-sm'")
+    mapSource.includes('overflow-hidden rounded-full bg-brand-700') && mapSource.includes("digits >= 3 ? 'text-[9px]' : 'text-xs'")
+  )
+  check(
+    'le halo animate-ping reste proportionné (h-full w-full du conteneur h-7 w-7, pas une taille fixe indépendante)',
+    /h-7 w-7 items-center justify-center">\s*<span class="absolute inline-flex h-full w-full animate-ping/.test(mapSource)
+  )
+  check(
+    'le label "Tunisie" est présent sur le hub, même style que les labels de pays (pill blanche)',
+    mapSource.includes('>Tunisie</span>') && mapSource.includes('rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 shadow-sm">Tunisie')
   )
 
   console.log('\n=== 4. Régression : la page continue de fonctionner avec des flèches sur les 2 onglets ===')

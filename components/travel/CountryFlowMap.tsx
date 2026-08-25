@@ -79,29 +79,48 @@ function countryDivIcon(label: string, placeAbove: boolean): L.DivIcon {
   })
 }
 
-// Hub Tunisie : même traitement mais plus grand, avec le badge du total —
-// interpolé directement dans le HTML (re-généré si totalCount change). Le
-// CERCLE (h-11 w-11, iconSize) reste fixe quel que soit le nombre de
-// chiffres — seul le texte s'adapte (overflow-hidden + font-size réduite à
-// partir de 3 chiffres) : sans ça, "201" en text-sm déborde visiblement du
-// cercle de 44px et donne l'impression que le badge entier grandit, alors
-// que le cercle lui-même ne bougeait déjà pas (bug trouvé en le signalant :
-// c'est bien le TEXTE qui débordait, pas le conteneur qui grandissait).
+// Hub Tunisie : même traitement que countryDivIcon (halo + badge + label),
+// mais légèrement plus grand pour rester identifiable comme le point
+// central — 28px (h-7 w-7) au lieu des 44px (h-11 w-11) d'origine, nettement
+// plus proche des marqueurs pays (16px) tout en restant visuellement
+// distinct. iconSize/iconAnchor recentrés en conséquence (14,14 = moitié de
+// 28) : sans ce recentrage, le point d'ancrage géographique du hub se
+// décale visuellement de sa position réelle sur la carte.
+//
+// Le CERCLE reste fixe quel que soit le nombre de chiffres du total — seul
+// le texte s'adapte (overflow-hidden + font-size réduite à partir de 3
+// chiffres, encore plus petite qu'avant vu le cercle réduit) : sans ça, un
+// total à 3 chiffres déborderait visiblement du cercle et donnerait
+// l'impression que le badge entier grandit, alors que le cercle lui-même
+// ne bouge pas (même bug que celui déjà corrigé une fois sur la taille
+// d'origine — revérifié à cette nouvelle taille, cf. script de test).
+//
+// Label "Tunisie" — même style que les labels de pays (countryDivIcon),
+// mais toujours EN DESSOUS (pas de calcul au-dessus/en dessous comme pour
+// les pays) : la majorité des pays de lib/countryGeo.ts sont au nord de la
+// Tunisie (Europe), donc la plupart de leurs labels se placent AU-DESSUS
+// de leur marqueur (cf. countryDivIcon, placeAbove) — la zone nord autour
+// du hub est donc la plus dense en labels. Mettre "Tunisie" en dessous
+// l'éloigne de cette zone la plus chargée, sans essayer de détecter
+// dynamiquement les labels environnants (même limite assumée que pour les
+// pays entre eux : volume actuel trop faible pour un algorithme de
+// placement générique).
 function hubDivIcon(totalCount: number): L.DivIcon {
   const digits = String(totalCount).length
-  const textSizeClass = digits >= 3 ? 'text-xs' : 'text-sm'
+  const textSizeClass = digits >= 3 ? 'text-[9px]' : 'text-xs'
   return L.divIcon({
     html: `
-      <span class="relative flex h-11 w-11 items-center justify-center">
+      <span class="relative flex h-7 w-7 items-center justify-center">
         <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-60"></span>
-        <span class="relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-brand-700 ${textSizeClass} font-bold leading-none text-white ring-4 ring-white shadow-soft-lg">
+        <span class="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-brand-700 ${textSizeClass} font-bold leading-none text-white ring-4 ring-white shadow-soft-lg">
           ${totalCount}
         </span>
+        <span class="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 shadow-sm">Tunisie</span>
       </span>
     `,
     className: '',
-    iconSize: [44, 44],
-    iconAnchor: [22, 22],
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
   })
 }
 
