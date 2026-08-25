@@ -3630,6 +3630,26 @@ alter table public.boost_payments add constraint boost_payments_exactly_one_item
   ((trip_id is not null)::int + (product_offer_id is not null)::int + (request_id is not null)::int) = 1
 );
 
+-- Notifications boost (chantier notifications+admin pricing) — nouveau type
+-- unique 'boost_update' couvrant les 3 événements du domaine (virement
+-- reçu, paiement vérifié, boost terminé), plutôt qu'un type par événement :
+-- même raisonnement que request_update, qui couvre déjà plusieurs
+-- sous-événements distincts d'un même domaine. Extension par
+-- drop/add constraint, même pattern que l'ajout de request_matched
+-- ci-dessus (pas de nouvelle colonne, la table grossit par construction).
+alter table public.notifications drop constraint if exists notifications_type_check;
+alter table public.notifications add constraint notifications_type_check
+  check (type in ('transaction_update', 'request_update', 'review_available', 'verification_update', 'request_matched', 'boost_update'));
+
+-- related_object_type n'avait que travel_request/travel_payment/
+-- identity_verification — le boost touche aussi trips et product_offers,
+-- deux tables qui n'avaient encore jamais eu de notification pointant
+-- vers elles. Noms alignés sur les tables (trip, product_offer), cohérent
+-- avec travel_request déjà présent.
+alter table public.notifications drop constraint if exists notifications_related_object_type_check;
+alter table public.notifications add constraint notifications_related_object_type_check
+  check (related_object_type in ('travel_request', 'travel_payment', 'identity_verification', 'trip', 'product_offer'));
+
 -- Achat d'un boost avec durée choisie (1-7j) — SURCHARGE de
 -- purchase_boost_virement (4 arguments, p_duration_days en plus), PAS un
 -- remplacement de la version 3-arg ci-dessus : Postgres/PostgREST
@@ -3723,6 +3743,27 @@ begin
   else
     update public.travel_requests set boosted_until = v_new_boosted_until where id = p_item_id;
   end if;
+
+  -- Notifications boost (chantier notifications+admin pricing), brique
+  -- 1/3 — "Confirmation de virement reçue". Déjà SECURITY DEFINER ici,
+  -- insertion directe (même raisonnement que REQUEST_UPDATE dans
+  -- accept_travel_proposal ci-dessus) : pas de détour par
+  -- create_notification()/service_role. related_object_type suit
+  -- p_item_type ('trip'/'product_offer' nouvellement ajoutés à la
+  -- contrainte, 'travel_request' déjà existant) pour que hrefFor() côté
+  -- TypeScript renvoie vers la bonne page de détail.
+  insert into public.notifications (user_id, type, priority, title, body, related_object_type, related_object_id)
+  values (
+    v_owner_id, 'boost_update', 'normal',
+    'Confirmation de virement reçue',
+    'Ta mise en avant est active dès maintenant, en attendant la vérification du virement.',
+    case p_item_type
+      when 'trip' then 'trip'
+      when 'offer' then 'product_offer'
+      else 'travel_request'
+    end,
+    p_item_id
+  );
 
   payment_id := v_payment_id;
   new_boosted_until := v_new_boosted_until;

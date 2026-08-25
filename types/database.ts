@@ -44,10 +44,16 @@ export type NotificationType =
   | 'review_available'
   | 'verification_update'
   | 'request_matched'
+  | 'boost_update'
 
 export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent'
 
-export type NotificationRelatedObjectType = 'travel_request' | 'travel_payment' | 'identity_verification'
+export type NotificationRelatedObjectType =
+  | 'travel_request'
+  | 'travel_payment'
+  | 'identity_verification'
+  | 'trip'
+  | 'product_offer'
 
 export type TripStatus = 'open' | 'matched' | 'completed' | 'cancelled'
 
