@@ -3885,6 +3885,114 @@ begin
 end $$;
 
 -- ============================================================================
+-- Table: wallet_deposits (chantier portefeuille interne, brique 1/N — dépôt
+-- par virement ; Flouci viendra en brique 2/N)
+--
+-- Journal des dépôts vers profiles.wallet_balance — volontairement SÉPARÉ
+-- de wallet_credits (parrainage, reason contraint à un enum spécifique) et
+-- de wallet_adjustments (ajustements manuels admin) : même raisonnement que
+-- la séparation déjà actée entre ces deux-là (cf. commentaire sur
+-- wallet_adjustments plus haut). wallet_balance reste le solde partagé unique
+-- entre les trois — seuls les JOURNAUX sont distincts.
+--
+-- Contrairement à purchase_boost_virement (qui active le boost IMMÉDIATEMENT
+-- à l'achat, avant toute vérification admin) : créditer wallet_balance sur
+-- une preuve de virement non vérifiée serait de l'argent réellement
+-- dépensable créé à partir d'une preuve falsifiable — un vecteur de fraude
+-- réel, contrairement à quelques heures de mise en avant boost à faible
+-- enjeu. Donc status reste 'awaiting_verification' jusqu'à vérification
+-- admin explicite ; le crédit n'a lieu qu'à ce moment (trigger ci-dessous).
+-- ============================================================================
+do $$ begin
+  create type public.wallet_deposit_status as enum ('awaiting_verification', 'credited', 'rejected');
+exception when duplicate_object then null; end $$;
+
+create table if not exists public.wallet_deposits (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles(id),
+  amount numeric(10,3) not null check (amount > 0),
+  payment_method public.payment_method not null check (payment_method in ('virement', 'flouci')),
+  -- virement uniquement ; contrainte défensive ci-dessous. payment_ref
+  -- (flouci uniquement) reste nullable ici, sans contrainte symétrique :
+  -- la brique 2/N (RPC credit_wallet_deposit_flouci) insère directement en
+  -- 'credited' avec payment_ref déjà posé, jamais une ligne 'awaiting_
+  -- verification' en attente côté flouci (pas de pré-insertion avant
+  -- paiement, même choix que accept_travel_proposal côté flouci : rien
+  -- n'est enregistré avant confirmation réelle de l'API).
+  payment_proof_url text,
+  payment_ref text,
+  status public.wallet_deposit_status not null default 'awaiting_verification',
+  verified_by uuid references public.profiles(id),
+  verified_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint wallet_deposits_virement_has_proof check (payment_method <> 'virement' or payment_proof_url is not null)
+);
+
+create index if not exists wallet_deposits_profile_idx on public.wallet_deposits(profile_id);
+create index if not exists wallet_deposits_status_idx on public.wallet_deposits(status);
+
+drop trigger if exists trg_wallet_deposits_updated_at on public.wallet_deposits;
+create trigger trg_wallet_deposits_updated_at
+  before update on public.wallet_deposits
+  for each row execute function public.set_updated_at();
+
+alter table public.wallet_deposits enable row level security;
+
+drop policy if exists "wallet_deposits_select_own_or_admin" on public.wallet_deposits;
+create policy "wallet_deposits_select_own_or_admin"
+  on public.wallet_deposits for select
+  using (profile_id = auth.uid() or public.is_admin());
+
+-- Insert direct autorisé (contrairement à boost_payments/withdrawal_
+-- requests) : contrairement à purchase_boost_virement, aucun autre effet
+-- de bord n'est nécessaire à la soumission (le crédit n'arrive qu'à la
+-- vérification, cf. trigger plus bas) — pas besoin d'une RPC juste pour un
+-- insert simple. status/payment_method forcés par le WITH CHECK : un
+-- client ne peut jamais insérer directement une ligne déjà 'credited', ni
+-- une ligne 'flouci' (réservé à la RPC de la brique 2/N, SECURITY DEFINER,
+-- qui contourne cette policy).
+drop policy if exists "wallet_deposits_insert_own" on public.wallet_deposits;
+create policy "wallet_deposits_insert_own"
+  on public.wallet_deposits for insert
+  with check (
+    profile_id = auth.uid()
+    and status = 'awaiting_verification'
+    and payment_method = 'virement'
+  );
+
+drop policy if exists "wallet_deposits_update_admin_only" on public.wallet_deposits;
+create policy "wallet_deposits_update_admin_only"
+  on public.wallet_deposits for update
+  using (public.is_admin());
+
+-- Crédite profiles.wallet_balance quand une ligne ARRIVE 'credited' — que ce
+-- soit à l'INSERT (chemin Flouci, brique 2/N : la RPC insère directement en
+-- 'credited', jamais exercé par ce commit) ou à l'UPDATE (chemin virement,
+-- vérification admin ci-dessous, seul chemin réellement actif dans cette
+-- brique). Un seul trigger, un seul endroit qui écrit le solde, pour les
+-- deux méthodes de paiement — jamais deux implémentations du crédit à
+-- maintenir en synchro.
+create or replace function public.credit_wallet_balance_on_deposit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.status = 'credited' and (tg_op = 'INSERT' or old.status is distinct from 'credited') then
+    update public.profiles set wallet_balance = wallet_balance + new.amount where id = new.profile_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_wallet_deposits_credit_balance on public.wallet_deposits;
+create trigger trg_wallet_deposits_credit_balance
+  after insert or update on public.wallet_deposits
+  for each row execute function public.credit_wallet_balance_on_deposit();
+
+-- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,
 -- catalogue, livraison zone tarifée — a existé puis a été retiré
 -- intégralement, cf. tête de fichier).

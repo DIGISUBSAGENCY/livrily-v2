@@ -64,6 +64,13 @@ export type ProductOfferStatus = 'open' | 'matched' | 'completed' | 'cancelled'
 // immédiatement, jamais retenu puis "livré" à une contrepartie.
 export type BoostPaymentStatus = 'awaiting_verification' | 'paid'
 
+// Portefeuille interne, brique 1/N — contrairement à BoostPaymentStatus
+// (2 valeurs, jamais de "rejected" : un boost verifié tard reste verifié),
+// un dépôt peut être explicitement rejeté (preuve invalide) sans jamais
+// créditer wallet_balance — cf. schema.sql, trigger
+// credit_wallet_balance_on_deposit.
+export type WalletDepositStatus = 'awaiting_verification' | 'credited' | 'rejected'
+
 export interface Database {
   public: {
     Tables: {
@@ -630,6 +637,37 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['wallet_adjustments']['Insert']>
         Relationships: []
       }
+      // Chantier portefeuille interne, brique 1/N (dépôt virement) — cf.
+      // schema.sql. payment_ref reste nul tant que la brique 2/N (Flouci)
+      // n'existe pas.
+      wallet_deposits: {
+        Row: {
+          id: string
+          profile_id: string
+          amount: number
+          payment_method: PaymentMethod
+          payment_proof_url: string | null
+          payment_ref: string | null
+          status: WalletDepositStatus
+          verified_by: string | null
+          verified_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          profile_id: string
+          amount: number
+          payment_method: PaymentMethod
+          payment_proof_url?: string | null
+          payment_ref?: string | null
+          status?: WalletDepositStatus
+          verified_by?: string | null
+          verified_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['wallet_deposits']['Insert']>
+        Relationships: []
+      }
       identity_verifications: {
         Row: {
           id: string
@@ -860,3 +898,4 @@ export type FlouciPaymentIncident = Database['public']['Tables']['flouci_payment
 export type TravelReview = Database['public']['Tables']['travel_reviews']['Row']
 export type BoostPayment = Database['public']['Tables']['boost_payments']['Row']
 export type BoostPricingTier = Database['public']['Tables']['boost_pricing_tiers']['Row']
+export type WalletDeposit = Database['public']['Tables']['wallet_deposits']['Row']

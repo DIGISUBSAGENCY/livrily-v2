@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { ReferralCodeCard } from '@/components/account/ReferralCodeCard'
+import { WalletDepositForm } from '@/components/account/WalletDepositForm'
+import { WalletDepositStatusBadge } from '@/components/account/WalletDepositStatusBadge'
 import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import { pageMetadata } from '@/lib/seo'
@@ -27,9 +29,15 @@ export default async function ParrainagePage() {
 
   if (!user) redirect('/login?next=/parrainage')
 
-  const [{ data: profile }, { data: history }] = await Promise.all([
+  const [{ data: profile }, { data: history }, { data: bankInfo }, { data: deposits }] = await Promise.all([
     supabase.from('profiles').select('referral_code, wallet_balance').eq('id', user.id).single(),
     supabase.from('wallet_credits').select('*').eq('profile_id', user.id).order('created_at', { ascending: false }).limit(20),
+    supabase.from('bank_transfer_info').select('bank_name, account_holder, rib').eq('is_active', true).limit(1).maybeSingle(),
+    // Chantier portefeuille interne, brique 1/N (dépôt virement) — section
+    // ajoutée sous "Solde disponible" ci-dessous ; restructuration en
+    // onglets Parrainage/Portefeuille prévue dans une brique ultérieure,
+    // pas construite ici pour rester testable seule.
+    supabase.from('wallet_deposits').select('*').eq('profile_id', user.id).order('created_at', { ascending: false }).limit(20),
   ])
 
   const siteUrl = getSiteUrl()
@@ -47,10 +55,39 @@ export default async function ParrainagePage() {
             <p className="text-sm text-slate-500">Solde disponible</p>
             <p className="text-2xl font-bold text-brand-700">{formatTND(profile?.wallet_balance ?? 0)}</p>
           </div>
-          <p className="max-w-[55%] text-right text-xs text-slate-400">
-            Applicable sur les frais de livraison au checkout.
-          </p>
+          {/* Ancien texte ("Applicable sur les frais de livraison au
+              checkout") faisait référence à un checkout qui n'existe plus
+              (rôle commerce retiré) — trouvé obsolète en construisant cette
+              section, corrigé ici plutôt que laissé à mentir sur ce que ce
+              solde représente maintenant (parrainage + dépôts). */}
+          <p className="max-w-[55%] text-right text-xs text-slate-400">Crédité par parrainage ou par dépôt.</p>
         </Card>
+
+        {/* Portefeuille — dépôt (brique 1/N, virement uniquement).
+            Restructuration en onglets Parrainage/Portefeuille prévue dans
+            une brique ultérieure ; section autonome pour l'instant, testable
+            seule. */}
+        <Card>
+          <h2 className="mb-2 font-semibold text-slate-900">Déposer</h2>
+          <WalletDepositForm bankInfo={bankInfo ?? null} />
+        </Card>
+
+        {deposits && deposits.length > 0 && (
+          <Card>
+            <h2 className="mb-2 font-semibold text-slate-900">Historique des dépôts</h2>
+            <ul className="divide-y divide-slate-100">
+              {deposits.map((deposit) => (
+                <li key={deposit.id} className="flex items-center justify-between py-2 text-sm">
+                  <div>
+                    <p className="font-medium text-slate-700">{formatTND(deposit.amount)}</p>
+                    <p className="text-xs text-slate-400">{new Date(deposit.created_at).toLocaleString('fr-TN')}</p>
+                  </div>
+                  <WalletDepositStatusBadge status={deposit.status} />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
 
         {history && history.length > 0 && (
           <Card>
