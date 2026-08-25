@@ -74,28 +74,13 @@ export async function Header() {
           {/* role === 'client' (pas showJibli) : contrairement à Demandes/
               Trips/Offres, /jibli/dashboard redirige vers /login si non
               connecté — pas de sens de l'afficher à un invité, qui se
-              ferait juste rebondir. Même condition que Parrainage
-              ci-dessous (page personnalisée équivalente). */}
+              ferait juste rebondir. */}
           {role === 'client' && (
             <Link
               href="/jibli/dashboard"
               className="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-brand-700 sm:inline-block"
             >
               Dashboard
-            </Link>
-          )}
-          <Link
-            href="/comment-ca-marche"
-            className="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-brand-700 sm:inline-block"
-          >
-            Comment ça marche
-          </Link>
-          {role === 'client' && (
-            <Link
-              href="/parrainage"
-              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-brand-700 sm:inline-block"
-            >
-              Parrainage
             </Link>
           )}
           {user ? (
@@ -128,7 +113,6 @@ export async function Header() {
           <MobileNav
             showJibli={showJibli}
             showDashboard={role === 'client'}
-            showParrainage={role === 'client'}
             isLoggedIn={!!user}
             displayName={displayName}
           />
