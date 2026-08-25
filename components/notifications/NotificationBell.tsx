@@ -9,16 +9,10 @@ import {
   markAllNotificationsRead,
   type NotificationRow,
 } from '@/lib/notifications/actions'
+import { hrefFor } from '@/lib/notifications/hrefFor'
 
 interface NotificationBellProps {
   initialUnreadCount: number
-}
-
-function hrefFor(notification: NotificationRow): string | null {
-  if (!notification.related_object_id) return null
-  if (notification.related_object_type === 'travel_request') return `/jibli/${notification.related_object_id}`
-  if (notification.related_object_type === 'identity_verification') return '/profil/verification-identite'
-  return null
 }
 
 // Même pattern d'ouverture/fermeture que UserMenu.tsx/AdminNav.tsx (bouton +
