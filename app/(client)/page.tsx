@@ -92,12 +92,19 @@ export default async function HomePage() {
       {/* ---------------------------------------------------------------- */}
       {/* Hero — deux parcours clairs dès l'arrivée                        */}
       {/* ---------------------------------------------------------------- */}
-      <section className="bg-gradient-to-b from-brand-50 to-white px-4 py-16 sm:py-20">
+      {/* pb-24/-mb-16 : le panneau stats déborde volontairement sous le
+          dégradé (cf. plus bas) — remplace l'ancienne grille de 2 Card qui
+          flottait sans ancrage entre le hero et la section suivante. */}
+      <section className="bg-gradient-to-b from-brand-50 to-white px-4 pb-24 pt-16 sm:pb-28 sm:pt-20">
         <div className="mx-auto max-w-2xl text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-semibold text-brand-700 shadow-soft ring-1 ring-brand-100">
+            <Plane className="h-3.5 w-3.5" aria-hidden />
+            Crowd-shipping vers la Tunisie
+          </span>
+          <h1 className="mt-4 text-balance text-4xl font-extrabold tracking-tight text-slate-900 sm:text-6xl">
             Fais-toi ramener un objet de l&apos;étranger
           </h1>
-          <p className="mt-4 text-lg text-slate-600">
+          <p className="mx-auto mt-4 max-w-md text-lg text-slate-600">
             Demande à un voyageur de te le ramener, ou rentabilise ton prochain voyage en le
             ramenant toi-même — paiement sécurisé, en séquestre jusqu&apos;à réception.
           </p>
@@ -110,7 +117,15 @@ export default async function HomePage() {
               </Button>
             </Link>
             <Link href="/jibli">
-              <Button variant="secondary" size="lg">
+              {/* Contour brand plutôt que le gris neutre par défaut de
+                  variant="secondary" — distinction nette avec le CTA
+                  primaire plein, sans toucher au composant Button partagé
+                  (override via className, twMerge dédoublonne). */}
+              <Button
+                variant="secondary"
+                size="lg"
+                className="border-2 border-brand-600 bg-transparent text-brand-700 shadow-none hover:bg-brand-50"
+              >
                 <Wallet className="h-4 w-4" aria-hidden />
                 Devenir voyageur
               </Button>
@@ -118,21 +133,30 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* Stats ------------------------------------------------------- */}
-        <div className="mx-auto mt-12 grid max-w-xl gap-4 sm:grid-cols-2">
-          {stats.map((stat) => (
-            <Card key={stat.label} className="text-center">
-              <p className="text-3xl font-bold text-slate-900">{stat.value}</p>
-              <p className="mt-1 text-sm text-slate-500">{stat.label}</p>
-            </Card>
-          ))}
+        {/* Stats — un seul panneau uni (pas 2 Card séparées) : séparateur
+            interne, ombre marquée, léger débordement sur la transition
+            dégradé→blanc pour un ancrage plus intentionnel. */}
+        <div className="relative z-10 mx-auto -mb-16 mt-14 max-w-xl overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-soft-lg sm:-mb-20">
+          <div className="grid divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+            {stats.map((stat) => (
+              <div key={stat.label} className="px-6 py-6 text-center">
+                <p className="text-3xl font-bold text-brand-700">{stat.value}</p>
+                <p className="mt-1 text-sm text-slate-500">{stat.label}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
       {/* ---------------------------------------------------------------- */}
       {/* Carousel — dernières demandes de voyage ouvertes                 */}
       {/* ---------------------------------------------------------------- */}
-      <section className="border-t border-slate-100 px-4 py-16">
+      {/* Pas de border-t (contrairement aux sections suivantes) : le
+          panneau stats du hero déborde jusqu'ici (cf. -mb-16/-mb-20
+          ci-dessus), un hairline juste en dessous ferait doublon avec sa
+          propre bordure/ombre. pt généreux pour garantir un dégagement net
+          sous le panneau, quelle que soit sa hauteur exacte. */}
+      <section className="px-4 pb-20 pt-28 sm:pb-24 sm:pt-32">
         <div className="mx-auto max-w-5xl">
           <div className="flex items-end justify-between gap-4">
             <div>
@@ -159,17 +183,24 @@ export default async function HomePage() {
       {/* ---------------------------------------------------------------- */}
       {/* Badges de confiance                                               */}
       {/* ---------------------------------------------------------------- */}
-      <section className="border-t border-slate-100 bg-slate-50 px-4 py-16">
-        <div className="mx-auto max-w-5xl">
-          <h2 className="text-center text-2xl font-bold tracking-tight text-slate-900">Pourquoi nous faire confiance</h2>
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
+      <section className="border-t border-slate-100 bg-slate-50 px-4 py-20 sm:py-24">
+        <div className="mx-auto max-w-5xl text-center">
+          {/* Eyebrow — même pattern que le hero et la section voyageurs
+              ci-dessous, répété plutôt que 3 traitements de titre
+              différents sur la page. */}
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-semibold text-brand-700 shadow-soft ring-1 ring-brand-100">
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+            De l&apos;argent en jeu, en toute confiance
+          </span>
+          <h2 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Pourquoi nous faire confiance</h2>
+          <div className="mt-10 grid gap-5 sm:grid-cols-3">
             {trustBadges.map((badge) => (
-              <Card key={badge.title} className="text-center">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-50">
-                  <badge.icon className="h-6 w-6 text-brand-600" aria-hidden />
+              <Card key={badge.title} interactive className="text-center">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-50 ring-4 ring-brand-50/60">
+                  <badge.icon className="h-7 w-7 text-brand-600" aria-hidden />
                 </div>
-                <p className="mt-4 font-semibold text-slate-900">{badge.title}</p>
-                <p className="mt-1 text-sm text-slate-500">{badge.description}</p>
+                <p className="mt-5 text-lg font-semibold text-slate-900">{badge.title}</p>
+                <p className="mt-1.5 text-sm text-slate-500">{badge.description}</p>
               </Card>
             ))}
           </div>
@@ -179,13 +210,13 @@ export default async function HomePage() {
       {/* ---------------------------------------------------------------- */}
       {/* Section dédiée voyageurs                                          */}
       {/* ---------------------------------------------------------------- */}
-      <section className="border-t border-slate-100 px-4 py-16">
+      <section className="border-t border-slate-100 px-4 py-20 sm:py-24">
         <div className="mx-auto max-w-2xl text-center">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold text-brand-700">
             <Wallet className="h-3.5 w-3.5" aria-hidden />
             Pour les voyageurs
           </span>
-          <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-900">
+          <h2 className="mt-4 text-balance text-3xl font-bold tracking-tight text-slate-900">
             Tu voyages bientôt ? Rentabilise ton trajet.
           </h2>
           <p className="mt-4 text-slate-600">
