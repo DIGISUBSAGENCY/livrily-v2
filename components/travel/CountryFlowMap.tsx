@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -65,6 +65,82 @@ function hubDivIcon(totalCount: number): L.DivIcon {
   })
 }
 
+// Flèche animée par pays (point 2, chantier améliorations carte) — pas de
+// nouvelle dépendance (leaflet-polylinedecorator écarté, cf. proposition
+// validée : l'animation reste de toute façon à coder à la main dans les
+// deux cas, autant éviter une lib de plus sans types officiels). Interpole
+// linéairement la position entre l'origine et Tunisie via
+// requestAnimationFrame, en écrivant directement sur l'instance Leaflet
+// (marker.setLatLng) — jamais via un état React, qui déclencherait un
+// re-render à chaque frame (coûteux avec plusieurs pays affichés à la
+// fois).
+const ARROW_CYCLE_MS = 2600
+
+function bearingDegrees(originLat: number, originLng: number, destLat: number, destLng: number): number {
+  // atan2(Δlng, Δlat) : 0° = vers le haut (nord), sens horaire — correspond
+  // directement à une rotation CSS classique (transform: rotate()).
+  // Approximation planaire, cohérente avec la ligne droite du Polyline
+  // ci-dessous (pas un vrai calcul géodésique, volontairement, même
+  // simplification que la ligne elle-même).
+  return (Math.atan2(destLng - originLng, destLat - originLat) * 180) / Math.PI
+}
+
+function arrowDivIcon(bearingDeg: number): L.DivIcon {
+  return L.divIcon({
+    html: `
+      <span class="block h-2.5 w-2.5" style="transform: rotate(${bearingDeg}deg)">
+        <svg viewBox="0 0 10 10" class="h-full w-full fill-brand-700 drop-shadow-sm"><path d="M5 0 L10 10 L5 7 L0 10 Z" /></svg>
+      </span>
+    `,
+    className: '',
+    iconSize: [10, 10],
+    iconAnchor: [5, 5],
+  })
+}
+
+interface AnimatedFlowArrowProps {
+  originLat: number
+  originLng: number
+}
+
+// Un composant dédié PAR pays (clé = row.label côté appelant) plutôt qu'une
+// boucle d'animation centralisée dans CountryFlowMap : au changement
+// d'onglet Articles/Demandes, CountryFlowMap n'est PAS démonté (seules ses
+// props rows/totalCount changent, cf. CountryFlowSection.tsx) — sans clé
+// par pays, les boucles requestAnimationFrame des pays disparus
+// continueraient de tourner indéfiniment (fuite). En donnant à chaque
+// flèche sa propre clé et son propre useEffect, React démonte proprement
+// (et nettoie via la fonction de retour de useEffect, pas juste au
+// démontage final de la carte) toute flèche dont le pays n'est plus dans
+// l'onglet actif — vérifié en direct, cf. script de test.
+function AnimatedFlowArrow({ originLat, originLng }: AnimatedFlowArrowProps) {
+  const markerRef = useRef<L.Marker>(null)
+  const bearing = useMemo(
+    () => bearingDegrees(originLat, originLng, TUNISIA[0], TUNISIA[1]),
+    [originLat, originLng]
+  )
+
+  useEffect(() => {
+    let frameId: number
+    const start = performance.now()
+
+    function tick(now: number) {
+      const t = ((now - start) % ARROW_CYCLE_MS) / ARROW_CYCLE_MS
+      const lat = originLat + (TUNISIA[0] - originLat) * t
+      const lng = originLng + (TUNISIA[1] - originLng) * t
+      markerRef.current?.setLatLng([lat, lng])
+      frameId = requestAnimationFrame(tick)
+    }
+    frameId = requestAnimationFrame(tick)
+
+    return () => cancelAnimationFrame(frameId)
+  }, [originLat, originLng])
+
+  return (
+    <Marker ref={markerRef} position={[originLat, originLng]} icon={arrowDivIcon(bearing)} interactive={false} />
+  )
+}
+
 // Remplace @vis.gl/react-google-maps (Google Maps) pour cette carte
 // uniquement — le reste du projet (AddressAutocomplete, GoogleMapsProvider)
 // continue de dépendre de Google Maps, cette dépendance-là n'est PAS
@@ -91,6 +167,10 @@ export function CountryFlowMap({ rows, totalCount }: CountryFlowMapProps) {
           positions={[[row.lat as number, row.lng as number], TUNISIA]}
           pathOptions={{ className: 'jibli-flow-line', color: '#0D6E4E', weight: 2, opacity: 0.6 }}
         />
+      ))}
+
+      {geoRows.map((row) => (
+        <AnimatedFlowArrow key={`arrow-${row.label}`} originLat={row.lat as number} originLng={row.lng as number} />
       ))}
 
       {geoRows.map((row) => (
