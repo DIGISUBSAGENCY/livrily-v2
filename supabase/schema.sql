@@ -4279,6 +4279,216 @@ create trigger trg_wallet_withdrawals_refund_on_reject
   for each row execute function public.refund_wallet_balance_on_withdrawal_reject();
 
 -- ============================================================================
+-- Chantier admin completeness — rejet des paiements Boost et Jibli.
+--
+-- Jusqu'ici, un virement invalide/frauduleux sur boost_payments ou
+-- travel_payments restait indéfiniment 'awaiting_verification' : aucun
+-- chemin de résolution admin (seul /admin/portefeuille-paiements avait
+-- déjà le couple vérifier/rejeter). Sémantiques validées explicitement :
+--   - boost_payment rejeté → le temps acheté est RETIRÉ (le boost était
+--     actif depuis l'achat, un rejet purement cosmétique laisserait la
+--     fraude fonctionner), via replay de l'historique (cf. RPC plus bas).
+--   - travel_payment rejeté → la mission reste 'matched', le client est
+--     notifié et renvoie une nouvelle preuve (Option B — le cas réel
+--     majoritaire est une preuve illisible, pas une fraude à annuler ;
+--     l'unwind détruirait les autres propositions auto-rejetées, non
+--     restaurables). Le rejet admin lui-même est TypeScript-only (update
+--     mono-table + notifyUser, même pattern que verifyTravelPayment) —
+--     seule la RE-SOUMISSION client a besoin d'une RPC (aucune policy
+--     UPDATE client sur travel_payments).
+--
+-- ⚠️ ALTER TYPE ... ADD VALUE : la nouvelle valeur d'enum ne peut pas être
+-- UTILISÉE dans la même transaction que son ajout — exécuter ces deux
+-- lignes SEULES d'abord (un run SQL Editor séparé), puis le reste.
+-- ============================================================================
+alter type public.boost_payment_status add value if not exists 'rejected';
+alter type public.travel_payment_status add value if not exists 'rejected';
+
+-- Rejette un paiement Boost ET retire le temps de mise en avant acheté.
+--
+-- Le point délicat : les boosts se CUMULENT (greatest(current, now()) +
+-- durée, cf. purchase_boost_virement). Soustraire naïvement la durée du
+-- paiement rejeté serait faux dans un cas précis : boost frauduleux expiré,
+-- puis achat honnête ultérieur — la soustraction mangerait du temps
+-- honnêtement payé. À la place, boosted_until est RECALCULÉ en rejouant
+-- l'historique complet des paiements non-rejetés de l'item, dans l'ordre,
+-- avec la même formule qu'à l'achat : reconstruction déterministe et
+-- exacte, tous les cas de cumul/expiration couverts, zéro paiement
+-- restant → null.
+--
+-- is_admin() vérifié explicitement dans le corps (même modèle que
+-- resolve_dispute_*/adjust_wallet_balance : RPC admin appelée via la
+-- session de l'admin lui-même, grant à authenticated + garde interne) —
+-- SECURITY DEFINER contourne RLS, le grant seul ne protégerait rien.
+create or replace function public.reject_boost_payment(p_payment_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_status public.boost_payment_status;
+  v_payer_id uuid;
+  v_trip_id uuid;
+  v_offer_id uuid;
+  v_request_id uuid;
+  v_until timestamptz;
+  v_p record;
+begin
+  if not public.is_admin() then
+    raise exception 'Accès refusé — réservé aux administrateurs.';
+  end if;
+
+  select status, voyageur_id, trip_id, product_offer_id, request_id
+    into v_status, v_payer_id, v_trip_id, v_offer_id, v_request_id
+  from public.boost_payments
+  where id = p_payment_id
+  for update;
+
+  if v_payer_id is null then
+    raise exception 'Paiement introuvable.';
+  end if;
+  if v_status <> 'awaiting_verification' then
+    raise exception 'Seul un paiement en attente de vérification peut être rejeté (statut actuel : %).', v_status;
+  end if;
+
+  update public.boost_payments
+  set status = 'rejected', verified_by = auth.uid(), verified_at = now()
+  where id = p_payment_id;
+
+  -- Replay : reconstruit boosted_until à partir des paiements NON-REJETÉS
+  -- de l'item. Filtre status <> 'rejected' indispensable — CORRECTIF trouvé
+  -- en testant en direct : la première version ne filtrait pas, en croyant
+  -- (à tort) que l'update ci-dessus "excluait" le paiement — il change son
+  -- statut, il ne le retire pas de la table. Le filtre exclut aussi tout
+  -- paiement rejeté ANTÉRIEUREMENT (un item peut cumuler plusieurs rejets).
+  v_until := null;
+  for v_p in
+    select created_at, duration_days from public.boost_payments
+    where ((v_trip_id is not null and trip_id = v_trip_id)
+       or (v_offer_id is not null and product_offer_id = v_offer_id)
+       or (v_request_id is not null and request_id = v_request_id))
+      and status <> 'rejected'
+    order by created_at
+  loop
+    if v_until is null or v_until < v_p.created_at then
+      v_until := v_p.created_at;
+    end if;
+    v_until := v_until + (v_p.duration_days || ' days')::interval;
+  end loop;
+
+  if v_trip_id is not null then
+    update public.trips set boosted_until = v_until,
+      -- Supprime la notification "Boost terminé" redondante que le cron
+      -- enverrait sinon (la révocation est déjà notifiée ci-dessous) —
+      -- uniquement si le recalcul laisse un boosted_until déjà échu.
+      boost_expiry_notified_at = case when v_until is not null and v_until < now() then now() else boost_expiry_notified_at end
+      where id = v_trip_id;
+  elsif v_offer_id is not null then
+    update public.product_offers set boosted_until = v_until,
+      boost_expiry_notified_at = case when v_until is not null and v_until < now() then now() else boost_expiry_notified_at end
+      where id = v_offer_id;
+  else
+    -- travel_requests : trigger d'invariants à bypasser (SECURITY DEFINER
+    -- ne contourne pas les triggers, leçon déjà apprise deux fois).
+    perform set_config('jibli.bypass_transition_checks', 'true', true);
+    update public.travel_requests set boosted_until = v_until,
+      boost_expiry_notified_at = case when v_until is not null and v_until < now() then now() else boost_expiry_notified_at end
+      where id = v_request_id;
+    perform set_config('jibli.bypass_transition_checks', 'false', true);
+  end if;
+
+  -- Notification au payeur — insertion directe (déjà SECURITY DEFINER).
+  -- Wording neutre : si d'autres paiements honnêtes restent, l'item peut
+  -- encore être boosté — "le temps correspondant" est exact dans tous les cas.
+  insert into public.notifications (user_id, type, priority, title, body, related_object_type, related_object_id)
+  values (
+    v_payer_id, 'boost_update', 'normal',
+    'Virement rejeté',
+    'Ta preuve de virement pour la mise en avant a été refusée — le temps correspondant a été retiré.',
+    case when v_trip_id is not null then 'trip'
+         when v_offer_id is not null then 'product_offer'
+         else 'travel_request' end,
+    coalesce(v_trip_id, v_offer_id, v_request_id)
+  );
+end;
+$$;
+
+revoke execute on function public.reject_boost_payment(uuid) from public;
+revoke execute on function public.reject_boost_payment(uuid) from anon;
+grant execute on function public.reject_boost_payment(uuid) to authenticated;
+
+-- Re-soumission d'une preuve de virement par le CLIENT après rejet admin
+-- (Option B — la mission reste 'matched' pendant tout le cycle). RPC
+-- nécessaire : travel_payments n'a aucune policy UPDATE pour un client
+-- (travel_payments_update_admin_only uniquement) — même raison structurelle
+-- que take_product_offer(). Self-scoped sur auth.uid() via la demande
+-- (client_id), grant à authenticated — même posture que
+-- confirm_travel_receipt.
+create or replace function public.resubmit_travel_payment_proof(
+  p_request_id uuid,
+  p_payment_proof_url text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_client_id uuid;
+  v_payment_status public.travel_payment_status;
+  v_payment_method public.payment_method;
+begin
+  if p_payment_proof_url is null or length(trim(p_payment_proof_url)) = 0 then
+    raise exception 'Preuve de virement manquante.';
+  end if;
+
+  select client_id into v_client_id
+  from public.travel_requests
+  where id = p_request_id
+  for update;
+
+  if v_client_id is null then
+    raise exception 'Demande introuvable.';
+  end if;
+  if v_client_id <> auth.uid() then
+    raise exception 'Seul le client propriétaire de la demande peut renvoyer une preuve.';
+  end if;
+
+  select status, payment_method into v_payment_status, v_payment_method
+  from public.travel_payments
+  where request_id = p_request_id
+  for update;
+
+  if v_payment_status is null then
+    raise exception 'Aucun paiement associé à cette demande.';
+  end if;
+  if v_payment_status <> 'rejected' then
+    raise exception 'Seul un paiement rejeté peut recevoir une nouvelle preuve (statut actuel : %).', v_payment_status;
+  end if;
+  if v_payment_method <> 'virement' then
+    raise exception 'Seul un paiement par virement porte une preuve.';
+  end if;
+
+  -- Repart au point de départ du cycle de vérification : verified_by/at
+  -- vidés (l'ancien rejet ne doit pas rester affiché comme la décision
+  -- courante), l'ancienne preuve est remplacée (une seule preuve courante
+  -- par paiement — l'historique des fichiers reste dans le bucket, chemins
+  -- distincts côté TypeScript).
+  update public.travel_payments
+  set status = 'awaiting_verification',
+      payment_proof_url = p_payment_proof_url,
+      verified_by = null,
+      verified_at = null
+  where request_id = p_request_id;
+end;
+$$;
+
+revoke execute on function public.resubmit_travel_payment_proof(uuid, text) from public;
+revoke execute on function public.resubmit_travel_payment_proof(uuid, text) from anon;
+grant execute on function public.resubmit_travel_payment_proof(uuid, text) to authenticated;
+
+-- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,
 -- catalogue, livraison zone tarifée — a existé puis a été retiré
 -- intégralement, cf. tête de fichier).

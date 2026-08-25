@@ -1,6 +1,6 @@
 import { ShieldCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { VerifyPaymentButton } from '@/components/travel/VerifyPaymentButton'
+import { TravelPaymentActions } from '@/components/admin/TravelPaymentActions'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatTND } from '@/lib/format'
@@ -89,7 +89,7 @@ export default async function JibliPaiementsPage() {
               )}
 
               <div className="mt-4">
-                <VerifyPaymentButton paymentId={payment.id} />
+                <TravelPaymentActions paymentId={payment.id} />
               </div>
             </Card>
           ))}

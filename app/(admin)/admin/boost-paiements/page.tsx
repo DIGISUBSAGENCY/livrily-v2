@@ -1,6 +1,6 @@
 import { Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { VerifyBoostPaymentButton } from '@/components/travel/VerifyBoostPaymentButton'
+import { BoostPaymentActions } from '@/components/admin/BoostPaymentActions'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatTND } from '@/lib/format'
@@ -112,7 +112,7 @@ export default async function BoostPaiementsPage() {
                 )}
 
                 <div className="mt-4">
-                  <VerifyBoostPaymentButton paymentId={payment.id} />
+                  <BoostPaymentActions paymentId={payment.id} />
                 </div>
               </Card>
             )

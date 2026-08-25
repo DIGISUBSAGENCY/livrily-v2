@@ -5,6 +5,7 @@ import { ExternalLink } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { TravelRequestStatusBadge } from '@/components/travel/TravelRequestStatusBadge'
 import { TravelPaymentStatusBadge } from '@/components/travel/TravelPaymentStatusBadge'
+import { ResubmitPaymentProof } from '@/components/travel/ResubmitPaymentProof'
 import { ProposalCard } from '@/components/travel/ProposalCard'
 import { ProposalForm } from '@/components/travel/ProposalForm'
 import { VoyageurStatusActions } from '@/components/travel/VoyageurStatusActions'
@@ -319,6 +320,14 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
         <div className="mt-2">
           <TravelPaymentStatusBadge status={payment.status} />
         </div>
+      )}
+
+      {/* Re-soumission de preuve après rejet admin (chantier admin
+          completeness, Option B) — propriétaire uniquement, paiement
+          virement rejeté uniquement. La RPC revérifie ces conditions côté
+          base, ce gate n'est que de l'affichage. */}
+      {isOwner && payment?.status === 'rejected' && payment.payment_method === 'virement' && (
+        <ResubmitPaymentProof requestId={request.id} />
       )}
 
       {request.item_photo_url ? (

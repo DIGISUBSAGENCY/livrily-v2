@@ -64,3 +64,29 @@ export async function verifyBoostPayment(paymentId: string): Promise<ActionResul
   revalidatePath('/admin/boost-paiements')
   return { error: null }
 }
+
+// Rejette un paiement Boost — chantier admin completeness. Tout le travail
+// (garde is_admin, rejet, RETRAIT du temps de mise en avant par replay de
+// l'historique, notification au payeur) vit dans la RPC
+// reject_boost_payment (schema.sql) : contrairement à verifyBoostPayment
+// ci-dessus (update mono-table), le rejet touche boost_payments + l'item
+// boosté atomiquement — pas faisable proprement en deux appels client.
+// error.message surfacé tel quel : exceptions métier lisibles de la RPC.
+export async function rejectBoostPayment(paymentId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) return { error: 'Non authentifié.' }
+
+  const { error } = await supabase.rpc('reject_boost_payment', { p_payment_id: paymentId })
+
+  if (error) {
+    return { error: error.message || 'Impossible de rejeter ce paiement, réessaie.' }
+  }
+
+  revalidatePath('/admin/boost-paiements')
+  return { error: null }
+}
