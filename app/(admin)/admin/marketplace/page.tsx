@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Plane, Tag } from 'lucide-react'
+import { Plane, Tag, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { TripStatusBadge } from '@/components/travel/TripStatusBadge'
 import { ProductOfferStatusBadge } from '@/components/travel/ProductOfferStatusBadge'
@@ -37,7 +37,7 @@ const PAGE_LIMIT = 100
 // exactement comme n'importe quel visiteur.
 export default async function AdminMarketplacePage({ searchParams }: AdminMarketplacePageProps) {
   const { type: typeParam, q = '', status = 'all' } = await searchParams
-  const type: MarketplaceType = typeParam === 'offres' ? 'offres' : 'trips'
+  const type: MarketplaceType = typeParam === 'offres' ? 'offres' : typeParam === 'boosts' ? 'boosts' : 'trips'
   const supabase = await createClient()
 
   const preservedParams = new URLSearchParams()
@@ -49,12 +49,17 @@ export default async function AdminMarketplacePage({ searchParams }: AdminMarket
     voyageurId: string
     originCountry: string
     destinationCity: string
-    travelDate: string
+    travelDate: string | null
     status: TripStatus | ProductOfferStatus
     createdAt: string
     itemDescription: string | null
     price: number | null
     publicHref: string
+    // Onglet Boosts actifs uniquement : type d'item (le mélange des 3
+    // tables rend le badge de statut par type peu lisible — remplacé par
+    // un libellé de type + la date d'expiration).
+    boostKind: 'Trip' | 'Offre' | 'Demande' | null
+    boostedUntil: string | null
   }
 
   let rows: Row[] = []
@@ -80,7 +85,42 @@ export default async function AdminMarketplacePage({ searchParams }: AdminMarket
       itemDescription: null,
       price: t.indicative_price,
       publicHref: `/jibli/trips/${t.id}`,
+      boostKind: null,
+      boostedUntil: null,
     }))
+  } else if (type === 'boosts') {
+    // Boosts actifs — les 3 tables boostables (le boost couvre aussi les
+    // demandes, pas seulement Trips/Offres : les omettre recréerait un
+    // angle mort dans la seule vue boost). boosted_until > now() côté
+    // requête ; tri par expiration croissante (le plus proche de la fin en
+    // premier — l'info la plus actionnable). Le filtre statut de la barre
+    // de recherche s'applique tel quel (les 3 types partagent les mêmes
+    // valeurs de statut).
+    const nowIso = new Date().toISOString()
+    const [tripsRes, offersRes, requestsRes] = await Promise.all([
+      supabase.from('trips').select('id, voyageur_id, origin_country, destination_city, status, created_at, boosted_until').gt('boosted_until', nowIso).limit(PAGE_LIMIT),
+      supabase.from('product_offers').select('id, voyageur_id, item_description, origin_country, destination_city, status, created_at, boosted_until').gt('boosted_until', nowIso).limit(PAGE_LIMIT),
+      supabase.from('travel_requests').select('id, client_id, item_description, origin_country, destination_city, status, created_at, boosted_until').gt('boosted_until', nowIso).limit(PAGE_LIMIT),
+    ])
+    error = tripsRes.error?.message ?? offersRes.error?.message ?? requestsRes.error?.message ?? null
+    rows = [
+      ...(tripsRes.data ?? []).map((t): Row => ({
+        id: t.id, voyageurId: t.voyageur_id, originCountry: t.origin_country, destinationCity: t.destination_city,
+        travelDate: null, status: t.status, createdAt: t.created_at, itemDescription: null, price: null,
+        publicHref: `/jibli/trips/${t.id}`, boostKind: 'Trip', boostedUntil: t.boosted_until,
+      })),
+      ...(offersRes.data ?? []).map((o): Row => ({
+        id: o.id, voyageurId: o.voyageur_id, originCountry: o.origin_country, destinationCity: o.destination_city,
+        travelDate: null, status: o.status, createdAt: o.created_at, itemDescription: o.item_description, price: null,
+        publicHref: `/jibli/offres/${o.id}`, boostKind: 'Offre', boostedUntil: o.boosted_until,
+      })),
+      ...(requestsRes.data ?? []).map((r): Row => ({
+        id: r.id, voyageurId: r.client_id, originCountry: r.origin_country, destinationCity: r.destination_city,
+        travelDate: null, status: r.status as TripStatus | ProductOfferStatus, createdAt: r.created_at, itemDescription: r.item_description, price: null,
+        publicHref: `/jibli/${r.id}`, boostKind: 'Demande', boostedUntil: r.boosted_until,
+      })),
+    ].sort((a, b) => (a.boostedUntil ?? '').localeCompare(b.boostedUntil ?? ''))
+    if (isValidStatus(status)) rows = rows.filter((r) => r.status === status)
   } else {
     let query = supabase
       .from('product_offers')
@@ -101,6 +141,8 @@ export default async function AdminMarketplacePage({ searchParams }: AdminMarket
       itemDescription: o.item_description,
       price: o.item_price + o.delivery_fee,
       publicHref: `/jibli/offres/${o.id}`,
+      boostKind: null,
+      boostedUntil: null,
     }))
   }
 
@@ -126,7 +168,7 @@ export default async function AdminMarketplacePage({ searchParams }: AdminMarket
     )
   })
 
-  const Icon = type === 'trips' ? Plane : Tag
+  const Icon = type === 'trips' ? Plane : type === 'boosts' ? Sparkles : Tag
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
@@ -135,7 +177,7 @@ export default async function AdminMarketplacePage({ searchParams }: AdminMarket
         Marketplace
       </h1>
       <p className="mt-1 text-sm text-slate-500">
-        Vue d&apos;ensemble des Trips et Offres publiés par les voyageurs — lecture seule.
+        Vue d&apos;ensemble des Trips, Offres et mises en avant actives — lecture seule.
       </p>
 
       <div className="mt-6">
@@ -151,7 +193,11 @@ export default async function AdminMarketplacePage({ searchParams }: AdminMarket
       {!error && filtered.length === 0 && (
         <div className="mt-16 flex flex-col items-center text-center text-slate-500">
           <Icon className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
-          <p>Aucun{type === 'trips' ? ' trip' : 'e offre'} ne correspond à ces critères.</p>
+          <p>
+            {type === 'boosts'
+              ? 'Aucune mise en avant active ne correspond à ces critères.'
+              : `Aucun${type === 'trips' ? ' trip' : 'e offre'} ne correspond à ces critères.`}
+          </p>
         </div>
       )}
 
@@ -166,11 +212,20 @@ export default async function AdminMarketplacePage({ searchParams }: AdminMarket
                   </Link>
                   <p className="text-xs text-slate-500">
                     {voyageurNameById.get(r.voyageurId) ?? 'Voyageur'}
-                    {r.itemDescription && ` · ${r.originCountry} → ${r.destinationCity}`} ·{' '}
-                    {new Date(r.travelDate).toLocaleDateString('fr-TN')}
+                    {r.itemDescription && ` · ${r.originCountry} → ${r.destinationCity}`}
+                    {r.travelDate && ` · ${new Date(r.travelDate).toLocaleDateString('fr-TN')}`}
                   </p>
                 </div>
-                {type === 'trips' ? (
+                {type === 'boosts' ? (
+                  <div className="flex-shrink-0 text-right">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">{r.boostKind}</p>
+                    {r.boostedUntil && (
+                      <p className="text-xs text-slate-500">
+                        En avant jusqu&apos;au {new Date(r.boostedUntil).toLocaleString('fr-TN')}
+                      </p>
+                    )}
+                  </div>
+                ) : type === 'trips' ? (
                   <TripStatusBadge status={r.status as TripStatus} />
                 ) : (
                   <ProductOfferStatusBadge status={r.status as ProductOfferStatus} />

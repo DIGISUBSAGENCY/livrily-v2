@@ -49,3 +49,47 @@ export async function verifyTravelPayment(paymentId: string): Promise<ActionResu
   revalidatePath('/admin/jibli-paiements')
   return { error: null }
 }
+
+// Rejette une preuve de virement — chantier admin completeness, Option B
+// validée : la mission reste 'matched', le client est notifié et renvoie
+// une nouvelle preuve depuis /jibli/[id] (resubmit_travel_payment_proof,
+// cf. schema.sql). Pas d'unwind de l'acceptation (les autres propositions
+// auto-rejetées ne seraient pas restaurables). Mirror exact de
+// verifyTravelPayment ci-dessus : update mono-table via la policy admin
+// existante + notifyUser — aucune RPC nécessaire côté admin.
+export async function rejectTravelPayment(paymentId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) return { error: 'Non authentifié.' }
+
+  const { data: payment, error } = await supabase
+    .from('travel_payments')
+    .update({ status: 'rejected', verified_by: user.id, verified_at: new Date().toISOString() })
+    .eq('id', paymentId)
+    .eq('status', 'awaiting_verification')
+    .select('request_id')
+    .single()
+
+  if (error || !payment) {
+    return { error: 'Impossible de rejeter ce paiement, réessaie.' }
+  }
+
+  const { data: request } = await supabase.from('travel_requests').select('client_id').eq('id', payment.request_id).single()
+  if (request) {
+    await notifyUser({
+      userId: request.client_id,
+      type: 'transaction_update',
+      title: 'Preuve de virement refusée',
+      body: 'Ta preuve de virement a été refusée — renvoie une nouvelle preuve depuis la page de ta demande.',
+      relatedObjectType: 'travel_request',
+      relatedObjectId: payment.request_id,
+    })
+  }
+
+  revalidatePath('/admin/jibli-paiements')
+  return { error: null }
+}

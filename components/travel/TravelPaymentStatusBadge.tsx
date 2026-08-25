@@ -6,6 +6,7 @@ const statusConfig: Record<TravelPaymentStatus, { label: string; tone: 'neutral'
   escrowed: { label: 'Paiement séquestré (bloqué par la plateforme)', tone: 'info' },
   released: { label: 'Paiement libéré', tone: 'success' },
   refunded: { label: 'Paiement remboursé', tone: 'neutral' },
+  rejected: { label: 'Preuve de virement refusée — renvoie une nouvelle preuve', tone: 'danger' },
 }
 
 export function TravelPaymentStatusBadge({ status }: { status: TravelPaymentStatus }) {

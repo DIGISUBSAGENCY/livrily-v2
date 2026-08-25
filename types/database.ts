@@ -22,7 +22,10 @@ export type TravelRequestStatus = 'open' | 'matched' | 'in_transit' | 'completed
 
 export type TravelProposalStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn'
 
-export type TravelPaymentStatus = 'awaiting_verification' | 'escrowed' | 'released' | 'refunded'
+// 'rejected' (chantier admin completeness) : preuve de virement refusée par
+// l'admin — la mission reste 'matched', le client renvoie une nouvelle
+// preuve via resubmit_travel_payment_proof() (Option B, cf. schema.sql).
+export type TravelPaymentStatus = 'awaiting_verification' | 'escrowed' | 'released' | 'refunded' | 'rejected'
 
 export type ReleaseReason = 'client_confirmed' | 'auto_released_after_delay' | 'admin_dispute_resolution'
 
@@ -62,13 +65,17 @@ export type ProductOfferStatus = 'open' | 'matched' | 'completed' | 'cancelled'
 // Boost payant (Phase 3, brique 5/N) — pas de lifecycle escrow/libération
 // contrairement à TravelPaymentStatus : un boost est consommé
 // immédiatement, jamais retenu puis "livré" à une contrepartie.
-export type BoostPaymentStatus = 'awaiting_verification' | 'paid'
+// 'rejected' (chantier admin completeness) : preuve refusée par l'admin ET
+// temps de mise en avant retiré (replay de l'historique, cf.
+// reject_boost_payment dans schema.sql).
+export type BoostPaymentStatus = 'awaiting_verification' | 'paid' | 'rejected'
 
-// Portefeuille interne, brique 1/N — contrairement à BoostPaymentStatus
-// (2 valeurs, jamais de "rejected" : un boost verifié tard reste verifié),
-// un dépôt peut être explicitement rejeté (preuve invalide) sans jamais
-// créditer wallet_balance — cf. schema.sql, trigger
-// credit_wallet_balance_on_deposit.
+// Portefeuille interne, brique 1/N — un dépôt peut être explicitement
+// rejeté (preuve invalide) sans jamais créditer wallet_balance — cf.
+// schema.sql, trigger credit_wallet_balance_on_deposit. (Historiquement le
+// premier statut de paiement du projet à porter 'rejected' ;
+// BoostPaymentStatus/TravelPaymentStatus l'ont rejoint au chantier admin
+// completeness.)
 export type WalletDepositStatus = 'awaiting_verification' | 'credited' | 'rejected'
 
 export interface Database {
@@ -925,6 +932,19 @@ export interface Database {
       request_wallet_withdrawal: {
         Args: { p_amount: number }
         Returns: string
+      }
+      // Chantier admin completeness — rejet Boost (is_admin vérifié dans le
+      // corps, cf. schema.sql : rejet + replay de l'historique pour
+      // recalculer boosted_until + notification, le tout atomique).
+      reject_boost_payment: {
+        Args: { p_payment_id: string }
+        Returns: undefined
+      }
+      // Re-soumission de preuve par le client après rejet admin (Option B)
+      // — self-scoped sur client_id, cf. schema.sql.
+      resubmit_travel_payment_proof: {
+        Args: { p_request_id: string; p_payment_proof_url: string }
+        Returns: undefined
       }
     }
   }

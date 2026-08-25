@@ -584,3 +584,51 @@ export async function submitReview(requestId: string, rating: number, comment: s
   revalidatePath('/profil')
   return { error: null }
 }
+
+// Re-soumission d'une preuve de virement après rejet admin — chantier
+// admin completeness, Option B (la mission reste matched pendant tout le
+// cycle). Chemin de fichier horodaté (pas `travel-${requestId}.jpg` en
+// upsert comme acceptProposalVirement) : la preuve REJETÉE doit rester
+// intacte dans le bucket comme trace d'audit — l'écraser détruirait la
+// pièce sur laquelle l'admin a fondé son rejet. La RPC
+// resubmit_travel_payment_proof (schema.sql) vérifie propriété + statut
+// 'rejected' et repasse le paiement à awaiting_verification.
+export async function resubmitTravelPaymentProof(
+  requestId: string,
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) redirect(`/login?next=/jibli/${requestId}`)
+
+  const proofFile = formData.get('payment_proof')
+  if (!(proofFile instanceof File) || proofFile.size === 0) {
+    return { error: "Merci de joindre une capture d'écran de la preuve de virement." }
+  }
+
+  const path = `${user.id}/travel-${requestId}-resubmit-${Date.now()}.jpg`
+  const { error: uploadError } = await supabase.storage
+    .from('payment-proofs')
+    .upload(path, proofFile, { contentType: proofFile.type || 'image/jpeg', upsert: true })
+
+  if (uploadError) {
+    return { error: "Impossible d'envoyer la preuve de paiement, réessaie." }
+  }
+
+  const { error } = await supabase.rpc('resubmit_travel_payment_proof', {
+    p_request_id: requestId,
+    p_payment_proof_url: path,
+  })
+
+  if (error) {
+    return { error: error.message || 'Impossible de renvoyer la preuve, réessaie.' }
+  }
+
+  revalidatePath(`/jibli/${requestId}`)
+  return { error: null }
+}
