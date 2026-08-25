@@ -110,9 +110,24 @@ async function run() {
   // ==========================================================================
   // 1. /parrainage : formulaire de dépôt visible, coordonnées bancaires
   //    affichées.
+  //
+  // Chantier brique 4/N (restructuration en onglets) : le contenu de
+  // l'onglet "Portefeuille" n'est rendu dans le DOM réel que si
+  // defaultTab='portefeuille' — sinon ?flouci=success force ce défaut côté
+  // serveur (ParrainageTabs, cf. page.tsx), même mécanique qu'un vrai
+  // retour de paiement Flouci. Sans ce paramètre, un GET nu montre l'onglet
+  // "Parrainage" par défaut, où ce formulaire n'existe pas dans le DOM —
+  // ATTENTION : le payload RSC (flight data) inliné dans le HTML initial
+  // contient quand même le texte des DEUX onglets (nécessaire pour changer
+  // d'onglet sans round-trip serveur), donc une simple recherche de TEXTE
+  // BRUT (ex: "Déposer", le RIB) matcherait à tort même onglet fermé —
+  // seules les recherches sur la SYNTAXE d'attribut HTML réelle
+  // (name="...") sont fiables ici, jamais trouvées dans ce payload encodé
+  // en JSON (name":"..." avec un deux-points, pas un egal). Vérifié en
+  // direct en comparant les deux ce chantier-ci.
   // ==========================================================================
   console.log('\n=== 1. /parrainage — formulaire de dépôt ===')
-  const pageBeforeRes = await fetch(`${BASE}/parrainage`, { headers: { cookie: clientCookie } })
+  const pageBeforeRes = await fetch(`${BASE}/parrainage?flouci=success`, { headers: { cookie: clientCookie } })
   const pageBeforeBody = await pageBeforeRes.text()
   check('GET /parrainage → 200', pageBeforeRes.status === 200, { status: pageBeforeRes.status })
   check('formulaire de dépôt présent (input amount)', pageBeforeBody.includes('name="amount"'), {})
@@ -147,7 +162,7 @@ async function run() {
   // 3. /parrainage reflète le dépôt (historique + badge).
   // ==========================================================================
   console.log('\n=== 3. /parrainage — historique reflète le dépôt ===')
-  const pageAfterRes = await fetch(`${BASE}/parrainage`, { headers: { cookie: clientCookie } })
+  const pageAfterRes = await fetch(`${BASE}/parrainage?flouci=success`, { headers: { cookie: clientCookie } })
   const pageAfterBody = (await pageAfterRes.text()).replace(/<!--\s*-->/g, '')
   check('montant du dépôt affiché dans l\'historique', pageAfterBody.includes('42.750') || pageAfterBody.includes('42,750') || pageAfterBody.includes('42.75'), {})
   check('badge "En attente de vérification" affiché', pageAfterBody.includes('En attente de vérification'), {})

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { ReferralCodeCard } from '@/components/account/ReferralCodeCard'
+import { ParrainageTabs } from '@/components/account/ParrainageTabs'
 import { WalletDepositForm } from '@/components/account/WalletDepositForm'
 import { WalletDepositStatusBadge } from '@/components/account/WalletDepositStatusBadge'
 import { WalletWithdrawalForm } from '@/components/account/WalletWithdrawalForm'
@@ -55,12 +56,7 @@ export default async function ParrainagePage({ searchParams }: ParrainagePagePro
     supabase.from('profiles').select('referral_code, wallet_balance').eq('id', user.id).single(),
     supabase.from('wallet_credits').select('*').eq('profile_id', user.id).order('created_at', { ascending: false }).limit(20),
     supabase.from('bank_transfer_info').select('bank_name, account_holder, rib, flouci_phone').eq('is_active', true).limit(1).maybeSingle(),
-    // Chantier portefeuille interne, brique 1/N (dépôt virement) — section
-    // ajoutée sous "Solde disponible" ci-dessous ; restructuration en
-    // onglets Parrainage/Portefeuille prévue dans une brique ultérieure,
-    // pas construite ici pour rester testable seule.
     supabase.from('wallet_deposits').select('*').eq('profile_id', user.id).order('created_at', { ascending: false }).limit(20),
-    // Brique 3/N (retrait) — même raisonnement.
     supabase.from('wallet_withdrawals').select('*').eq('profile_id', user.id).order('requested_at', { ascending: false }).limit(20),
   ])
 
@@ -75,91 +71,100 @@ export default async function ParrainagePage({ searchParams }: ParrainagePagePro
         <div className={`mt-4 rounded-lg border p-3 text-sm ${flouciBanner.tone}`}>{flouciBanner.text}</div>
       )}
 
-      <div className="mt-6 space-y-4">
-        {profile?.referral_code && <ReferralCodeCard code={profile.referral_code} shareUrl={shareUrl} />}
+      {/* Chantier portefeuille interne, brique 4/N — les 2 sections
+          (Parrainage / Portefeuille), jusqu'ici empilées verticalement
+          (briques 1-3/N), séparées en onglets distincts. defaultTab :
+          atterrit directement sur "Portefeuille" au retour d'un paiement
+          Flouci (?flouci=...) — ce serait absurde de laisser l'utilisateur
+          sur l'onglet Parrainage juste après avoir payé un dépôt. */}
+      <ParrainageTabs
+        defaultTab={flouci ? 'portefeuille' : 'parrainage'}
+        parrainage={
+          <>
+            {profile?.referral_code && <ReferralCodeCard code={profile.referral_code} shareUrl={shareUrl} />}
 
-        <Card className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-slate-500">Solde disponible</p>
-            <p className="text-2xl font-bold text-brand-700">{formatTND(profile?.wallet_balance ?? 0)}</p>
-          </div>
-          {/* Ancien texte ("Applicable sur les frais de livraison au
-              checkout") faisait référence à un checkout qui n'existe plus
-              (rôle commerce retiré) — trouvé obsolète en construisant cette
-              section, corrigé ici plutôt que laissé à mentir sur ce que ce
-              solde représente maintenant (parrainage + dépôts). */}
-          <p className="max-w-[55%] text-right text-xs text-slate-400">Crédité par parrainage ou par dépôt.</p>
-        </Card>
+            {history && history.length > 0 && (
+              <Card>
+                <h2 className="mb-2 font-semibold text-slate-900">Historique</h2>
+                <ul className="divide-y divide-slate-100">
+                  {history.map((entry) => (
+                    <li key={entry.id} className="flex items-center justify-between py-2 text-sm">
+                      <div>
+                        <p className="text-slate-700">{reasonLabels[entry.reason] ?? entry.reason}</p>
+                        <p className="text-xs text-slate-400">{new Date(entry.created_at).toLocaleDateString('fr-TN')}</p>
+                      </div>
+                      <span className={entry.amount >= 0 ? 'font-medium text-brand-700' : 'font-medium text-slate-500'}>
+                        {entry.amount >= 0 ? '+' : ''}
+                        {formatTND(entry.amount)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+          </>
+        }
+        portefeuille={
+          <>
+            <Card className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">Solde disponible</p>
+                <p className="text-2xl font-bold text-brand-700">{formatTND(profile?.wallet_balance ?? 0)}</p>
+              </div>
+              {/* Ancien texte ("Applicable sur les frais de livraison au
+                  checkout") faisait référence à un checkout qui n'existe
+                  plus (rôle commerce retiré) — trouvé obsolète en
+                  construisant la brique 1/N, corrigé à l'époque plutôt que
+                  laissé à mentir sur ce que ce solde représente maintenant. */}
+              <p className="max-w-[55%] text-right text-xs text-slate-400">Crédité par parrainage ou par dépôt.</p>
+            </Card>
 
-        {/* Portefeuille — dépôt (brique 1/N, virement uniquement).
-            Restructuration en onglets Parrainage/Portefeuille prévue dans
-            une brique ultérieure ; section autonome pour l'instant, testable
-            seule. */}
-        <Card>
-          <h2 className="mb-2 font-semibold text-slate-900">Déposer</h2>
-          <WalletDepositForm bankInfo={bankInfo ?? null} />
-        </Card>
+            <Card>
+              <h2 className="mb-2 font-semibold text-slate-900">Déposer</h2>
+              <WalletDepositForm bankInfo={bankInfo ?? null} />
+            </Card>
 
-        {deposits && deposits.length > 0 && (
-          <Card>
-            <h2 className="mb-2 font-semibold text-slate-900">Historique des dépôts</h2>
-            <ul className="divide-y divide-slate-100">
-              {deposits.map((deposit) => (
-                <li key={deposit.id} className="flex items-center justify-between py-2 text-sm">
-                  <div>
-                    <p className="font-medium text-slate-700">{formatTND(deposit.amount)}</p>
-                    <p className="text-xs text-slate-400">{new Date(deposit.created_at).toLocaleString('fr-TN')}</p>
-                  </div>
-                  <WalletDepositStatusBadge status={deposit.status} />
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
+            {deposits && deposits.length > 0 && (
+              <Card>
+                <h2 className="mb-2 font-semibold text-slate-900">Historique des dépôts</h2>
+                <ul className="divide-y divide-slate-100">
+                  {deposits.map((deposit) => (
+                    <li key={deposit.id} className="flex items-center justify-between py-2 text-sm">
+                      <div>
+                        <p className="font-medium text-slate-700">{formatTND(deposit.amount)}</p>
+                        <p className="text-xs text-slate-400">{new Date(deposit.created_at).toLocaleString('fr-TN')}</p>
+                      </div>
+                      <WalletDepositStatusBadge status={deposit.status} />
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
 
-        {/* Retrait (brique 3/N) — même section autonome que "Déposer". */}
-        <Card>
-          <h2 className="mb-2 font-semibold text-slate-900">Retirer</h2>
-          <WalletWithdrawalForm balance={profile?.wallet_balance ?? 0} />
-        </Card>
+            <Card>
+              <h2 className="mb-2 font-semibold text-slate-900">Retirer</h2>
+              <WalletWithdrawalForm balance={profile?.wallet_balance ?? 0} />
+            </Card>
 
-        {withdrawals && withdrawals.length > 0 && (
-          <Card>
-            <h2 className="mb-2 font-semibold text-slate-900">Historique des retraits</h2>
-            <ul className="divide-y divide-slate-100">
-              {withdrawals.map((withdrawal) => (
-                <li key={withdrawal.id} className="flex items-center justify-between py-2 text-sm">
-                  <div>
-                    <p className="font-medium text-slate-700">{formatTND(withdrawal.amount)}</p>
-                    <p className="text-xs text-slate-400">{new Date(withdrawal.requested_at).toLocaleString('fr-TN')}</p>
-                  </div>
-                  <WithdrawalStatusBadge status={withdrawal.status} />
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-
-        {history && history.length > 0 && (
-          <Card>
-            <h2 className="mb-2 font-semibold text-slate-900">Historique</h2>
-            <ul className="divide-y divide-slate-100">
-              {history.map((entry) => (
-                <li key={entry.id} className="flex items-center justify-between py-2 text-sm">
-                  <div>
-                    <p className="text-slate-700">{reasonLabels[entry.reason] ?? entry.reason}</p>
-                    <p className="text-xs text-slate-400">{new Date(entry.created_at).toLocaleDateString('fr-TN')}</p>
-                  </div>
-                  <span className={entry.amount >= 0 ? 'font-medium text-brand-700' : 'font-medium text-slate-500'}>
-                    {entry.amount >= 0 ? '+' : ''}
-                    {formatTND(entry.amount)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-      </div>
+            {withdrawals && withdrawals.length > 0 && (
+              <Card>
+                <h2 className="mb-2 font-semibold text-slate-900">Historique des retraits</h2>
+                <ul className="divide-y divide-slate-100">
+                  {withdrawals.map((withdrawal) => (
+                    <li key={withdrawal.id} className="flex items-center justify-between py-2 text-sm">
+                      <div>
+                        <p className="font-medium text-slate-700">{formatTND(withdrawal.amount)}</p>
+                        <p className="text-xs text-slate-400">{new Date(withdrawal.requested_at).toLocaleString('fr-TN')}</p>
+                      </div>
+                      <WithdrawalStatusBadge status={withdrawal.status} />
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+          </>
+        }
+      />
     </main>
   )
 }

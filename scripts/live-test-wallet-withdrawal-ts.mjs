@@ -107,9 +107,14 @@ async function run() {
 
   // ==========================================================================
   // 1. /parrainage : formulaire de retrait + solde.
+  //
+  // Chantier brique 4/N (restructuration en onglets) : ce formulaire vit
+  // dans l'onglet "Portefeuille", pas rendu dans le DOM réel par défaut —
+  // ?flouci=success force ce défaut côté serveur (cf. ParrainageTabs/
+  // page.tsx), même mécanique qu'un vrai retour de paiement Flouci.
   // ==========================================================================
   console.log('\n=== 1. /parrainage — formulaire de retrait ===')
-  const pageRes = await fetch(`${BASE}/parrainage`, { headers: { cookie: clientCookie } })
+  const pageRes = await fetch(`${BASE}/parrainage?flouci=success`, { headers: { cookie: clientCookie } })
   const pageBody = (await pageRes.text()).replace(/<!--\s*-->/g, '')
   check('GET /parrainage → 200', pageRes.status === 200, { status: pageRes.status })
   check('formulaire de retrait présent (input withdrawal_amount)', pageBody.includes('id="withdrawal_amount"'), {})
@@ -130,6 +135,10 @@ async function run() {
   )
   const page = await context.newPage()
   await page.goto(`${BASE}/parrainage`, { waitUntil: 'networkidle' })
+  // Chantier brique 4/N (restructuration en onglets) : "Portefeuille" doit
+  // être ouvert AVANT de chercher le formulaire de retrait (onglet
+  // "Parrainage" actif par défaut sans ?flouci=...).
+  await page.getByRole('button', { name: 'Portefeuille', exact: true }).click()
   await page.getByLabel('Montant à retirer (TND)').fill('35')
   const requestButton = page.getByRole('button', { name: 'Demander le retrait' })
   await requestButton.click()

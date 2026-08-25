@@ -184,9 +184,15 @@ async function run() {
 
   // ==========================================================================
   // 5. /parrainage : sélecteur de méthode Virement/Flouci présent.
+  //
+  // Chantier brique 4/N (restructuration en onglets) : ce sélecteur vit
+  // dans l'onglet "Portefeuille", pas rendu dans le DOM réel par défaut
+  // (onglet "Parrainage" actif au premier chargement) — ?flouci=success
+  // force ce défaut côté serveur, même mécanique qu'un vrai retour de
+  // paiement Flouci (cf. ParrainageTabs/page.tsx).
   // ==========================================================================
   console.log('\n=== 5. /parrainage — sélecteur de méthode ===')
-  const parrainageRes = await fetch(`${BASE}/parrainage`, { headers: { cookie: clientCookie } })
+  const parrainageRes = await fetch(`${BASE}/parrainage?flouci=success`, { headers: { cookie: clientCookie } })
   const parrainageBody = await parrainageRes.text()
   check('bouton "Virement" présent', parrainageBody.includes('>Virement<'), {})
   check('bouton "Flouci" présent', parrainageBody.includes('>Flouci<'), {})
@@ -207,6 +213,10 @@ async function run() {
   )
   const page = await context.newPage()
   await page.goto(`${BASE}/parrainage`, { waitUntil: 'networkidle' })
+  // Chantier brique 4/N (restructuration en onglets) : "Portefeuille" doit
+  // être ouvert AVANT de chercher le formulaire de dépôt (onglet
+  // "Parrainage" actif par défaut sans ?flouci=...).
+  await page.getByRole('button', { name: 'Portefeuille', exact: true }).click()
   // Montant obligatoire AVANT le clic : handleFlouci() valide le montant
   // côté client avant d'appeler la Server Action — sans ça, l'erreur
   // affichée serait "Indique un montant valide.", pas le message "pas
