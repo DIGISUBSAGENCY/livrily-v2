@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 
 interface MobileNavProps {
   showJibli: boolean
+  showDashboard: boolean
   showParrainage: boolean
   isLoggedIn: boolean
   displayName: string | null
@@ -18,7 +19,7 @@ interface MobileNavProps {
 // composant, "Demandes"/"Parrainage" étaient simplement `hidden` sur mobile
 // (cf. Header.tsx), sans aucun moyen d'y accéder — pas un menu à
 // "simplifier", un menu à construire.
-export function MobileNav({ showJibli, showParrainage, isLoggedIn, displayName }: MobileNavProps) {
+export function MobileNav({ showJibli, showDashboard, showParrainage, isLoggedIn, displayName }: MobileNavProps) {
   const [isOpen, setIsOpen] = useState(false)
 
   return (
@@ -67,6 +68,15 @@ export function MobileNav({ showJibli, showParrainage, isLoggedIn, displayName }
                 className="rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 Offres
+              </Link>
+            )}
+            {showDashboard && (
+              <Link
+                href="/jibli/dashboard"
+                onClick={() => setIsOpen(false)}
+                className="rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Dashboard
               </Link>
             )}
             <Link
