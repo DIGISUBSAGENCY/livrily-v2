@@ -1,7 +1,11 @@
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
-export type MarketplaceType = 'trips' | 'offres'
+// 'boosts' (chantier admin completeness) : vue des mises en avant
+// actuellement actives (boosted_until futur), tous types confondus —
+// jusqu'ici invisible sans SQL direct (seule la file de PAIEMENTS boost
+// existait, pas l'état courant des boosts eux-mêmes).
+export type MarketplaceType = 'trips' | 'offres' | 'boosts'
 
 interface MarketplaceTypeTabsProps {
   type: MarketplaceType
@@ -15,6 +19,7 @@ interface MarketplaceTypeTabsProps {
 const TABS: { value: MarketplaceType; label: string }[] = [
   { value: 'trips', label: 'Trips' },
   { value: 'offres', label: 'Offres' },
+  { value: 'boosts', label: 'Boosts actifs' },
 ]
 
 export function MarketplaceTypeTabs({ type, preservedQuery }: MarketplaceTypeTabsProps) {
