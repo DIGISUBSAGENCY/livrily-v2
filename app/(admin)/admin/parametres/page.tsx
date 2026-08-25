@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Percent, Landmark, Clock } from 'lucide-react'
+import { Percent, Landmark, Clock, Rocket } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 
@@ -13,12 +13,19 @@ import { Card } from '@/components/ui/Card'
 export default async function AdminParametresPage() {
   const supabase = await createClient()
 
-  const [{ data: settings }, { count: bankCount }] = await Promise.all([
+  const [{ data: settings }, { count: bankCount }, { data: boostTiers }] = await Promise.all([
     supabase.from('platform_settings').select('travel_commission_rate, auto_release_delay_days').eq('id', true).single(),
     supabase.from('bank_transfer_info').select('id', { count: 'exact', head: true }),
+    supabase.from('boost_pricing_tiers').select('price_tnd').order('duration_days'),
   ])
 
   const commissionPercent = settings ? Math.round(settings.travel_commission_rate * 10000) / 100 : null
+
+  // Aperçu chiffré : plage min-max plutôt qu'une valeur unique (7 paliers,
+  // pas un seul réglage comme commission/libération automatique).
+  const boostPrices = (boostTiers ?? []).map((t) => t.price_tnd)
+  const boostRange =
+    boostPrices.length > 0 ? `${Math.min(...boostPrices)}–${Math.max(...boostPrices)} TND` : null
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
@@ -68,6 +75,19 @@ export default async function AdminParametresPage() {
             <p className="text-lg font-bold text-slate-900">
               {settings ? `${settings.auto_release_delay_days} j` : '—'}
             </p>
+          </Card>
+        </Link>
+
+        <Link href="/admin/parametres/boost">
+          <Card interactive className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Rocket className="h-6 w-6 text-brand-600" aria-hidden />
+              <div>
+                <p className="font-medium text-slate-900">Boost</p>
+                <p className="text-sm text-slate-500">Prix par palier de durée (1 à 7 jours) de la mise en avant</p>
+              </div>
+            </div>
+            <p className="text-lg font-bold text-slate-900">{boostRange ?? '—'}</p>
           </Card>
         </Link>
       </div>

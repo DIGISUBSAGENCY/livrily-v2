@@ -50,6 +50,7 @@ const items: NavItem[] = [
       { href: '/admin/parametres/commission', label: 'Commission' },
       { href: '/admin/parametres/virement', label: 'Virement' },
       { href: '/admin/parametres/liberation-automatique', label: 'Libération automatique' },
+      { href: '/admin/parametres/boost', label: 'Boost' },
     ],
   },
 ]
