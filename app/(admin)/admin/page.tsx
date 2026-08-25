@@ -1,13 +1,18 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { Plane, Wallet, ShieldCheck } from 'lucide-react'
+import { Plane, Wallet, ShieldCheck, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 
-// Dashboard retreint aux métriques Jibli (crowd-shipping) — les métriques
+// Dashboard restreint aux métriques Jibli (crowd-shipping) — les métriques
 // commerce (commandes du jour, CA, temps de livraison moyen, commerces
 // actifs) ont disparu avec le rôle commerce, cf. suppression complète.
+//
+// Chantier admin completeness : Boost et Portefeuille intégrés — jusqu'ici
+// ce dashboard ignorait complètement boost_payments/wallet_deposits/
+// wallet_withdrawals, un admin n'avait aucun indice que ces files
+// existaient sans connaître le menu déroulant Paiements.
 export default async function AdminDashboardPage() {
   const supabase = await createClient()
   const {
@@ -16,15 +21,37 @@ export default async function AdminDashboardPage() {
 
   if (!user) redirect('/login')
 
-  const [{ count: travelAwaiting }, { count: travelOpen }, { count: withdrawalsAwaiting }, { count: verificationsAwaiting }] =
-    await Promise.all([
-      supabase.from('travel_payments').select('id', { count: 'exact', head: true }).eq('status', 'awaiting_verification'),
-      supabase.from('travel_requests').select('id', { count: 'exact', head: true }).eq('status', 'open'),
-      supabase.from('withdrawal_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('identity_verifications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    ])
+  const [
+    { count: travelAwaiting },
+    { count: travelOpen },
+    { count: withdrawalsAwaiting },
+    { count: verificationsAwaiting },
+    { count: boostAwaiting },
+    { count: walletDepositsAwaiting },
+    { count: walletWithdrawalsPending },
+  ] = await Promise.all([
+    supabase.from('travel_payments').select('id', { count: 'exact', head: true }).eq('status', 'awaiting_verification'),
+    supabase.from('travel_requests').select('id', { count: 'exact', head: true }).eq('status', 'open'),
+    supabase.from('withdrawal_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('identity_verifications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('boost_payments').select('id', { count: 'exact', head: true }).eq('status', 'awaiting_verification'),
+    // payment_method='virement' : même filtre que /admin/portefeuille-
+    // paiements — un dépôt Flouci en awaiting n'est qu'une intention
+    // pré-paiement qui se résout toute seule (callback), jamais du travail
+    // admin ; le compter ici gonflerait le badge sans action possible.
+    supabase.from('wallet_deposits').select('id', { count: 'exact', head: true }).eq('status', 'awaiting_verification').eq('payment_method', 'virement'),
+    supabase.from('wallet_withdrawals').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+  ])
 
-  const paymentsPending = (travelAwaiting ?? 0) + (withdrawalsAwaiting ?? 0)
+  // Total "paiements en attente" = tout ce qui attend une action admin,
+  // toutes files confondues (escrow + retraits gains + boost + dépôts et
+  // retraits portefeuille) — cohérent avec les 6 tuiles ci-dessous.
+  const paymentsPending =
+    (travelAwaiting ?? 0) +
+    (withdrawalsAwaiting ?? 0) +
+    (boostAwaiting ?? 0) +
+    (walletDepositsAwaiting ?? 0) +
+    (walletWithdrawalsPending ?? 0)
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
@@ -67,6 +94,39 @@ export default async function AdminDashboardPage() {
               </p>
             </div>
             {(travelAwaiting ?? 0) > 0 && <Badge tone="warning">{travelAwaiting}</Badge>}
+          </Card>
+        </Link>
+
+        <Link href="/admin/boost-paiements">
+          <Card interactive className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Sparkles className="h-5 w-5 flex-shrink-0 text-slate-500" aria-hidden />
+              <div>
+                <p className="font-medium text-slate-900">Paiements Boost</p>
+                <p className="text-sm text-slate-500">Virements de mise en avant à vérifier</p>
+              </div>
+            </div>
+            {(boostAwaiting ?? 0) > 0 && <Badge tone="warning">{boostAwaiting}</Badge>}
+          </Card>
+        </Link>
+
+        <Link href="/admin/portefeuille-paiements">
+          <Card interactive className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-slate-900">Dépôts portefeuille</p>
+              <p className="text-sm text-slate-500">Virements vers le solde interne à vérifier</p>
+            </div>
+            {(walletDepositsAwaiting ?? 0) > 0 && <Badge tone="warning">{walletDepositsAwaiting}</Badge>}
+          </Card>
+        </Link>
+
+        <Link href="/admin/portefeuille-retraits">
+          <Card interactive className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-slate-900">Retraits portefeuille</p>
+              <p className="text-sm text-slate-500">Demandes de retrait du solde interne</p>
+            </div>
+            {(walletWithdrawalsPending ?? 0) > 0 && <Badge tone="warning">{walletWithdrawalsPending}</Badge>}
           </Card>
         </Link>
 
