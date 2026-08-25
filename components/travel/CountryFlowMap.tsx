@@ -79,21 +79,29 @@ function countryDivIcon(label: string, placeAbove: boolean): L.DivIcon {
   })
 }
 
-// Hub Tunisie : même traitement que countryDivIcon (halo + badge + label),
-// mais légèrement plus grand pour rester identifiable comme le point
-// central — 28px (h-7 w-7) au lieu des 44px (h-11 w-11) d'origine, nettement
-// plus proche des marqueurs pays (16px) tout en restant visuellement
-// distinct. iconSize/iconAnchor recentrés en conséquence (14,14 = moitié de
-// 28) : sans ce recentrage, le point d'ancrage géographique du hub se
-// décale visuellement de sa position réelle sur la carte.
+// Hub Tunisie : même traitement que countryDivIcon (halo + badge + label).
+// Cercle réduit une 2e fois — 20px (h-5 w-5), au lieu de 28px (h-7 w-7) —
+// toujours nettement identifiable comme point central (ring-4, plus foncé)
+// mais désormais très proche des marqueurs pays (16px). iconSize/iconAnchor
+// recentrés en conséquence (10,10 = moitié de 20) : sans ce recentrage, le
+// point d'ancrage géographique du hub se décale visuellement de sa position
+// réelle sur la carte.
+//
+// Le halo (animate-ping) n'est PAS une taille indépendante — il vaut
+// toujours h-full w-full du conteneur EXTÉRIEUR (h-5 w-5 désormais), donc
+// il rétrécit proportionnellement avec le cercle sans réglage séparé.
+// Toujours perceptible à cette taille : Tailwind anime le halo par un
+// agrandissement RELATIF (scale, pas une taille absolue fixe), donc son
+// amplitude visuelle reste la même proportion du cercle qu'avant, quelle
+// que soit la taille de base.
 //
 // Le CERCLE reste fixe quel que soit le nombre de chiffres du total — seul
 // le texte s'adapte (overflow-hidden + font-size réduite à partir de 3
-// chiffres, encore plus petite qu'avant vu le cercle réduit) : sans ça, un
-// total à 3 chiffres déborderait visiblement du cercle et donnerait
-// l'impression que le badge entier grandit, alors que le cercle lui-même
-// ne bouge pas (même bug que celui déjà corrigé une fois sur la taille
-// d'origine — revérifié à cette nouvelle taille, cf. script de test).
+// chiffres, encore plus petite qu'avant vu le cercle réduit une 2e fois) :
+// sans ça, un total à 3 chiffres déborderait visiblement du cercle et
+// donnerait l'impression que le badge entier grandit, alors que le cercle
+// lui-même ne bouge pas (même bug que celui déjà corrigé une fois — revérifié
+// à cette nouvelle taille, cf. script de test, avec 1/2/3 chiffres).
 //
 // Label "Tunisie" — même style que les labels de pays (countryDivIcon),
 // mais toujours EN DESSOUS (pas de calcul au-dessus/en dessous comme pour
@@ -107,20 +115,20 @@ function countryDivIcon(label: string, placeAbove: boolean): L.DivIcon {
 // placement générique).
 function hubDivIcon(totalCount: number): L.DivIcon {
   const digits = String(totalCount).length
-  const textSizeClass = digits >= 3 ? 'text-[9px]' : 'text-xs'
+  const textSizeClass = digits >= 3 ? 'text-[8px]' : 'text-[10px]'
   return L.divIcon({
     html: `
-      <span class="relative flex h-7 w-7 items-center justify-center">
+      <span class="relative flex h-5 w-5 items-center justify-center">
         <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-60"></span>
-        <span class="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-brand-700 ${textSizeClass} font-bold leading-none text-white ring-4 ring-white shadow-soft-lg">
+        <span class="relative flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-brand-700 ${textSizeClass} font-bold leading-none text-white ring-4 ring-white shadow-soft-lg">
           ${totalCount}
         </span>
         <span class="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 shadow-sm">Tunisie</span>
       </span>
     `,
     className: '',
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
   })
 }
 

@@ -105,30 +105,44 @@ async function run() {
   )
 
   console.log('\n=== 3. Badge hub Tunisie — taille de cercle fixe quel que soit le nombre de chiffres ===')
-  // Réduit de 44x44 à 28x28 (chantier taille du hub) — rapproché des
-  // marqueurs pays (16x16) tout en restant identifiable comme point
-  // central. Valeur de référence mise à jour, pas juste re-testée telle
-  // quelle.
+  // Réduit une 2e fois, 28x28 → 20x20 (chantier taille du hub) — encore
+  // plus proche des marqueurs pays (16x16) tout en restant identifiable
+  // comme point central (ring-4). Valeur de référence mise à jour, pas
+  // juste re-testée telle quelle.
   check(
-    'iconSize reste fixe (28x28) — pas basé sur le contenu',
-    mapSource.includes('iconSize: [28, 28]')
+    'iconSize reste fixe (20x20) — pas basé sur le contenu',
+    mapSource.includes('iconSize: [20, 20]')
   )
   check(
-    'iconAnchor recentré en conséquence (14,14 = moitié de 28) — sinon le hub se décale visuellement de sa position réelle',
-    mapSource.includes('iconAnchor: [14, 14]')
+    'iconAnchor recentré en conséquence (10,10 = moitié de 20) — sinon le hub se décale visuellement de sa position réelle',
+    mapSource.includes('iconAnchor: [10, 10]')
   )
   check(
-    'le texte du badge est contraint (overflow-hidden) et sa taille de police s\'adapte au nombre de chiffres, pas le cercle',
-    mapSource.includes('overflow-hidden rounded-full bg-brand-700') && mapSource.includes("digits >= 3 ? 'text-[9px]' : 'text-xs'")
+    'le texte du badge est contraint (overflow-hidden), pas le cercle',
+    mapSource.includes('overflow-hidden rounded-full bg-brand-700')
   )
   check(
-    'le halo animate-ping reste proportionné (h-full w-full du conteneur h-7 w-7, pas une taille fixe indépendante)',
-    /h-7 w-7 items-center justify-center">\s*<span class="absolute inline-flex h-full w-full animate-ping/.test(mapSource)
+    'le halo animate-ping reste proportionné (h-full w-full du conteneur h-5 w-5, pas une taille fixe indépendante) — donc rétrécit avec le cercle sans réglage séparé, toujours perceptible (agrandissement relatif via scale, pas une taille absolue)',
+    /h-5 w-5 items-center justify-center">\s*<span class="absolute inline-flex h-full w-full animate-ping/.test(mapSource)
   )
   check(
     'le label "Tunisie" est présent sur le hub, même style que les labels de pays (pill blanche)',
     mapSource.includes('>Tunisie</span>') && mapSource.includes('rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 shadow-sm">Tunisie')
   )
+
+  // Extrait la VRAIE logique digits→taille de police de hubDivIcon (pas une
+  // réimplémentation, même principe que l'extraction de escapeHtml dans
+  // scripts/live-test-dashboard-country-labels.mjs) et l'évalue pour 1, 2
+  // et 3 chiffres — demande explicite de tester ces 3 cas, pas juste
+  // matcher la chaîne source.
+  const digitsLogicMatch = mapSource.match(/const digits = String\(totalCount\)\.length\n\s*const textSizeClass = (digits >= 3 \? '[^']+' : '[^']+')/)
+  check('logique digits→taille de police trouvée dans hubDivIcon', !!digitsLogicMatch, { digitsLogicMatch })
+  if (digitsLogicMatch) {
+    const textSizeClassFor = new Function('totalCount', `const digits = String(totalCount).length; return ${digitsLogicMatch[1]};`)
+    check('total à 1 chiffre (5) → text-[10px] (lisible, cercle 20px)', textSizeClassFor(5) === 'text-[10px]', { result: textSizeClassFor(5) })
+    check('total à 2 chiffres (52) → text-[10px] (encore la taille "normale")', textSizeClassFor(52) === 'text-[10px]', { result: textSizeClassFor(52) })
+    check('total à 3 chiffres (201) → text-[8px] (réduite, pour rester dans le cercle 20px)', textSizeClassFor(201) === 'text-[8px]', { result: textSizeClassFor(201) })
+  }
 
   console.log('\n=== 4. Régression : la page continue de fonctionner avec des flèches sur les 2 onglets ===')
   const userId = await makeUser(`arrows-${ts}@example.com`, password)
