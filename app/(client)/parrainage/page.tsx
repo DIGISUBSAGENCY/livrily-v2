@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { ReferralCodeCard } from '@/components/account/ReferralCodeCard'
 import { WalletDepositForm } from '@/components/account/WalletDepositForm'
 import { WalletDepositStatusBadge } from '@/components/account/WalletDepositStatusBadge'
+import { WalletWithdrawalForm } from '@/components/account/WalletWithdrawalForm'
+import { WithdrawalStatusBadge } from '@/components/travel/WithdrawalStatusBadge'
 import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import { pageMetadata } from '@/lib/seo'
@@ -49,7 +51,7 @@ export default async function ParrainagePage({ searchParams }: ParrainagePagePro
 
   if (!user) redirect('/login?next=/parrainage')
 
-  const [{ data: profile }, { data: history }, { data: bankInfo }, { data: deposits }] = await Promise.all([
+  const [{ data: profile }, { data: history }, { data: bankInfo }, { data: deposits }, { data: withdrawals }] = await Promise.all([
     supabase.from('profiles').select('referral_code, wallet_balance').eq('id', user.id).single(),
     supabase.from('wallet_credits').select('*').eq('profile_id', user.id).order('created_at', { ascending: false }).limit(20),
     supabase.from('bank_transfer_info').select('bank_name, account_holder, rib, flouci_phone').eq('is_active', true).limit(1).maybeSingle(),
@@ -58,6 +60,8 @@ export default async function ParrainagePage({ searchParams }: ParrainagePagePro
     // onglets Parrainage/Portefeuille prévue dans une brique ultérieure,
     // pas construite ici pour rester testable seule.
     supabase.from('wallet_deposits').select('*').eq('profile_id', user.id).order('created_at', { ascending: false }).limit(20),
+    // Brique 3/N (retrait) — même raisonnement.
+    supabase.from('wallet_withdrawals').select('*').eq('profile_id', user.id).order('requested_at', { ascending: false }).limit(20),
   ])
 
   const siteUrl = getSiteUrl()
@@ -107,6 +111,29 @@ export default async function ParrainagePage({ searchParams }: ParrainagePagePro
                     <p className="text-xs text-slate-400">{new Date(deposit.created_at).toLocaleString('fr-TN')}</p>
                   </div>
                   <WalletDepositStatusBadge status={deposit.status} />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
+        {/* Retrait (brique 3/N) — même section autonome que "Déposer". */}
+        <Card>
+          <h2 className="mb-2 font-semibold text-slate-900">Retirer</h2>
+          <WalletWithdrawalForm balance={profile?.wallet_balance ?? 0} />
+        </Card>
+
+        {withdrawals && withdrawals.length > 0 && (
+          <Card>
+            <h2 className="mb-2 font-semibold text-slate-900">Historique des retraits</h2>
+            <ul className="divide-y divide-slate-100">
+              {withdrawals.map((withdrawal) => (
+                <li key={withdrawal.id} className="flex items-center justify-between py-2 text-sm">
+                  <div>
+                    <p className="font-medium text-slate-700">{formatTND(withdrawal.amount)}</p>
+                    <p className="text-xs text-slate-400">{new Date(withdrawal.requested_at).toLocaleString('fr-TN')}</p>
+                  </div>
+                  <WithdrawalStatusBadge status={withdrawal.status} />
                 </li>
               ))}
             </ul>

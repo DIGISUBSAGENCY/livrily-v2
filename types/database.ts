@@ -668,6 +668,35 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['wallet_deposits']['Insert']>
         Relationships: []
       }
+      // Chantier portefeuille interne, brique 3/N (retrait) — réutilise
+      // WithdrawalStatus (déjà défini pour withdrawal_requests, système B,
+      // intact) plutôt qu'un type dupliqué identique. Insert typé pour
+      // cohérence avec les autres tables de ce fichier, mais jamais utilisé
+      // directement côté TS : aucune policy INSERT, écriture réservée à
+      // request_wallet_withdrawal() (cf. schema.sql), appelée via .rpc(),
+      // pas .from().insert().
+      wallet_withdrawals: {
+        Row: {
+          id: string
+          profile_id: string
+          amount: number
+          status: WithdrawalStatus
+          requested_at: string
+          processed_at: string | null
+          processed_by: string | null
+        }
+        Insert: {
+          id?: string
+          profile_id: string
+          amount: number
+          status?: WithdrawalStatus
+          requested_at?: string
+          processed_at?: string | null
+          processed_by?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['wallet_withdrawals']['Insert']>
+        Relationships: []
+      }
       identity_verifications: {
         Row: {
           id: string
@@ -890,6 +919,13 @@ export interface Database {
         Args: { p_deposit_id: string; p_profile_id: string }
         Returns: undefined
       }
+      // Chantier portefeuille interne, brique 3/N (retrait) — grant à
+      // authenticated (entièrement self-scoped sur auth.uid(), cf.
+      // schema.sql), contrairement aux deux RPC Flouci ci-dessus.
+      request_wallet_withdrawal: {
+        Args: { p_amount: number }
+        Returns: string
+      }
     }
   }
 }
@@ -912,3 +948,4 @@ export type TravelReview = Database['public']['Tables']['travel_reviews']['Row']
 export type BoostPayment = Database['public']['Tables']['boost_payments']['Row']
 export type BoostPricingTier = Database['public']['Tables']['boost_pricing_tiers']['Row']
 export type WalletDeposit = Database['public']['Tables']['wallet_deposits']['Row']
+export type WalletWithdrawal = Database['public']['Tables']['wallet_withdrawals']['Row']

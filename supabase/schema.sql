@@ -195,6 +195,18 @@ create trigger trg_profiles_prevent_role_escalation
 -- une connexion service role. grant_referral_reward() (cf. plus haut,
 -- fonction orpheline en attente d'un déclencheur Jibli) suivait la même
 -- logique côté security definer quand son trigger existait encore.
+--
+-- CORRECTIF (chantier portefeuille interne, brique 3/N) : bypass explicite
+-- via jibli.bypass_transition_checks (même flag déjà utilisé par
+-- accept_travel_proposal/auto_release_stale_payments/notify_expired_boosts,
+-- pas un nouveau nom inventé) — trouvé en testant request_wallet_withdrawal()
+-- en direct : SECURITY DEFINER contourne les policies RLS mais PAS les
+-- triggers (même leçon que sur notify_expired_boosts), et ici l'ACTEUR
+-- (auth.uid(), le client qui retire) est le MÊME que la cible (old.id, son
+-- propre profil) — contrairement au crédit d'un dépôt (admin ou
+-- service_role créditent le profil d'un AUTRE utilisateur, jamais bloqués
+-- par ce trigger pour cette raison précise), donc le seul nouveau chemin de
+-- ce chantier qui heurte ce garde-fou.
 create or replace function public.prevent_wallet_self_edit()
 returns trigger
 language plpgsql
@@ -202,6 +214,10 @@ security definer
 set search_path = public
 as $$
 begin
+  if coalesce(current_setting('jibli.bypass_transition_checks', true), 'false') = 'true' then
+    return new;
+  end if;
+
   if auth.uid() = old.id and not public.is_admin() then
     if new.wallet_balance is distinct from old.wallet_balance
        or new.referred_by is distinct from old.referred_by
@@ -4139,6 +4155,128 @@ $$;
 revoke execute on function public.reject_wallet_deposit_flouci(uuid, uuid) from public;
 revoke execute on function public.reject_wallet_deposit_flouci(uuid, uuid) from anon;
 revoke execute on function public.reject_wallet_deposit_flouci(uuid, uuid) from authenticated;
+
+-- ============================================================================
+-- Chantier portefeuille interne, brique 3/N — retrait.
+--
+-- Table séparée de withdrawal_requests (système B, gains voyageur —
+-- intact, jamais touché par ce chantier) : même forme de colonnes, mais
+-- profile_id (pas voyageur_id) puisque n'importe quel profil avec un
+-- wallet_balance peut retirer, pas seulement un voyageur avec des gains de
+-- mission. Réutilise le type withdrawal_status existant (pending/paid/
+-- rejected) plutôt que d'en dupliquer un identique — décision explicite.
+--
+-- Toujours un virement manuel hors app, quelle que soit la méthode de
+-- dépôt d'origine (Flouci n'a pas d'API de payout dans ce projet,
+-- lib/flouci.ts ne fait que générer des liens de collecte) — même
+-- traitement que withdrawal_requests. Montant libre (retrait partiel
+-- autorisé), contrairement à withdrawal_requests qui ne retire que le
+-- solde total : ce solde sert aussi à financer des achats futurs
+-- (hors périmètre de ce chantier), pas seulement à être vidé.
+-- ============================================================================
+create table if not exists public.wallet_withdrawals (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles(id),
+  amount numeric(10,3) not null check (amount > 0),
+  status public.withdrawal_status not null default 'pending',
+  requested_at timestamptz not null default now(),
+  processed_at timestamptz,
+  processed_by uuid references public.profiles(id)
+);
+
+create index if not exists wallet_withdrawals_profile_idx on public.wallet_withdrawals(profile_id);
+create index if not exists wallet_withdrawals_status_idx on public.wallet_withdrawals(status);
+
+alter table public.wallet_withdrawals enable row level security;
+
+drop policy if exists "wallet_withdrawals_select_own_or_admin" on public.wallet_withdrawals;
+create policy "wallet_withdrawals_select_own_or_admin"
+  on public.wallet_withdrawals for select
+  using (profile_id = auth.uid() or public.is_admin());
+
+-- Pas de policy INSERT : contrairement à withdrawal_requests (simple trace,
+-- solde jamais stocké, juste recalculé à la volée), wallet_balance EST un
+-- solde réellement stocké qui doit être débité de façon atomique avec
+-- l'insertion — deux appels client séparés (update solde + insert
+-- historique) ouvriraient une fenêtre de course (double-clic, deux onglets)
+-- où le solde pourrait passer sous zéro. RPC ci-dessous uniquement, même
+-- sûreté que purchase_boost_virement (verrou FOR UPDATE inclus).
+drop policy if exists "wallet_withdrawals_update_admin_only" on public.wallet_withdrawals;
+create policy "wallet_withdrawals_update_admin_only"
+  on public.wallet_withdrawals for update
+  using (public.is_admin());
+
+-- Débite wallet_balance ET insère la demande en une seule transaction
+-- (verrou FOR UPDATE sur profiles). Grant à `authenticated` (contrairement
+-- aux RPC Flouci ci-dessus) : entièrement self-scoped sur auth.uid(), rien
+-- à vérifier auprès d'un tiers — aucune des deux raisons qui justifiaient
+-- la posture service_role-only pour Flouci ne s'applique ici.
+create or replace function public.request_wallet_withdrawal(p_amount numeric)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_balance numeric;
+  v_id uuid;
+begin
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'Montant invalide.';
+  end if;
+
+  select wallet_balance into v_balance from public.profiles where id = auth.uid() for update;
+
+  if v_balance is null then
+    raise exception 'Profil introuvable.';
+  end if;
+  if p_amount > v_balance then
+    raise exception 'Montant demandé (%) supérieur au solde disponible (%).', p_amount, v_balance;
+  end if;
+
+  -- Bypass de prevent_wallet_self_edit (cf. correctif sur cette fonction
+  -- plus haut) : ici, contrairement au crédit d'un dépôt, l'acteur EST la
+  -- cible (le client débite son propre solde) — sans ce bypass explicite,
+  -- le trigger rejette l'update malgré le SECURITY DEFINER.
+  perform set_config('jibli.bypass_transition_checks', 'true', true);
+  update public.profiles set wallet_balance = wallet_balance - p_amount where id = auth.uid();
+  perform set_config('jibli.bypass_transition_checks', 'false', true);
+
+  insert into public.wallet_withdrawals (profile_id, amount) values (auth.uid(), p_amount)
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+revoke execute on function public.request_wallet_withdrawal(numeric) from public;
+revoke execute on function public.request_wallet_withdrawal(numeric) from anon;
+grant execute on function public.request_wallet_withdrawal(numeric) to authenticated;
+
+-- Recrédite automatiquement si l'admin rejette — le montant a déjà été
+-- débité à la demande (RPC ci-dessus), un rejet doit donc le restituer.
+-- old.status is distinct from 'rejected' (pas juste "on update") : un
+-- rejet répété sur une ligne déjà rejected (garde-fou déjà présent côté
+-- Server Action, .eq('status', 'pending')) ne doit jamais recréditer deux
+-- fois, même en cas d'appel direct hors Server Action.
+create or replace function public.refund_wallet_balance_on_withdrawal_reject()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.status = 'rejected' and old.status is distinct from 'rejected' then
+    update public.profiles set wallet_balance = wallet_balance + new.amount where id = new.profile_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_wallet_withdrawals_refund_on_reject on public.wallet_withdrawals;
+create trigger trg_wallet_withdrawals_refund_on_reject
+  after update on public.wallet_withdrawals
+  for each row execute function public.refund_wallet_balance_on_withdrawal_reject();
 
 -- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,

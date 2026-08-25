@@ -130,3 +130,35 @@ export async function initiateWalletDepositFlouci(amount: number): Promise<Actio
 
   redirect(paymentLink)
 }
+
+// Retrait — chantier portefeuille interne, brique 3/N. Montant libre
+// (contrairement à requestWithdrawal, mes-gains/actions.ts, qui retire
+// toujours le solde total du système B) : passe par la RPC
+// request_wallet_withdrawal (débit + insertion atomiques, verrou FOR
+// UPDATE — cf. schema.sql), jamais un insert direct + update séparés
+// (fenêtre de course). error.message de la RPC surfacé tel quel (comme
+// purchaseBoostVirement) : ce sont des exceptions métier lisibles
+// ("Montant demandé (X) supérieur au solde disponible (Y).", etc.), pas une
+// erreur RLS/contrainte brute.
+export async function requestWalletWithdrawal(amount: number): Promise<ActionResult> {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { error: 'Indique un montant valide.' }
+  }
+
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) return { error: 'Non authentifié.' }
+
+  const { error } = await supabase.rpc('request_wallet_withdrawal', { p_amount: amount })
+
+  if (error) {
+    return { error: error.message || 'Impossible de créer la demande de retrait, réessaie.' }
+  }
+
+  revalidatePath('/parrainage')
+  return { error: null }
+}
