@@ -21,7 +21,27 @@ const reasonLabels: Record<string, string> = {
   checkout_redemption: 'Utilisé à la commande',
 }
 
-export default async function ParrainagePage() {
+// Mirror de flouciBannerMessages (jibli/[id]/page.tsx) — pas de cas
+// "orphaned" ici : contrairement à accept_travel_proposal (peut échouer
+// après paiement confirmé si la proposition a changé entre-temps),
+// credit_wallet_deposit_flouci n'agit que sur des lignes entièrement
+// contrôlées par ce chantier (wallet_deposits/wallet_balance), aucun état
+// externe ne peut la faire échouer après coup.
+const flouciBannerMessages: Record<string, { text: string; tone: string }> = {
+  success: { text: 'Paiement Flouci confirmé — ton solde a été crédité.', tone: 'bg-brand-50 text-brand-700 border-brand-200' },
+  failed: { text: 'Le paiement Flouci a échoué ou a été annulé.', tone: 'bg-red-50 text-red-700 border-red-200' },
+  error: { text: 'Une erreur est survenue pendant la vérification du paiement Flouci.', tone: 'bg-red-50 text-red-700 border-red-200' },
+  unknown: { text: 'Une erreur est survenue pendant la vérification du paiement Flouci.', tone: 'bg-red-50 text-red-700 border-red-200' },
+}
+
+interface ParrainagePageProps {
+  searchParams: Promise<{ flouci?: string }>
+}
+
+export default async function ParrainagePage({ searchParams }: ParrainagePageProps) {
+  const { flouci } = await searchParams
+  const flouciBanner = flouci ? flouciBannerMessages[flouci] : null
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -32,7 +52,7 @@ export default async function ParrainagePage() {
   const [{ data: profile }, { data: history }, { data: bankInfo }, { data: deposits }] = await Promise.all([
     supabase.from('profiles').select('referral_code, wallet_balance').eq('id', user.id).single(),
     supabase.from('wallet_credits').select('*').eq('profile_id', user.id).order('created_at', { ascending: false }).limit(20),
-    supabase.from('bank_transfer_info').select('bank_name, account_holder, rib').eq('is_active', true).limit(1).maybeSingle(),
+    supabase.from('bank_transfer_info').select('bank_name, account_holder, rib, flouci_phone').eq('is_active', true).limit(1).maybeSingle(),
     // Chantier portefeuille interne, brique 1/N (dépôt virement) — section
     // ajoutée sous "Solde disponible" ci-dessous ; restructuration en
     // onglets Parrainage/Portefeuille prévue dans une brique ultérieure,
@@ -46,6 +66,10 @@ export default async function ParrainagePage() {
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
       <h1 className="text-2xl font-bold text-slate-900">Parrainage & portefeuille</h1>
+
+      {flouciBanner && (
+        <div className={`mt-4 rounded-lg border p-3 text-sm ${flouciBanner.tone}`}>{flouciBanner.text}</div>
+      )}
 
       <div className="mt-6 space-y-4">
         {profile?.referral_code && <ReferralCodeCard code={profile.referral_code} shareUrl={shareUrl} />}

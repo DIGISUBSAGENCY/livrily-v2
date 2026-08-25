@@ -877,6 +877,19 @@ export interface Database {
         }
         Returns: string
       }
+      // Chantier portefeuille interne, brique 2/N (dépôt Flouci) — non
+      // exposées à `authenticated` côté DB (revoke explicite, cf. schema.sql
+      // pour le raisonnement sécurité), appelables uniquement via le client
+      // service_role depuis /api/flouci/wallet-callback. Gardées ici pour le
+      // typage de ce client-là, même raisonnement que create_notification.
+      credit_wallet_deposit_flouci: {
+        Args: { p_deposit_id: string; p_profile_id: string; p_payment_ref: string }
+        Returns: undefined
+      }
+      reject_wallet_deposit_flouci: {
+        Args: { p_deposit_id: string; p_profile_id: string }
+        Returns: undefined
+      }
     }
   }
 }

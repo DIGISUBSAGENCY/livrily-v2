@@ -10,6 +10,14 @@ import { formatTND } from '@/lib/format'
 // réellement wallet_balance (trigger credit_wallet_balance_on_deposit, cf.
 // schema.sql) — un dépôt en attente n'a encore aucun effet sur le solde
 // affiché au client.
+//
+// Filtre payment_method='virement' (chantier portefeuille, brique 2/N) :
+// un dépôt Flouci en 'awaiting_verification' n'est qu'une intention
+// pré-enregistrée avant redirection vers le paiement (cf. schema.sql) —
+// jamais quelque chose qu'un admin doit vérifier manuellement, il se
+// résout tout seul (crédité ou rejeté via /api/flouci/wallet-callback).
+// Sans ce filtre, une tentative Flouci abandonnée resterait affichée ici
+// indéfiniment sans qu'aucune action admin n'ait de sens dessus.
 export default async function PortefeuillePaiementsPage() {
   const supabase = await createClient()
 
@@ -17,6 +25,7 @@ export default async function PortefeuillePaiementsPage() {
     .from('wallet_deposits')
     .select('*')
     .eq('status', 'awaiting_verification')
+    .eq('payment_method', 'virement')
     .order('created_at', { ascending: true })
 
   const profileIds = Array.from(new Set((deposits ?? []).map((d) => d.profile_id)))

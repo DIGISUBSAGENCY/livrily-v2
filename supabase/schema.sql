@@ -3993,6 +3993,154 @@ create trigger trg_wallet_deposits_credit_balance
   for each row execute function public.credit_wallet_balance_on_deposit();
 
 -- ============================================================================
+-- Chantier portefeuille interne, brique 2/N — dépôt par Flouci.
+--
+-- Le montant est fixé AVANT le paiement : initiateWalletDepositFlouci (TS,
+-- brique 2/N) insère une ligne 'awaiting_verification' avec le montant
+-- choisi, PUIS redirige vers Flouci pour CE montant exact — jamais repris
+-- depuis les paramètres de l'URL de retour au callback (falsifiables).
+-- Extension de la policy INSERT existante (brique 1/N) pour permettre ce
+-- pré-enregistrement, exactement comme pour le virement.
+-- ============================================================================
+drop policy if exists "wallet_deposits_insert_own" on public.wallet_deposits;
+create policy "wallet_deposits_insert_own"
+  on public.wallet_deposits for insert
+  with check (
+    profile_id = auth.uid()
+    and status = 'awaiting_verification'
+    and payment_method in ('virement', 'flouci')
+  );
+
+-- Anti-rejeu : un même paiement Flouci réel ne doit jamais pouvoir créditer
+-- deux lignes wallet_deposits différentes. NULL (virement, aucune
+-- référence) n'est jamais considéré en conflit avec un autre NULL
+-- (sémantique standard d'UNIQUE en SQL), donc pas besoin d'un index partiel.
+alter table public.wallet_deposits add constraint wallet_deposits_payment_ref_unique unique (payment_ref);
+
+-- SÉCURITÉ — pourquoi ces deux RPC ne sont PAS grant à `authenticated`
+-- (contrairement à purchase_boost_virement/accept_travel_proposal) :
+-- credit_wallet_deposit_flouci ne re-vérifie PAS elle-même le paiement
+-- auprès de Flouci (impossible en plpgsql pur, ça demanderait un appel
+-- HTTP sortant) — elle fait confiance à p_payment_ref tel quel, EXACTEMENT
+-- comme accept_travel_proposal(..., 'flouci', ..., p_payment_ref) le fait
+-- déjà pour l'escrow des missions (grant à authenticated là-bas). Sur
+-- accept_travel_proposal, un client malveillant pourrait en théorie
+-- l'appeler directement avec une référence Flouci fabriquée sans jamais
+-- payer — risque déjà présent en prod, hors périmètre de ce chantier, je
+-- le signale séparément plutôt que d'y toucher ici. Mais un solde de
+-- portefeuille est de l'argent immédiatement liquide/dépensable, sans
+-- filet de rattrapage (pas de litige/contrepartie humaine comme sur une
+-- mission) — donc ICI, posture plus stricte : ni `anon` ni `authenticated`
+-- ne peuvent appeler ces deux RPC. Seul le client service_role peut
+-- (implicite, service_role contourne les grants), exclusivement depuis
+-- /api/flouci/wallet-callback (TS, brique 2/N) — APRÈS que la route ait
+-- déjà appelé verifyFlouciPayment() (vraie vérification HTTP côté API
+-- Flouci) et confirmé que le dépôt appartient bien à l'utilisateur
+-- connecté (via son PROPRE client, RLS wallet_deposits_select_own_or_admin,
+-- avant d'escalader au client admin). p_profile_id (pas auth.uid(), qui
+-- n'existe pas sous service_role) est fourni par la route à partir de CETTE
+-- vérification déjà faite — même modèle de confiance que
+-- create_notification()/notifyUser() plus haut dans ce fichier.
+create or replace function public.credit_wallet_deposit_flouci(
+  p_deposit_id uuid,
+  p_profile_id uuid,
+  p_payment_ref text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_profile_id uuid;
+  v_status public.wallet_deposit_status;
+  v_payment_method public.payment_method;
+begin
+  if p_payment_ref is null or length(trim(p_payment_ref)) = 0 then
+    raise exception 'Référence de paiement manquante.';
+  end if;
+
+  select profile_id, status, payment_method into v_profile_id, v_status, v_payment_method
+  from public.wallet_deposits
+  where id = p_deposit_id
+  for update;
+
+  if v_profile_id is null then
+    raise exception 'Dépôt introuvable.';
+  end if;
+  if v_profile_id <> p_profile_id then
+    raise exception 'Ce dépôt ne correspond pas à cet utilisateur.';
+  end if;
+  if v_payment_method <> 'flouci' then
+    raise exception 'Ce dépôt n''est pas un dépôt Flouci.';
+  end if;
+
+  -- Déjà traité (replay du callback, ex: rafraîchissement de la page de
+  -- retour Flouci) : sortie silencieuse, idempotent, jamais une erreur ni
+  -- un second crédit.
+  if v_status <> 'awaiting_verification' then
+    return;
+  end if;
+
+  update public.wallet_deposits
+  set status = 'credited', payment_ref = p_payment_ref, verified_at = now()
+  where id = p_deposit_id;
+end;
+$$;
+
+revoke execute on function public.credit_wallet_deposit_flouci(uuid, uuid, text) from public;
+revoke execute on function public.credit_wallet_deposit_flouci(uuid, uuid, text) from anon;
+revoke execute on function public.credit_wallet_deposit_flouci(uuid, uuid, text) from authenticated;
+
+-- Marque un dépôt Flouci comme rejeté après un échec/abandon du paiement
+-- (failLink) — sans ça, une ligne 'awaiting_verification' resterait
+-- indéfiniment en attente d'un crédit qui n'arrivera jamais, ET
+-- apparaîtrait à tort dans la file de vérification manuelle admin (filtre
+-- payment_method='virement' ajouté côté TS sur
+-- /admin/portefeuille-paiements). Même posture de sécurité et même
+-- idempotence que credit_wallet_deposit_flouci ci-dessus.
+create or replace function public.reject_wallet_deposit_flouci(
+  p_deposit_id uuid,
+  p_profile_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_profile_id uuid;
+  v_status public.wallet_deposit_status;
+  v_payment_method public.payment_method;
+begin
+  select profile_id, status, payment_method into v_profile_id, v_status, v_payment_method
+  from public.wallet_deposits
+  where id = p_deposit_id
+  for update;
+
+  if v_profile_id is null then
+    raise exception 'Dépôt introuvable.';
+  end if;
+  if v_profile_id <> p_profile_id then
+    raise exception 'Ce dépôt ne correspond pas à cet utilisateur.';
+  end if;
+  if v_payment_method <> 'flouci' then
+    raise exception 'Ce dépôt n''est pas un dépôt Flouci.';
+  end if;
+
+  if v_status <> 'awaiting_verification' then
+    return;
+  end if;
+
+  update public.wallet_deposits set status = 'rejected', verified_at = now() where id = p_deposit_id;
+end;
+$$;
+
+revoke execute on function public.reject_wallet_deposit_flouci(uuid, uuid) from public;
+revoke execute on function public.reject_wallet_deposit_flouci(uuid, uuid) from anon;
+revoke execute on function public.reject_wallet_deposit_flouci(uuid, uuid) from authenticated;
+
+-- ============================================================================
 -- Fin du schéma. 2 rôles : client, admin (le rôle "commerce" — courses,
 -- catalogue, livraison zone tarifée — a existé puis a été retiré
 -- intégralement, cf. tête de fichier).
