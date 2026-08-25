@@ -20,3 +20,16 @@ export const autoReleaseSettingsSchema = z.object({
     .min(1, "Le délai doit être d'au moins 1 jour.")
     .max(90, 'Le délai ne peut pas dépasser 90 jours.'),
 })
+
+// Prix d'un palier boost_pricing_tiers (duration_days fixe, 1-7, jamais
+// édité ici — seul price_tnd change). positive() plutôt que min(0, ...) :
+// un palier à 0 TND rendrait la mise en avant gratuite, jamais un cas
+// valide contrairement au taux de commission ci-dessus qui peut
+// légitimement être à 0%. Pas de max artificiel — aucune borne haute
+// naturelle pour un prix (contrairement à un pourcentage), inventer un
+// plafond ajouterait une contrainte non demandée.
+export const boostTierPriceSchema = z.object({
+  price_tnd: z.coerce
+    .number({ message: 'Prix invalide.' })
+    .positive('Le prix doit être positif.'),
+})

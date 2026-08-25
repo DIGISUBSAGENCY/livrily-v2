@@ -12,5 +12,9 @@ export function hrefFor(notification: NotificationRow): string | null {
   if (!notification.related_object_id) return null
   if (notification.related_object_type === 'travel_request') return `/jibli/${notification.related_object_id}`
   if (notification.related_object_type === 'identity_verification') return '/profil/verification-identite'
+  // Notifications boost (trip/product_offer) — ajoutés pour le chantier
+  // notifications boost, pointent vers la page de détail de l'item boosté.
+  if (notification.related_object_type === 'trip') return `/jibli/trips/${notification.related_object_id}`
+  if (notification.related_object_type === 'product_offer') return `/jibli/offres/${notification.related_object_id}`
   return null
 }
