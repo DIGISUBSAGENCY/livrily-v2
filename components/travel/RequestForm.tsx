@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/Label'
 import { Input } from '@/components/ui/Input'
 import { ErrorText } from '@/components/ui/ErrorText'
 import { SubmitButton } from '@/components/ui/SubmitButton'
+import { FileInput } from '@/components/ui/FileInput'
 
 const initialState: TravelRequestFormState = { error: null }
 
@@ -33,13 +34,7 @@ export function RequestForm() {
 
       <div>
         <Label htmlFor="item_photo">Photo de l&apos;objet (optionnel)</Label>
-        <input
-          id="item_photo"
-          name="item_photo"
-          type="file"
-          accept="image/*"
-          className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
-        />
+        <FileInput id="item_photo" name="item_photo" />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
