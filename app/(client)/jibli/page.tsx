@@ -16,6 +16,7 @@ import { getPublicProfileSummaries } from '@/lib/profiles'
 import { pageMetadata } from '@/lib/seo'
 import type { TravelRequest, TravelProposal, TravelRequestStatus } from '@/types/database'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Jibli chay men l’a5er — Crowd-shipping',
@@ -226,10 +227,10 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+          <Heading level="h1" className="flex items-center gap-2">
             <Plane className="h-6 w-6 text-brand-600" aria-hidden />
             Jibli chay men l&apos;a5er
-          </h1>
+          </Heading>
           <p className="mt-1 text-sm text-slate-500">
             Demande à un voyageur de te ramener un objet de l&apos;étranger.
           </p>
