@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { pageMetadata } from '@/lib/seo'
 import { getPublicProfileSummaries } from '@/lib/profiles'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Offres',
@@ -56,10 +57,10 @@ export default async function ProductOffersPage({ searchParams }: ProductOffersP
     <main className="mx-auto max-w-5xl px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+          <Heading level="h1" className="flex items-center gap-2">
             <Tag className="h-6 w-6 text-brand-600" aria-hidden />
             Offres
-          </h1>
+          </Heading>
           <p className="mt-1 text-sm text-slate-500">
             Des voyageurs annoncent un produit précis, à un prix déjà fixé — prends-le directement.
           </p>
