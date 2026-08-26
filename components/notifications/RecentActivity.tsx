@@ -4,6 +4,7 @@ import { hrefFor } from '@/lib/notifications/hrefFor'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import type { NotificationRow } from '@/lib/notifications/actions'
+import { Heading } from '@/components/ui/Typography'
 
 interface RecentActivityProps {
   notifications: NotificationRow[]
@@ -17,10 +18,10 @@ interface RecentActivityProps {
 export function RecentActivity({ notifications }: RecentActivityProps) {
   return (
     <section className="mt-8">
-      <h2 className="mb-3 flex items-center gap-1.5 font-semibold text-slate-900">
+      <Heading level="h3" as="h2" className="mb-3 flex items-center gap-1.5">
         <Bell className="h-5 w-5 text-brand-600" aria-hidden />
         Activité récente
-      </h2>
+      </Heading>
 
       {notifications.length === 0 ? (
         <Card>

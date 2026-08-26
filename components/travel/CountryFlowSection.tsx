@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import type { CountryFlowRow } from '@/lib/countryGeo'
+import { Heading } from '@/components/ui/Typography'
 
 // ssr:false obligatoire : Leaflet touche `window` dès l'import du module,
 // incompatible avec le rendu serveur de Next.js App Router. Autorisé ici
@@ -56,10 +57,10 @@ export function CountryFlowSection({ articles, demandes }: CountryFlowSectionPro
 
   return (
     <section className="mt-6">
-      <h2 className="flex items-center gap-1.5 font-semibold text-slate-900">
+      <Heading level="h3" as="h2" className="flex items-center gap-1.5">
         <Globe2 className="h-5 w-5 text-brand-600" aria-hidden />
         Activité en direct
-      </h2>
+      </Heading>
 
       <div className="mt-3 flex gap-1 border-b border-slate-200">
         {tabs.map((t) => (

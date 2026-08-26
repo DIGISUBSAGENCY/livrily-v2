@@ -19,7 +19,8 @@ import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
 import { aggregateByCountry } from '@/lib/countryGeo'
 import { getRecentNotifications } from '@/lib/notifications/actions'
-import { formatTND } from '@/lib/format'
+import { Price } from '@/components/ui/Price'
+import { Heading } from '@/components/ui/Typography'
 import type { TravelRequestStatus } from '@/types/database'
 
 export const metadata: Metadata = pageMetadata({
@@ -154,9 +155,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
-      <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+      <Heading level="h1">
         Bonjour {firstName(profile?.full_name ?? null) || 'toi'} 👋
-      </h1>
+      </Heading>
       <p className="mt-1 text-sm text-slate-500">Ton activité Jibli en un coup d&apos;œil.</p>
 
       {flouciBanner && (
@@ -216,29 +217,29 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           l'ancien onglet Portefeuille, juste reconnectés aux données de
           cette page (profile/bankInfo/deposits/withdrawals ci-dessus). */}
       <div className="mt-8 space-y-4">
-        <h2 className="text-lg font-bold tracking-tight text-slate-900">Portefeuille</h2>
+        <Heading level="h2">Portefeuille</Heading>
 
         <Card className="flex items-center justify-between">
           <div>
             <p className="text-sm text-slate-500">Solde disponible</p>
-            <p className="text-2xl font-bold text-brand-700">{formatTND(profile?.wallet_balance ?? 0)}</p>
+            <p><Price amount={profile?.wallet_balance ?? 0} size="lg" /></p>
           </div>
           <p className="max-w-[55%] text-right text-xs text-slate-400">Crédité par parrainage ou par dépôt.</p>
         </Card>
 
         <Card>
-          <h3 className="mb-2 font-semibold text-slate-900">Déposer</h3>
+          <Heading level="h3" className="mb-2">Déposer</Heading>
           <WalletDepositForm bankInfo={bankInfo ?? null} />
         </Card>
 
         {deposits && deposits.length > 0 && (
           <Card>
-            <h3 className="mb-2 font-semibold text-slate-900">Historique des dépôts</h3>
+            <Heading level="h3" className="mb-2">Historique des dépôts</Heading>
             <ul className="divide-y divide-slate-100">
               {deposits.map((deposit) => (
                 <li key={deposit.id} className="flex items-center justify-between py-2 text-sm">
                   <div>
-                    <p className="font-medium text-slate-700">{formatTND(deposit.amount)}</p>
+                    <p><Price amount={deposit.amount} size="sm" /></p>
                     <p className="text-xs text-slate-400">{new Date(deposit.created_at).toLocaleString('fr-TN')}</p>
                   </div>
                   <WalletDepositStatusBadge status={deposit.status} />
@@ -249,18 +250,18 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         )}
 
         <Card>
-          <h3 className="mb-2 font-semibold text-slate-900">Retirer</h3>
+          <Heading level="h3" className="mb-2">Retirer</Heading>
           <WalletWithdrawalForm balance={profile?.wallet_balance ?? 0} />
         </Card>
 
         {withdrawals && withdrawals.length > 0 && (
           <Card>
-            <h3 className="mb-2 font-semibold text-slate-900">Historique des retraits</h3>
+            <Heading level="h3" className="mb-2">Historique des retraits</Heading>
             <ul className="divide-y divide-slate-100">
               {withdrawals.map((withdrawal) => (
                 <li key={withdrawal.id} className="flex items-center justify-between py-2 text-sm">
                   <div>
-                    <p className="font-medium text-slate-700">{formatTND(withdrawal.amount)}</p>
+                    <p><Price amount={withdrawal.amount} size="sm" /></p>
                     <p className="text-xs text-slate-400">{new Date(withdrawal.requested_at).toLocaleString('fr-TN')}</p>
                   </div>
                   <WithdrawalStatusBadge status={withdrawal.status} />

@@ -6,6 +6,7 @@ import { ProposalAmounts } from '@/components/travel/ProposalAmounts'
 import { Card } from '@/components/ui/Card'
 import type { TravelProposal, TravelRequestStatus } from '@/types/database'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 interface MyProposalsPreviewProps {
   proposals: TravelProposal[]
@@ -19,7 +20,7 @@ export function MyProposalsPreview({ proposals, requestById, totalCount }: MyPro
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-semibold text-slate-900">Mes propositions</h2>
+        <Heading level="h3" as="h2">Mes propositions</Heading>
         {totalCount > 0 && (
           <Link href="/jibli/mes-propositions" className="text-sm font-medium text-brand-600 hover:underline">
             Voir tout ({totalCount})
