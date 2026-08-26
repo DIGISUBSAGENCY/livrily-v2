@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { ResetPasswordForm } from '@/components/auth/ResetPasswordForm'
 import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Nouveau mot de passe',
@@ -26,7 +27,7 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-gradient-to-b from-brand-50/50 to-white px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Nouveau mot de passe</h1>
+          <Heading level="h1">Nouveau mot de passe</Heading>
           <p className="mt-1 text-sm text-slate-500">
             Entre le code à 8 chiffres reçu par email et choisis un nouveau mot de passe.
           </p>

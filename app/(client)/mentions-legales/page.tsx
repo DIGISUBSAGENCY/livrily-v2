@@ -3,6 +3,7 @@ import { FileText } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { pageMetadata } from '@/lib/seo'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Mentions légales',
@@ -16,7 +17,7 @@ export default function MentionsLegalesPage() {
         <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-50">
           <FileText className="h-5 w-5 text-brand-600" aria-hidden />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Mentions légales</h1>
+        <Heading level="h1">Mentions légales</Heading>
       </div>
       <Card className="mt-6">
         <Badge tone="neutral">À venir</Badge>

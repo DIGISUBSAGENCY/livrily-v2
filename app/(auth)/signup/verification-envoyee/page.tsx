@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { MailCheck } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Vérifie ta boîte mail',
@@ -26,7 +27,7 @@ export default async function VerificationEnvoyeePage({ searchParams }: Verifica
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-12">
       <Card className="w-full max-w-sm text-center">
         <MailCheck className="mx-auto mb-4 h-10 w-10 text-brand-600" aria-hidden />
-        <h1 className="text-xl font-semibold text-slate-900">Vérifie ta boîte mail</h1>
+        <Heading level="h1">Vérifie ta boîte mail</Heading>
         <p className="mt-2 text-sm text-slate-600">
           On t&apos;a envoyé un lien de confirmation
           {email ? (
