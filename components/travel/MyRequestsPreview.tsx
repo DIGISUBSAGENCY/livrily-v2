@@ -4,6 +4,7 @@ import { TravelRequestStatusBadge } from '@/components/travel/TravelRequestStatu
 import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import type { TravelRequest } from '@/types/database'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 interface MyRequestsPreviewProps {
   requests: TravelRequest[]
@@ -26,12 +27,13 @@ export function MyRequestsPreview({ requests, totalCount }: MyRequestsPreviewPro
       </div>
 
       {requests.length === 0 && (
-        <Card className="flex flex-col items-center py-10 text-center text-slate-500">
-          <Plane className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
-          <p>Tu n&apos;as encore publié aucune demande.</p>
-          <Link href="/jibli/nouvelle-demande" className="mt-3 text-sm font-medium text-brand-600 hover:underline">
-            Publier une demande
-          </Link>
+        <Card>
+          <EmptyState icon={Plane} className="mt-0 py-4">
+            <p>Tu n&apos;as encore publié aucune demande.</p>
+            <Link href="/jibli/nouvelle-demande" className="mt-3 text-sm font-medium text-brand-600 hover:underline">
+              Publier une demande
+            </Link>
+          </EmptyState>
         </Card>
       )}
 

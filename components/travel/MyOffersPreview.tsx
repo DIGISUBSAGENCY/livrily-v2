@@ -4,6 +4,7 @@ import { ProductOfferStatusBadge } from '@/components/travel/ProductOfferStatusB
 import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import type { ProductOffer } from '@/types/database'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 interface MyOffersPreviewProps {
   offers: ProductOffer[]
@@ -27,12 +28,13 @@ export function MyOffersPreview({ offers, totalCount }: MyOffersPreviewProps) {
       </div>
 
       {offers.length === 0 && (
-        <Card className="flex flex-col items-center py-10 text-center text-slate-500">
-          <Tag className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
-          <p>Tu n&apos;as encore publié aucun article.</p>
-          <Link href="/jibli/offres/nouveau" className="mt-3 text-sm font-medium text-brand-600 hover:underline">
-            Publier un article
-          </Link>
+        <Card>
+          <EmptyState icon={Tag} className="mt-0 py-4">
+            <p>Tu n&apos;as encore publié aucun article.</p>
+            <Link href="/jibli/offres/nouveau" className="mt-3 text-sm font-medium text-brand-600 hover:underline">
+              Publier un article
+            </Link>
+          </EmptyState>
         </Card>
       )}
 

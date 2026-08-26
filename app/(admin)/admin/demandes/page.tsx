@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatTND } from '@/lib/format'
 import type { TravelRequestStatus } from '@/types/database'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 const REQUEST_STATUSES: TravelRequestStatus[] = ['open', 'matched', 'in_transit', 'completed', 'cancelled']
 
@@ -137,10 +138,9 @@ export default async function AdminDemandesPage({ searchParams }: AdminDemandesP
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger les demandes.</p>}
 
       {!error && filtered.length === 0 && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
-          <Package className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={Package}>
           <p>Aucune demande ne correspond à ces critères.</p>
-        </div>
+        </EmptyState>
       )}
 
       {!error && filtered.length > 0 && (

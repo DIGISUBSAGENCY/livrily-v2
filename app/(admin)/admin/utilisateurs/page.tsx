@@ -5,6 +5,7 @@ import { UserRow } from '@/components/admin/UserRow'
 import { UserSearchFilters } from '@/components/admin/UserSearchFilters'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 interface AdminUsersPageProps {
   searchParams: Promise<{ q?: string; status?: string; type?: string; sort?: string }>
@@ -67,10 +68,9 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger les utilisateurs.</p>}
 
       {!error && sortedUsers.length === 0 && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
-          <Users className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={Users}>
           <p>Aucun utilisateur ne correspond à ces critères.</p>
-        </div>
+        </EmptyState>
       )}
 
       {!error && sortedUsers.length > 0 && (

@@ -8,6 +8,7 @@ import { isBoosted } from '@/components/travel/BoostBadge'
 import { Button } from '@/components/ui/Button'
 import { pageMetadata } from '@/lib/seo'
 import { getPublicProfileSummaries } from '@/lib/profiles'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Trips',
@@ -99,8 +100,7 @@ export default async function TripsPage({ searchParams }: TripsPageProps) {
       )}
 
       {!error && trips && trips.length === 0 && (
-        <div className="mt-10 flex flex-col items-center text-center text-slate-500">
-          <Plane className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={Plane} className="mt-10">
           {hasActiveFilters ? (
             <>
               <p>Aucun trip ne correspond à ces filtres.</p>
@@ -111,7 +111,7 @@ export default async function TripsPage({ searchParams }: TripsPageProps) {
           ) : (
             <p>Aucun trip publié pour l&apos;instant.</p>
           )}
-        </div>
+        </EmptyState>
       )}
 
       {!error && trips && trips.length > 0 && (

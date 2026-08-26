@@ -15,6 +15,7 @@ import { getIdentityStatus } from '@/lib/identity'
 import { getPublicProfileSummaries } from '@/lib/profiles'
 import { pageMetadata } from '@/lib/seo'
 import type { TravelRequest, TravelProposal, TravelRequestStatus } from '@/types/database'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Jibli chay men l’a5er — Crowd-shipping',
@@ -283,8 +284,7 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
       )}
 
       {!error && requests && requests.length === 0 && (
-        <div className="mt-10 flex flex-col items-center text-center text-slate-500">
-          <Package className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={Package} className="mt-10">
           {hasActiveFilters ? (
             <>
               <p>Aucune demande ne correspond à ces filtres.</p>
@@ -295,7 +295,7 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
           ) : (
             <p>Aucune demande ouverte pour l&apos;instant.</p>
           )}
-        </div>
+        </EmptyState>
       )}
 
       {!error && requests && requests.length > 0 && (

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { VerificationActions } from '@/components/admin/VerificationActions'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 // Même structure que /admin/jibli-paiements : liste des soumissions
 // 'pending', URLs signées pour les deux photos (bucket privé, jamais
@@ -44,10 +45,9 @@ export default async function AdminVerificationsPage() {
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger les vérifications.</p>}
 
       {!error && verifications && verifications.length === 0 && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
-          <ShieldCheck className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={ShieldCheck}>
           <p>Aucune vérification en attente.</p>
-        </div>
+        </EmptyState>
       )}
 
       {!error && verifications && verifications.length > 0 && (

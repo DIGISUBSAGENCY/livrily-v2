@@ -5,6 +5,7 @@ import { TravelProposalStatusBadge } from '@/components/travel/TravelProposalSta
 import { ProposalAmounts } from '@/components/travel/ProposalAmounts'
 import { Card } from '@/components/ui/Card'
 import type { TravelProposal, TravelRequestStatus } from '@/types/database'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 interface MyProposalsPreviewProps {
   proposals: TravelProposal[]
@@ -27,13 +28,14 @@ export function MyProposalsPreview({ proposals, requestById, totalCount }: MyPro
       </div>
 
       {proposals.length === 0 && (
-        <Card className="flex flex-col items-center py-10 text-center text-slate-500">
-          <Luggage className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
-          <p>Tu n&apos;as encore fait aucune proposition.</p>
-          <p className="mt-1 text-sm">Parcours les demandes ouvertes pour en faire une.</p>
-          <a href="#demandes-ouvertes" className="mt-3 text-sm font-medium text-brand-600 hover:underline">
-            Voir les demandes ouvertes
-          </a>
+        <Card>
+          <EmptyState icon={Luggage} className="mt-0 py-4">
+            <p>Tu n&apos;as encore fait aucune proposition.</p>
+            <p className="mt-1 text-sm">Parcours les demandes ouvertes pour en faire une.</p>
+            <a href="#demandes-ouvertes" className="mt-3 text-sm font-medium text-brand-600 hover:underline">
+              Voir les demandes ouvertes
+            </a>
+          </EmptyState>
         </Card>
       )}
 

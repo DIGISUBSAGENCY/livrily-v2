@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { WalletDepositActions } from '@/components/admin/WalletDepositActions'
 import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 // Mirror de /admin/boost-paiements — liste simple, pas un dashboard.
 // Contrairement au boost (rapprochement comptable a posteriori,
@@ -56,10 +57,9 @@ export default async function PortefeuillePaiementsPage() {
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger les dépôts.</p>}
 
       {!error && deposits && deposits.length === 0 && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
-          <Wallet className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={Wallet}>
           <p>Aucun dépôt en attente de vérification.</p>
-        </div>
+        </EmptyState>
       )}
 
       {!error && deposits && deposits.length > 0 && (

@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { WithdrawalStatusBadge } from '@/components/travel/WithdrawalStatusBadge'
 import { RequestWithdrawalButton } from '@/components/travel/RequestWithdrawalButton'
 import { Card } from '@/components/ui/Card'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { formatTND } from '@/lib/format'
 import { pageMetadata } from '@/lib/seo'
 
@@ -87,7 +88,9 @@ export default async function MesGainsPage() {
 
       <h2 className="mb-3 mt-8 font-semibold text-slate-900">Historique des retraits</h2>
       {(!withdrawals || withdrawals.length === 0) && (
-        <p className="text-sm text-slate-500">Aucune demande de retrait pour l&apos;instant.</p>
+        <EmptyState icon={Wallet} className="mt-6">
+          <p>Aucune demande de retrait pour l&apos;instant.</p>
+        </EmptyState>
       )}
       {withdrawals && withdrawals.length > 0 && (
         <div className="space-y-3">

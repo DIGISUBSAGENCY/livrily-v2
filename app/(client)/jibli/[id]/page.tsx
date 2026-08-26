@@ -1,9 +1,10 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import type { Metadata } from 'next'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, Inbox } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { TravelRequestStatusBadge } from '@/components/travel/TravelRequestStatusBadge'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { TravelPaymentStatusBadge } from '@/components/travel/TravelPaymentStatusBadge'
 import { ResubmitPaymentProof } from '@/components/travel/ResubmitPaymentProof'
 import { ProposalCard } from '@/components/travel/ProposalCard'
@@ -436,7 +437,9 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
             Propositions reçues {proposals.length > 0 && `(${proposals.length})`}
           </h2>
           {proposals.length === 0 && (
-            <p className="text-sm text-slate-500">Aucune proposition pour l&apos;instant.</p>
+            <EmptyState icon={Inbox} className="mt-6">
+              <p>Aucune proposition pour l&apos;instant.</p>
+            </EmptyState>
           )}
           <div className="space-y-3">
             {proposals.map((proposal) => (

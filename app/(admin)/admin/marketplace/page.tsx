@@ -8,6 +8,7 @@ import { MarketplaceSearchFilters } from '@/components/admin/MarketplaceSearchFi
 import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import type { TripStatus, ProductOfferStatus } from '@/types/database'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 const STATUSES: (TripStatus | ProductOfferStatus)[] = ['open', 'matched', 'completed', 'cancelled']
 
@@ -191,14 +192,13 @@ export default async function AdminMarketplacePage({ searchParams }: AdminMarket
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger les données.</p>}
 
       {!error && filtered.length === 0 && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
-          <Icon className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={Icon}>
           <p>
             {type === 'boosts'
               ? 'Aucune mise en avant active ne correspond à ces critères.'
               : `Aucun${type === 'trips' ? ' trip' : 'e offre'} ne correspond à ces critères.`}
           </p>
-        </div>
+        </EmptyState>
       )}
 
       {!error && filtered.length > 0 && (
