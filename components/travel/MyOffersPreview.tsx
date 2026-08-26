@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import type { ProductOffer } from '@/types/database'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 interface MyOffersPreviewProps {
   offers: ProductOffer[]
@@ -19,7 +20,7 @@ export function MyOffersPreview({ offers, totalCount }: MyOffersPreviewProps) {
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-semibold text-slate-900">Mes articles en vente</h2>
+        <Heading level="h3" as="h2">Mes articles en vente</Heading>
         {totalCount > 0 && (
           <Link href="/jibli/mes-offres" className="text-sm font-medium text-brand-600 hover:underline">
             Voir tout ({totalCount})
