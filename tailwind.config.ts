@@ -35,21 +35,10 @@ const config: Config = {
           800: "#084433",
           900: "#063329",
         },
-        // Direction visuelle "Ledger" (nouvelle identité, cf. audit
-        // design/UX) : palette additive, namespacée pour ne rien casser du
-        // thème brand/slate actuel tant que les pages n'ont pas migré.
-        // Esthétique "manifeste douanier / carte d'embarquement" — surface
-        // crème neutre, hairlines plutôt qu'ombres, ambre réservé aux
-        // montants/gains uniquement (jamais une couleur de bouton générique).
-        ledger: {
-          surface: "#FAFAF7",
-          line: "#E3E0D6",
-          ink: "#10231D",
-          "ink-soft": "#1B332B",
-          amber: "#C6862A",
-          text: "#1A1A17",
-          muted: "#7A7669",
-        },
+        // La palette "Ledger" (seconde direction visuelle amorcée puis
+        // jamais adoptée par aucune page produit) a été SUPPRIMÉE ici —
+        // refonte v3, vague A : un seul système (brand + slate), consolidé
+        // au lieu de deux systèmes concurrents dont un au point mort.
       },
       // Ombres plus douces/diffuses que shadow-sm/shadow-md par défaut — la
       // profondeur vient de l'ombre, la bordure reste quasi invisible
@@ -57,11 +46,6 @@ const config: Config = {
       boxShadow: {
         soft: "0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06)",
         "soft-lg": "0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.05)",
-      },
-      // Rayon quasi carré propre à Ledger, distinct de rounded-lg/xl
-      // utilisés par le thème actuel.
-      borderRadius: {
-        ledger: "3px",
       },
     },
   },
