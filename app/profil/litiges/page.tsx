@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { pageMetadata } from '@/lib/seo'
 import type { DisputeStatus } from '@/types/database'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Mes litiges',
@@ -51,7 +52,7 @@ export default async function LitigesPage({ searchParams }: LitigesPageProps) {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="text-2xl font-bold tracking-tight text-slate-900">Mes litiges</h1>
+      <Heading level="h1">Mes litiges</Heading>
       <p className="mt-1 text-sm text-slate-500">
         Litiges sur tes missions Jibli, en tant que client ou voyageur.
       </p>

@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card'
 import { Alert } from '@/components/ui/Alert'
 import { pageMetadata } from '@/lib/seo'
 import type { IdentityGateStatus } from '@/lib/identity'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: "Vérification d'identité",
@@ -46,7 +47,7 @@ export default async function VerificationIdentitePage() {
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-50">
           <ShieldCheck className="h-6 w-6 text-brand-600" aria-hidden />
         </div>
-        <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900">Vérification d&apos;identité</h1>
+        <Heading level="h1" className="mt-3">Vérification d&apos;identité</Heading>
         <p className="mt-2 text-sm text-slate-500">
           Cette vérification (~2 min) sécurise l&apos;échange direct entre client et voyageur — ton
           paiement reste séquestré jusqu&apos;à la confirmation de réception. Obligatoire avant de

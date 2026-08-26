@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
 import type { BankTransferInfo, BoostPricingTier, Trip, ProductOffer, TravelRequest } from '@/types/database'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Mes boosts',
@@ -70,10 +71,10 @@ export default async function MesBoostsPage() {
       {/* Pas de lien retour ici — accessible depuis le menu profil
           (UserMenu.tsx), pas imbriqué sous /profil/parametres, même
           absence de lien retour que /profil/litiges. */}
-      <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+      <Heading level="h1" className="flex items-center gap-2">
         <Sparkles className="h-6 w-6 text-brand-600" aria-hidden />
         Mes boosts
-      </h1>
+      </Heading>
       <p className="mt-1 text-sm text-slate-500">
         Mets en avant tes trips, offres et demandes ouverts — ils apparaissent en priorité dans les listings.
       </p>

@@ -7,8 +7,9 @@ import { WithdrawalStatusBadge } from '@/components/travel/WithdrawalStatusBadge
 import { RequestWithdrawalButton } from '@/components/travel/RequestWithdrawalButton'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { formatTND } from '@/lib/format'
+import { Price } from '@/components/ui/Price'
 import { pageMetadata } from '@/lib/seo'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Mes gains',
@@ -60,22 +61,22 @@ export default async function MesGainsPage() {
       <Link href="/jibli" className="text-sm text-brand-600 transition-colors hover:text-brand-700 hover:underline">
         ← Jibli chay men l&apos;a5er
       </Link>
-      <h1 className="mt-3 flex items-center gap-2 text-2xl font-bold text-slate-900">
+      <Heading level="h1" className="mt-3 flex items-center gap-2">
         <Wallet className="h-6 w-6 text-brand-600" aria-hidden />
         Mes gains
-      </h1>
+      </Heading>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Card>
           <p className="text-sm text-slate-500">En attente (séquestré)</p>
-          <p className="mt-1 text-2xl font-bold text-amber-600">{formatTND(escrowedTotal)}</p>
+          <p className="mt-1"><Price amount={escrowedTotal} size="lg" className="text-amber-600" /></p>
           <p className="mt-1 text-xs text-slate-400">
             Bloqué par la plateforme jusqu&apos;à ce que le client confirme la réception.
           </p>
         </Card>
         <Card>
           <p className="text-sm text-slate-500">Disponible</p>
-          <p className="mt-1 text-2xl font-bold text-brand-600">{formatTND(availableBalance ?? 0)}</p>
+          <p className="mt-1"><Price amount={availableBalance ?? 0} size="lg" /></p>
           <p className="mt-1 text-xs text-slate-400">Libéré, net des retraits déjà demandés.</p>
         </Card>
       </div>
@@ -86,7 +87,7 @@ export default async function MesGainsPage() {
         </div>
       )}
 
-      <h2 className="mb-3 mt-8 font-semibold text-slate-900">Historique des retraits</h2>
+      <Heading level="h3" as="h2" className="mb-3 mt-8">Historique des retraits</Heading>
       {(!withdrawals || withdrawals.length === 0) && (
         <EmptyState icon={Wallet} className="mt-6">
           <p>Aucune demande de retrait pour l&apos;instant.</p>
@@ -97,7 +98,7 @@ export default async function MesGainsPage() {
           {withdrawals.map((withdrawal) => (
             <Card key={withdrawal.id} className="flex items-center justify-between gap-3">
               <div>
-                <p className="font-medium text-slate-900">{formatTND(withdrawal.amount)}</p>
+                <p><Price amount={withdrawal.amount} size="sm" /></p>
                 <p className="text-xs text-slate-500">
                   {new Date(withdrawal.requested_at).toLocaleString('fr-TN')}
                 </p>

@@ -16,6 +16,7 @@ import { getProfileStats } from '@/lib/profileStats'
 import { getIdentityStatus, isIdentityVerified } from '@/lib/identity'
 import { getProfileRating } from '@/lib/reviews'
 import { getTrustScore, getTrustBadges } from '@/lib/trust'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Mon profil',
@@ -106,9 +107,9 @@ export default async function ProfilPage() {
             </Link>
           </div>
 
-          <h1 className="mt-3 text-xl font-bold tracking-tight text-slate-900">
+          <Heading level="h1" className="mt-3">
             {profile.full_name || 'Utilisateur Livrily'}
-          </h1>
+          </Heading>
 
           <ProfileBio bio={profile.bio} editable />
 

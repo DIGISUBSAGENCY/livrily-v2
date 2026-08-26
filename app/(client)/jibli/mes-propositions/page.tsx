@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { ProposalsTabs } from '@/components/travel/ProposalsTabs'
 import { pageMetadata } from '@/lib/seo'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Mes propositions',
@@ -38,7 +39,7 @@ export default async function MyProposalsPage() {
       <Link href="/jibli" className="text-sm text-brand-600 transition-colors hover:text-brand-700 hover:underline">
         ← Jibli chay men l&apos;a5er
       </Link>
-      <h1 className="mt-3 text-2xl font-bold text-slate-900">Mes propositions</h1>
+      <Heading level="h1" className="mt-3">Mes propositions</Heading>
 
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger tes propositions.</p>}
 
