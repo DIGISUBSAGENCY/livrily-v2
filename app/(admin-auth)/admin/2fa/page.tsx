@@ -7,6 +7,7 @@ import { MfaSetupForm } from '@/components/auth/MfaSetupForm'
 import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
 import { enrollAdminMfaFactor, verifyAdminMfaEnrollment } from './actions'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Activer la double authentification',
@@ -39,12 +40,12 @@ export default async function Admin2faPage({ searchParams }: Admin2faPageProps) 
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
           <ShieldCheck className="mx-auto h-8 w-8 text-brand-400" aria-hidden />
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-white">Double authentification requise</h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <Heading level="h1" className="mt-3">Double authentification requise</Heading>
+          <p className="mt-1 text-sm text-slate-500">
             Obligatoire pour les comptes administrateur Livrily — à activer avant de continuer.
           </p>
         </div>

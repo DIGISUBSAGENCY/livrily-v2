@@ -4,6 +4,7 @@ import { WalletDepositActions } from '@/components/admin/WalletDepositActions'
 import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 // Mirror de /admin/boost-paiements — liste simple, pas un dashboard.
 // Contrairement au boost (rapprochement comptable a posteriori,
@@ -46,10 +47,10 @@ export default async function PortefeuillePaiementsPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+      <Heading level="h1" className="flex items-center gap-2">
         <Wallet className="h-6 w-6 text-brand-600" aria-hidden />
         Dépôts portefeuille en attente
-      </h1>
+      </Heading>
       <p className="mt-1 text-sm text-slate-500">
         Virements vers le solde interne en attente de vérification manuelle.
       </p>

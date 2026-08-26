@@ -4,6 +4,7 @@ import { Plane, Wallet, ShieldCheck, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { Heading } from '@/components/ui/Typography'
 
 // Dashboard restreint aux métriques Jibli (crowd-shipping) — les métriques
 // commerce (commandes du jour, CA, temps de livraison moyen, commerces
@@ -55,7 +56,7 @@ export default async function AdminDashboardPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
-      <h1 className="text-2xl font-bold tracking-tight text-slate-900">Tableau de bord</h1>
+      <Heading level="h1">Tableau de bord</Heading>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
         <Card className="flex items-center gap-3">

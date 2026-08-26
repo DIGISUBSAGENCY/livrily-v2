@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatTND } from '@/lib/format'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 // Mini page admin dédiée à la validation des virements en attente pour le
 // crowd-shipping (Flouci n'y apparaît jamais : confirmé automatiquement par
@@ -39,7 +40,7 @@ export default async function JibliPaiementsPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="text-2xl font-bold tracking-tight text-slate-900">Paiements Jibli en attente</h1>
+      <Heading level="h1">Paiements Jibli en attente</Heading>
       <p className="mt-1 text-sm text-slate-500">
         Virements pour le crowd-shipping en attente de vérification manuelle.
       </p>

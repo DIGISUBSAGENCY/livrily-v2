@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card'
 import { Alert } from '@/components/ui/Alert'
 import { formatTND } from '@/lib/format'
 import type { DisputeResolutionType } from '@/types/database'
+import { Heading } from '@/components/ui/Typography'
 
 const RESOLUTION_TYPE_LABELS: Record<DisputeResolutionType, string> = {
   released_to_voyageur: 'Fonds libérés au voyageur',
@@ -64,18 +65,18 @@ export default async function AdminLitigeDetailPage({ params }: AdminLitigeDetai
       </Link>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+        <Heading level="h1" className="flex items-center gap-2">
           <AlertTriangle className="h-6 w-6 text-brand-600" aria-hidden />
           Litige
-        </h1>
+        </Heading>
         <DisputeStatusBadge status={dispute.status} />
       </div>
 
       <Card className="mt-6">
-        <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+        <Heading level="h3" as="h2" className="flex items-center gap-2">
           <Package className="h-4 w-4 text-slate-500" aria-hidden />
           Mission concernée
-        </h2>
+        </Heading>
         {travelRequest ? (
           <div className="mt-3 space-y-1 text-sm">
             <Link href={`/jibli/${travelRequest.id}`} className="font-medium text-brand-700 hover:underline">
@@ -92,10 +93,10 @@ export default async function AdminLitigeDetailPage({ params }: AdminLitigeDetai
       </Card>
 
       <Card className="mt-4">
-        <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+        <Heading level="h3" as="h2" className="flex items-center gap-2">
           <User className="h-4 w-4 text-slate-500" aria-hidden />
           Parties concernées
-        </h2>
+        </Heading>
         <dl className="mt-3 grid gap-3 sm:grid-cols-3 text-sm">
           <div>
             <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">A ouvert le litige</dt>
@@ -118,10 +119,10 @@ export default async function AdminLitigeDetailPage({ params }: AdminLitigeDetai
       </Card>
 
       <Card className="mt-4">
-        <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+        <Heading level="h3" as="h2" className="flex items-center gap-2">
           <Wallet className="h-4 w-4 text-slate-500" aria-hidden />
           Paiement associé
-        </h2>
+        </Heading>
         {payment ? (
           <>
             <div className="mt-3 flex flex-wrap gap-6 text-sm">
@@ -166,10 +167,10 @@ export default async function AdminLitigeDetailPage({ params }: AdminLitigeDetai
       </Card>
 
       <Card className="mt-4">
-        <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+        <Heading level="h3" as="h2" className="flex items-center gap-2">
           <CalendarDays className="h-4 w-4 text-slate-500" aria-hidden />
           Raison du litige
-        </h2>
+        </Heading>
         <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{dispute.reason}</p>
         <p className="mt-3 text-xs text-slate-400">
           Ouvert le {new Date(dispute.created_at).toLocaleString('fr-TN')}
@@ -189,7 +190,7 @@ export default async function AdminLitigeDetailPage({ params }: AdminLitigeDetai
         </Alert>
       ) : (
         <Card className="mt-4">
-          <h2 className="mb-3 font-semibold text-slate-900">Résoudre ce litige</h2>
+          <Heading level="h3" as="h2" className="mb-3">Résoudre ce litige</Heading>
           {/*
             .bind() sur les vraies server actions, pas des closures — une
             arrow function qui se contente d'appeler une 'use server' dans

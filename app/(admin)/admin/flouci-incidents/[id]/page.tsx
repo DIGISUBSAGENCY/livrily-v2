@@ -9,6 +9,7 @@ import { resolveFlouciIncident } from '../actions'
 import { Card } from '@/components/ui/Card'
 import { Alert } from '@/components/ui/Alert'
 import { formatTND } from '@/lib/format'
+import { Heading } from '@/components/ui/Typography'
 
 interface AdminFlouciIncidentDetailPageProps {
   params: Promise<{ id: string }>
@@ -66,10 +67,10 @@ export default async function AdminFlouciIncidentDetailPage({ params }: AdminFlo
       </Link>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+        <Heading level="h1" className="flex items-center gap-2">
           <AlertOctagon className="h-6 w-6 text-brand-600" aria-hidden />
           Incident Flouci
-        </h1>
+        </Heading>
         <FlouciIncidentStatusBadge status={incident.status} />
       </div>
 
@@ -82,10 +83,10 @@ export default async function AdminFlouciIncidentDetailPage({ params }: AdminFlo
       )}
 
       <Card className="mt-6">
-        <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+        <Heading level="h3" as="h2" className="flex items-center gap-2">
           <Receipt className="h-4 w-4 text-slate-500" aria-hidden />
           Paiement Flouci
-        </h2>
+        </Heading>
         <dl className="mt-3 grid gap-3 sm:grid-cols-2 text-sm">
           <div>
             <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">Référence Flouci</dt>
@@ -113,10 +114,10 @@ export default async function AdminFlouciIncidentDetailPage({ params }: AdminFlo
       </Card>
 
       <Card className="mt-4">
-        <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+        <Heading level="h3" as="h2" className="flex items-center gap-2">
           <User className="h-4 w-4 text-slate-500" aria-hidden />
           Client
-        </h2>
+        </Heading>
         <div className="mt-2 text-sm">
           <p className="text-slate-900">{client?.full_name ?? 'Utilisateur'}</p>
           <p className="text-slate-500">{client?.email}</p>
@@ -124,10 +125,10 @@ export default async function AdminFlouciIncidentDetailPage({ params }: AdminFlo
       </Card>
 
       <Card className="mt-4">
-        <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+        <Heading level="h3" as="h2" className="flex items-center gap-2">
           <Package className="h-4 w-4 text-slate-500" aria-hidden />
           Mission concernée
-        </h2>
+        </Heading>
         {travelRequest ? (
           <div className="mt-2 space-y-1 text-sm">
             <Link href={`/jibli/${travelRequest.id}`} className="font-medium text-brand-700 hover:underline">
@@ -142,10 +143,10 @@ export default async function AdminFlouciIncidentDetailPage({ params }: AdminFlo
       </Card>
 
       <Card className="mt-4">
-        <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+        <Heading level="h3" as="h2" className="flex items-center gap-2">
           <CalendarDays className="h-4 w-4 text-slate-500" aria-hidden />
           Détection
-        </h2>
+        </Heading>
         <p className="mt-2 text-xs text-slate-400">
           Incident capturé le {new Date(incident.created_at).toLocaleString('fr-TN')}
         </p>
@@ -162,7 +163,7 @@ export default async function AdminFlouciIncidentDetailPage({ params }: AdminFlo
         </Alert>
       ) : (
         <Card className="mt-4">
-          <h2 className="mb-3 font-semibold text-slate-900">Résoudre cet incident</h2>
+          <Heading level="h3" as="h2" className="mb-3">Résoudre cet incident</Heading>
           {/* .bind() sur la vraie référence server action, PAS une arrow
               function fermant sur incident.id : "Functions cannot be passed
               directly to Client Components unless..." — seule une vraie

@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatTND } from '@/lib/format'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 // Mini page admin dédiée, mirror de /admin/jibli-paiements — liste simple,
 // pas un dashboard (cf. plan validé). boosted_until est déjà posé depuis
@@ -52,7 +53,7 @@ export default async function BoostPaiementsPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="text-2xl font-bold tracking-tight text-slate-900">Paiements Boost en attente</h1>
+      <Heading level="h1">Paiements Boost en attente</Heading>
       <p className="mt-1 text-sm text-slate-500">
         Virements pour la mise en avant payante (trips/offres) en attente de vérification manuelle.
       </p>

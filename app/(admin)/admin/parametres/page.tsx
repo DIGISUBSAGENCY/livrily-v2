@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Percent, Landmark, Clock, Rocket } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
+import { Heading } from '@/components/ui/Typography'
 
 // Hub qui regroupe les réglages plateforme déjà existants (Commission,
 // Virement, Libération automatique) sous un même point d'entrée — ne
@@ -29,7 +30,7 @@ export default async function AdminParametresPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="text-2xl font-bold tracking-tight text-slate-900">Paramètres</h1>
+      <Heading level="h1">Paramètres</Heading>
       <p className="mt-1 text-sm text-slate-500">Réglages globaux de la plateforme Livrily.</p>
 
       <div className="mt-6 space-y-4">

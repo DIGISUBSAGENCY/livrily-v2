@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { Alert } from '@/components/ui/Alert'
 import { formatTND } from '@/lib/format'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 interface AdminFlouciIncidentsPageProps {
   searchParams: Promise<{ q?: string; status?: string }>
@@ -43,10 +44,10 @@ export default async function AdminFlouciIncidentsPage({ searchParams }: AdminFl
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
-      <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+      <Heading level="h1" className="flex items-center gap-2">
         <AlertOctagon className="h-6 w-6 text-brand-600" aria-hidden />
         Paiements Flouci orphelins
-      </h1>
+      </Heading>
       <p className="mt-1 text-sm text-slate-500">
         Paiements Flouci confirmés réussis (vérifiés auprès de l&apos;API) dont la transaction Livrily n&apos;a pas pu
         être finalisée.

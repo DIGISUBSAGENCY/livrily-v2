@@ -5,6 +5,7 @@ import { BankTransferRow } from '@/components/admin/BankTransferRow'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 export default async function AdminBankTransferPage() {
   const supabase = await createClient()
@@ -16,7 +17,7 @@ export default async function AdminBankTransferPage() {
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Coordonnées de virement</h1>
+        <Heading level="h1">Coordonnées de virement</Heading>
         <Link href="/admin/parametres/virement/nouveau">
           <Button size="sm">
             <Plus className="h-4 w-4" aria-hidden />

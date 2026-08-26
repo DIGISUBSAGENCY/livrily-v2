@@ -12,6 +12,7 @@ import { Card } from '@/components/ui/Card'
 import { Alert } from '@/components/ui/Alert'
 import { formatTND } from '@/lib/format'
 import { COUNTRIES } from '@/lib/constants/countries'
+import { Heading } from '@/components/ui/Typography'
 
 interface UserDetailPageProps {
   params: Promise<{ id: string }>
@@ -140,7 +141,7 @@ export default async function AdminUserDetailPage({ params, searchParams }: User
       </Link>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{user.full_name ?? 'Sans nom'}</h1>
+        <Heading level="h1">{user.full_name ?? 'Sans nom'}</Heading>
         <UserStatusToggle userId={user.id} initialIsActive={user.is_active} />
       </div>
 
@@ -172,10 +173,10 @@ export default async function AdminUserDetailPage({ params, searchParams }: User
       </Card>
 
       <section className="mt-6">
-        <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-900">
+        <Heading level="h3" as="h2" className="mb-3 flex items-center gap-2">
           <Plane className="h-5 w-5 text-slate-500" aria-hidden />
           Demandes Jibli postées ({travelRequests?.length ?? 0})
-        </h2>
+        </Heading>
         {(!travelRequests || travelRequests.length === 0) && <p className="text-sm text-slate-500">Aucune demande.</p>}
         {travelRequests && travelRequests.length > 0 && (
           <Card className="p-3">
@@ -193,10 +194,10 @@ export default async function AdminUserDetailPage({ params, searchParams }: User
       </section>
 
       <section className="mt-6">
-        <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-900">
+        <Heading level="h3" as="h2" className="mb-3 flex items-center gap-2">
           <Luggage className="h-5 w-5 text-slate-500" aria-hidden />
           Propositions en tant que voyageur ({proposals?.length ?? 0})
-        </h2>
+        </Heading>
         {(!proposals || proposals.length === 0) && <p className="text-sm text-slate-500">Aucune proposition.</p>}
         {proposals && proposals.length > 0 && (
           <Card className="p-3">
@@ -217,10 +218,10 @@ export default async function AdminUserDetailPage({ params, searchParams }: User
       </section>
 
       <section className="mt-6">
-        <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-900">
+        <Heading level="h3" as="h2" className="mb-3 flex items-center gap-2">
           <Receipt className="h-5 w-5 text-slate-500" aria-hidden />
           Historique solde parrainage ({walletHistory.length})
-        </h2>
+        </Heading>
         {walletHistory.length === 0 && <p className="text-sm text-slate-500">Aucune transaction.</p>}
         {walletHistory.length > 0 && (
           <Card className="p-3">
@@ -241,10 +242,10 @@ export default async function AdminUserDetailPage({ params, searchParams }: User
       </section>
 
       <section className="mt-6">
-        <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-900">
+        <Heading level="h3" as="h2" className="mb-3 flex items-center gap-2">
           <Wallet className="h-5 w-5 text-slate-500" aria-hidden />
           Retraits crowd-shipping ({withdrawalHistory.length})
-        </h2>
+        </Heading>
         <p className="mb-3 text-xs text-slate-400">
           N&apos;affecte pas le solde parrainage ci-dessus — calculé séparément depuis les paiements
           crowd-shipping libérés (travel_voyageur_balance).

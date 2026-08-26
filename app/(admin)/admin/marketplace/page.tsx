@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import type { TripStatus, ProductOfferStatus } from '@/types/database'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 const STATUSES: (TripStatus | ProductOfferStatus)[] = ['open', 'matched', 'completed', 'cancelled']
 
@@ -173,10 +174,10 @@ export default async function AdminMarketplacePage({ searchParams }: AdminMarket
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
-      <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+      <Heading level="h1" className="flex items-center gap-2">
         <Icon className="h-6 w-6 text-brand-600" aria-hidden />
         Marketplace
-      </h1>
+      </Heading>
       <p className="mt-1 text-sm text-slate-500">
         Vue d&apos;ensemble des Trips, Offres et mises en avant actives — lecture seule.
       </p>

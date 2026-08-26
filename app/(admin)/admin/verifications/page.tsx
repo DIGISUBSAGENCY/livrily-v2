@@ -4,6 +4,7 @@ import { VerificationActions } from '@/components/admin/VerificationActions'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 // Même structure que /admin/jibli-paiements : liste des soumissions
 // 'pending', URLs signées pour les deux photos (bucket privé, jamais
@@ -36,10 +37,10 @@ export default async function AdminVerificationsPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+      <Heading level="h1" className="flex items-center gap-2">
         <ShieldCheck className="h-6 w-6 text-brand-600" aria-hidden />
         Vérifications d&apos;identité
-      </h1>
+      </Heading>
       <p className="mt-1 text-sm text-slate-500">Soumissions en attente d&apos;examen.</p>
 
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger les vérifications.</p>}
