@@ -3,6 +3,7 @@ import { Plane, ShieldCheck, UserCheck, LifeBuoy, Wallet } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { Heading } from '@/components/ui/Typography'
 import { TravelRequestCarousel } from '@/components/home/TravelRequestCarousel'
 import { getTravelTrend, type TravelTrend } from '@/lib/travel/getTravelTrend'
 
@@ -101,9 +102,9 @@ export default async function HomePage() {
             <Plane className="h-3.5 w-3.5" aria-hidden />
             Crowd-shipping vers la Tunisie
           </span>
-          <h1 className="mt-4 text-balance text-4xl font-extrabold tracking-tight text-slate-900 sm:text-6xl">
+          <Heading level="display" className="mt-4">
             Fais-toi ramener un objet de l&apos;étranger
-          </h1>
+          </Heading>
           <p className="mx-auto mt-4 max-w-md text-lg text-slate-600">
             Demande à un voyageur de te le ramener, ou rentabilise ton prochain voyage en le
             ramenant toi-même — paiement sécurisé, en séquestre jusqu&apos;à réception.
@@ -131,7 +132,7 @@ export default async function HomePage() {
         {/* Stats — un seul panneau uni (pas 2 Card séparées) : séparateur
             interne, ombre marquée, léger débordement sur la transition
             dégradé→blanc pour un ancrage plus intentionnel. */}
-        <div className="relative z-10 mx-auto -mb-16 mt-14 max-w-xl overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-soft-lg sm:-mb-20">
+        <div className="relative z-10 mx-auto -mb-16 mt-14 max-w-xl overflow-hidden rounded-xl border border-slate-200/70 bg-white shadow-soft-lg sm:-mb-20">
           <div className="grid divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
             {stats.map((stat) => (
               <div key={stat.label} className="px-6 py-6 text-center">
@@ -155,7 +156,7 @@ export default async function HomePage() {
         <div className="mx-auto max-w-5xl">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-bold tracking-tight text-slate-900">Dernières demandes de voyage</h2>
+              <Heading level="h1" as="h2">Dernières demandes de voyage</Heading>
               <p className="mt-1 text-sm text-slate-500">
                 Publiées par nos membres, en attente d&apos;un voyageur.
               </p>
@@ -187,7 +188,9 @@ export default async function HomePage() {
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
             De l&apos;argent en jeu, en toute confiance
           </span>
-          <h2 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Pourquoi nous faire confiance</h2>
+          <Heading level="h1" as="h2" className="mt-4 sm:text-3xl">
+            Pourquoi nous faire confiance
+          </Heading>
           <div className="mt-10 grid gap-5 sm:grid-cols-3">
             {trustBadges.map((badge) => (
               <Card key={badge.title} interactive className="text-center">
@@ -211,9 +214,9 @@ export default async function HomePage() {
             <Wallet className="h-3.5 w-3.5" aria-hidden />
             Pour les voyageurs
           </span>
-          <h2 className="mt-4 text-balance text-3xl font-bold tracking-tight text-slate-900">
+          <Heading level="h1" as="h2" className="mt-4 text-balance sm:text-3xl">
             Tu voyages bientôt ? Rentabilise ton trajet.
-          </h2>
+          </Heading>
           <p className="mt-4 text-slate-600">
             Parcours les demandes ouvertes vers ta destination, propose ton prix pour ramener
             l&apos;objet, et sois payé en toute sécurité dès que le client confirme la réception.
