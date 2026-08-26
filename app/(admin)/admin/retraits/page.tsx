@@ -5,6 +5,7 @@ import { WithdrawalStatusBadge } from '@/components/travel/WithdrawalStatusBadge
 import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 // Traitement manuel des demandes de retrait voyageur (crowd-shipping) —
 // jusqu'ici aucune UI admin n'existait pour ça (cf. commentaire dans
@@ -28,10 +29,10 @@ export default async function AdminRetraitsPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+      <Heading level="h1" className="flex items-center gap-2">
         <Wallet className="h-6 w-6 text-brand-600" aria-hidden />
         Retraits voyageurs
-      </h1>
+      </Heading>
       <p className="mt-1 text-sm text-slate-500">
         Demandes de retrait en attente de traitement manuel (virement hors app).
       </p>

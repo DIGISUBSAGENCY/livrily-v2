@@ -5,6 +5,7 @@ import { DisputeStatusBadge } from '@/components/travel/DisputeStatusBadge'
 import { DisputeSearchFilters } from '@/components/admin/DisputeSearchFilters'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 interface AdminLitigesPageProps {
   searchParams: Promise<{ q?: string; status?: string }>
@@ -76,10 +77,10 @@ export default async function AdminLitigesPage({ searchParams }: AdminLitigesPag
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
-      <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+      <Heading level="h1" className="flex items-center gap-2">
         <AlertTriangle className="h-6 w-6 text-brand-600" aria-hidden />
         Litiges
-      </h1>
+      </Heading>
       <p className="mt-1 text-sm text-slate-500">Litiges ouverts par les clients ou voyageurs sur une mission Jibli.</p>
 
       <div className="mt-6">

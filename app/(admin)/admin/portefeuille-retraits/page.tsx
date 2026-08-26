@@ -5,6 +5,7 @@ import { WithdrawalStatusBadge } from '@/components/travel/WithdrawalStatusBadge
 import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 // Mirror de /admin/retraits (système B, gains voyageur) — même structure,
 // mais sur wallet_withdrawals (profile_id, pas voyageur_id) : n'importe
@@ -27,10 +28,10 @@ export default async function PortefeuilleRetraitsPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+      <Heading level="h1" className="flex items-center gap-2">
         <Wallet className="h-6 w-6 text-brand-600" aria-hidden />
         Retraits portefeuille
-      </h1>
+      </Heading>
       <p className="mt-1 text-sm text-slate-500">
         Demandes de retrait du solde interne en attente de traitement manuel (virement hors app).
       </p>

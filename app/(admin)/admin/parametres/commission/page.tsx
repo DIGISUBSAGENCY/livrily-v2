@@ -2,6 +2,7 @@ import { Percent } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { CommissionForm } from '@/components/admin/CommissionForm'
 import { Card } from '@/components/ui/Card'
+import { Heading } from '@/components/ui/Typography'
 
 // Configuration du taux de commission Livrily sur les opérations de
 // livraison entre particuliers (nommées "Jibli" en interne uniquement —
@@ -25,10 +26,10 @@ export default async function AdminCommissionPage() {
 
   return (
     <main className="mx-auto max-w-lg px-4 py-8">
-      <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+      <Heading level="h1" className="flex items-center gap-2">
         <Percent className="h-6 w-6 text-brand-600" aria-hidden />
         Commission Livrily
-      </h1>
+      </Heading>
       <p className="mt-1 text-sm text-slate-500">
         Taux prélevé par la plateforme sur chaque livraison Livrily entre particuliers.
       </p>

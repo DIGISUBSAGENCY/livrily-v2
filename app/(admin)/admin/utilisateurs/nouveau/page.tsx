@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { UserCreateForm } from '@/components/admin/UserCreateForm'
 import { Card } from '@/components/ui/Card'
+import { Heading } from '@/components/ui/Typography'
 
 export default function NewUserPage() {
   return (
@@ -8,7 +9,7 @@ export default function NewUserPage() {
       <Link href="/admin/utilisateurs" className="text-sm text-brand-600 transition-colors hover:text-brand-700 hover:underline">
         ← Utilisateurs
       </Link>
-      <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900">Créer un utilisateur</h1>
+      <Heading level="h1" className="mt-3">Créer un utilisateur</Heading>
       <p className="mt-1 text-sm text-slate-500">
         Crée directement un compte client, sans passer par l&apos;inscription self-service.
       </p>

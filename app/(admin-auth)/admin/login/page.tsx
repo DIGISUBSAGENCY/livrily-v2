@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { AdminLoginForm } from '@/components/auth/AdminLoginForm'
 import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Connexion admin',
@@ -36,20 +37,20 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <p className="text-lg font-bold tracking-tight text-white">
+          <p className="text-lg font-bold tracking-tight text-brand-700">
             Livrily{' '}
-            <span className="rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+            <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
               Admin
             </span>
           </p>
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-white">Connexion administrateur</h1>
-          <p className="mt-1 text-sm text-slate-400">Accès réservé aux comptes administrateur.</p>
+          <Heading level="h1" className="mt-3">Connexion administrateur</Heading>
+          <p className="mt-1 text-sm text-slate-500">Accès réservé aux comptes administrateur.</p>
         </div>
         {reset === 'success' && (
-          <p className="mb-4 rounded-lg border border-emerald-800 bg-emerald-950/50 p-3 text-center text-sm text-emerald-300">
+          <p className="mb-4 rounded-lg border border-brand-200 bg-brand-50 p-3 text-center text-sm text-brand-700">
             Mot de passe mis à jour. Connecte-toi avec ton nouveau mot de passe.
           </p>
         )}

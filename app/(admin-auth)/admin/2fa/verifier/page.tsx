@@ -7,6 +7,7 @@ import { MfaChallengeForm } from '@/components/auth/MfaChallengeForm'
 import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
 import { verifyAdminMfaChallenge } from './actions'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Vérification en 2 étapes',
@@ -38,12 +39,12 @@ export default async function Admin2faVerifierPage({ searchParams }: Admin2faVer
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
           <ShieldCheck className="mx-auto h-8 w-8 text-brand-400" aria-hidden />
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-white">Vérification en 2 étapes</h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <Heading level="h1" className="mt-3">Vérification en 2 étapes</Heading>
+          <p className="mt-1 text-sm text-slate-500">
             Entre le code affiché dans ton application d&apos;authentification.
           </p>
         </div>

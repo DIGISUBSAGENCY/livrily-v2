@@ -2,6 +2,7 @@ import { Rocket } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { BoostTierRow } from '@/components/admin/BoostTierRow'
 import { Card } from '@/components/ui/Card'
+import { Heading } from '@/components/ui/Typography'
 
 // Même pattern que /admin/parametres/commission (page.tsx lecture Server
 // Component + actions.ts Server Action + composant client par formulaire) —
@@ -24,10 +25,10 @@ export default async function AdminBoostPricingPage() {
 
   return (
     <main className="mx-auto max-w-lg px-4 py-8">
-      <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+      <Heading level="h1" className="flex items-center gap-2">
         <Rocket className="h-6 w-6 text-brand-600" aria-hidden />
         Tarification Boost
-      </h1>
+      </Heading>
       <p className="mt-1 text-sm text-slate-500">
         Prix par palier de durée (1 à 7 jours) pour la mise en avant d&apos;un trajet, d&apos;une offre ou
         d&apos;une demande dans les listings.

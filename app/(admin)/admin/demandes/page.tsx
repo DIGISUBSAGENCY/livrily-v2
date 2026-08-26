@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { formatTND } from '@/lib/format'
 import type { TravelRequestStatus } from '@/types/database'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 const REQUEST_STATUSES: TravelRequestStatus[] = ['open', 'matched', 'in_transit', 'completed', 'cancelled']
 
@@ -123,10 +124,10 @@ export default async function AdminDemandesPage({ searchParams }: AdminDemandesP
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
-      <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+      <Heading level="h1" className="flex items-center gap-2">
         <Package className="h-6 w-6 text-brand-600" aria-hidden />
         Demandes
-      </h1>
+      </Heading>
       <p className="mt-1 text-sm text-slate-500">
         Vue d&apos;ensemble des missions Jibli, tous statuts confondus — lecture seule.
       </p>

@@ -6,6 +6,7 @@ import { UserSearchFilters } from '@/components/admin/UserSearchFilters'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 interface AdminUsersPageProps {
   searchParams: Promise<{ q?: string; status?: string; type?: string; sort?: string }>
@@ -46,10 +47,10 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+        <Heading level="h1" className="flex items-center gap-2">
           <Users className="h-6 w-6 text-brand-600" aria-hidden />
           Utilisateurs
-        </h1>
+        </Heading>
         <Link href="/admin/utilisateurs/nouveau">
           <Button size="sm">
             <Plus className="h-4 w-4" aria-hidden />
