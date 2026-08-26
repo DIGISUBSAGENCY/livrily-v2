@@ -143,13 +143,16 @@ async function run() {
       check('source_offer_id = offerId', prop?.source_offer_id === offerId, { prop })
       check('status = pending (pas encore accepté)', prop?.status === 'pending', { prop })
 
-      // Avant accept_travel_proposal() : is_client_of_matched_offer() doit
-      // encore renvoyer false (accepted_proposal_id pas encore posé sur la
-      // demande) — clientC (tiers) ne doit RIEN voir non plus.
+      // Visibilité PUBLIQUE des offres (using(true), cf. schema.sql — les
+      // listings gardent une offre 'matched' visible avec son statut au
+      // lieu de la faire disparaître) : assertions mises à jour d'après la
+      // policy actuelle. Les anciennes assertions (is_client_of_matched_
+      // offer, supprimée) dataient d'avant ce changement et faussaient le
+      // filet de non-régression en FAIL permanents.
       const { data: beforeAcceptB } = await clientB.from('product_offers').select('*').eq('id', offerId).maybeSingle()
       check(
-        'AVANT accept : clientB (a pris l\'offre mais pas encore payé) ne la voit pas encore (accepted_proposal_id pas posé)',
-        beforeAcceptB === null,
+        'AVANT accept : clientB voit l\'offre (visibilité publique, status=matched depuis la prise)',
+        beforeAcceptB?.id === offerId && beforeAcceptB?.status === 'matched',
         { beforeAcceptB }
       )
 
@@ -169,13 +172,13 @@ async function run() {
       const { data: payment } = await service.from('travel_payments').select('*').eq('request_id', row.request_id).single()
       check('travel_payments créé, status = escrowed (flouci)', payment?.status === 'escrowed', { payment })
 
-      // APRÈS accept : clientB doit maintenant voir l'offre (matched, lui
-      // en est le client) ; clientC (tiers non impliqué) ne doit RIEN voir.
+      // APRÈS accept : tout le monde voit l'offre matched (visibilité
+      // publique) — clientB comme un tiers quelconque.
       const { data: afterAcceptB } = await clientB.from('product_offers').select('*').eq('id', offerId).maybeSingle()
-      check('APRÈS accept : clientB voit l\'offre (is_client_of_matched_offer)', afterAcceptB?.id === offerId, { afterAcceptB })
+      check('APRÈS accept : clientB voit l\'offre (visibilité publique)', afterAcceptB?.id === offerId, { afterAcceptB })
 
       const { data: afterAcceptC } = await clientC.from('product_offers').select('*').eq('id', offerId).maybeSingle()
-      check('APRÈS accept : clientC (tiers) ne voit PAS l\'offre', afterAcceptC === null, { afterAcceptC })
+      check('APRÈS accept : clientC (tiers) voit aussi l\'offre matched (statut affiché, pas masquée)', afterAcceptC?.id === offerId && afterAcceptC?.status === 'matched', { afterAcceptC })
 
       // voyageurA (propriétaire) doit toujours la voir aussi (voyageur_id = auth.uid()).
       const { data: voyageurSees } = await voyageurA.from('product_offers').select('*').eq('id', offerId).maybeSingle()
