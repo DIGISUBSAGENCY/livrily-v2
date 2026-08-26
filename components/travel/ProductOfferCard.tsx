@@ -5,7 +5,7 @@ import { RequestPhotoPlaceholder } from '@/components/travel/RequestPhotoPlaceho
 import { ProductOfferStatusBadge } from '@/components/travel/ProductOfferStatusBadge'
 import { BoostBadge, isBoosted } from '@/components/travel/BoostBadge'
 import { getPublicStorageUrl } from '@/lib/storage'
-import { formatTND } from '@/lib/format'
+import { Price } from '@/components/ui/Price'
 import type { ProductOffer } from '@/types/database'
 
 interface ProductOfferCardProps {
@@ -60,7 +60,9 @@ export function ProductOfferCard({ offer, ownerName, ownerAvatarUrl }: ProductOf
             {offer.origin_country} → {offer.destination_city}
           </p>
           <p className="text-sm text-slate-500">{new Date(offer.travel_date).toLocaleDateString('fr-TN')}</p>
-          <p className="mt-1 text-sm font-semibold text-brand-700">{formatTND(total)}</p>
+          <p className="mt-1">
+            <Price amount={total} size="md" />
+          </p>
         </div>
       </Card>
     </Link>
