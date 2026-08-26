@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { BankTransferRow } from '@/components/admin/BankTransferRow'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 export default async function AdminBankTransferPage() {
   const supabase = await createClient()
@@ -30,10 +31,9 @@ export default async function AdminBankTransferPage() {
       {error && <p className="mt-6 text-sm text-red-600">Impossible de charger les coordonnées.</p>}
 
       {!error && entries && entries.length === 0 && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
-          <Landmark className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={Landmark}>
           <p>Aucune coordonnée bancaire configurée.</p>
-        </div>
+        </EmptyState>
       )}
 
       {!error && entries && entries.length > 0 && (

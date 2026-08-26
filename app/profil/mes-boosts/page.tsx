@@ -8,6 +8,7 @@ import { BoostBadge, isBoosted } from '@/components/travel/BoostBadge'
 import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
 import type { BankTransferInfo, BoostPricingTier, Trip, ProductOffer, TravelRequest } from '@/types/database'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Mes boosts',
@@ -78,8 +79,7 @@ export default async function MesBoostsPage() {
       </p>
 
       {isEmpty && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
-          <Sparkles className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={Sparkles}>
           <p>Tu n&apos;as encore rien à booster.</p>
           <p className="mt-1 text-sm">
             <Link href="/jibli/trips/nouveau" className="font-medium text-brand-600 hover:underline">
@@ -95,7 +95,7 @@ export default async function MesBoostsPage() {
             </Link>
             .
           </p>
-        </div>
+        </EmptyState>
       )}
 
       {tripList.length > 0 && (

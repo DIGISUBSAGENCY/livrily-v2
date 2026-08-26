@@ -4,6 +4,7 @@ import { TravelPaymentActions } from '@/components/admin/TravelPaymentActions'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatTND } from '@/lib/format'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 // Mini page admin dédiée à la validation des virements en attente pour le
 // crowd-shipping (Flouci n'y apparaît jamais : confirmé automatiquement par
@@ -46,10 +47,9 @@ export default async function JibliPaiementsPage() {
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger les paiements.</p>}
 
       {!error && payments && payments.length === 0 && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
-          <ShieldCheck className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={ShieldCheck}>
           <p>Aucun paiement en attente de vérification.</p>
-        </div>
+        </EmptyState>
       )}
 
       {!error && payments && payments.length > 0 && (

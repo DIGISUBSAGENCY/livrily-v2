@@ -5,6 +5,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { RequestPhotoPlaceholder } from '@/components/travel/RequestPhotoPlaceholder'
 import { getPublicStorageUrl } from '@/lib/storage'
 import { formatTND } from '@/lib/format'
+import { Price } from '@/components/ui/Price'
 import { estimateSuggestedGain, actualGainFromProposal } from '@/lib/travel/estimateGain'
 import type { TravelRequest } from '@/types/database'
 
@@ -56,8 +57,9 @@ export function RequestCard({ request, ownProposal, ownerName, ownerAvatarUrl }:
           <p className="mt-2.5 text-sm text-slate-500">
             {request.origin_country} → {request.destination_city}
           </p>
-          <p className="mt-1 text-sm font-medium text-brand-700">
-            Budget max : {formatTND(request.budget_max)}
+          <p className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-xs text-slate-500">Budget max</span>
+            <Price amount={request.budget_max} size="md" />
           </p>
 
           <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand-100 px-2.5 py-1 text-xs font-semibold text-brand-800">

@@ -4,6 +4,7 @@ import { WalletWithdrawalActions } from '@/components/admin/WalletWithdrawalActi
 import { WithdrawalStatusBadge } from '@/components/travel/WithdrawalStatusBadge'
 import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 // Mirror de /admin/retraits (système B, gains voyageur) — même structure,
 // mais sur wallet_withdrawals (profile_id, pas voyageur_id) : n'importe
@@ -37,10 +38,9 @@ export default async function PortefeuilleRetraitsPage() {
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger les demandes de retrait.</p>}
 
       {!error && withdrawals && withdrawals.length === 0 && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
-          <Wallet className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={Wallet}>
           <p>Aucune demande de retrait en attente.</p>
-        </div>
+        </EmptyState>
       )}
 
       {!error && withdrawals && withdrawals.length > 0 && (

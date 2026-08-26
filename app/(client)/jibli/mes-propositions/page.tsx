@@ -5,6 +5,7 @@ import { Luggage } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { ProposalsTabs } from '@/components/travel/ProposalsTabs'
 import { pageMetadata } from '@/lib/seo'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Mes propositions',
@@ -42,13 +43,12 @@ export default async function MyProposalsPage() {
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger tes propositions.</p>}
 
       {!error && proposals && proposals.length === 0 && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
-          <Luggage className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={Luggage}>
           <p>Tu n&apos;as encore fait aucune proposition.</p>
           <Link href="/jibli" className="mt-3 text-sm font-medium text-brand-600 hover:underline">
             Parcourir les demandes ouvertes
           </Link>
-        </div>
+        </EmptyState>
       )}
 
       {!error && proposals && proposals.length > 0 && <ProposalsTabs proposals={proposals} requestById={requestById} />}

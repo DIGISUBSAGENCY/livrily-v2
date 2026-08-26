@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card'
 import { cn } from '@/lib/utils'
 import { pageMetadata } from '@/lib/seo'
 import type { DisputeStatus } from '@/types/database'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Mes litiges',
@@ -75,10 +76,9 @@ export default async function LitigesPage({ searchParams }: LitigesPageProps) {
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger tes litiges.</p>}
 
       {!error && disputes && disputes.length === 0 && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
-          <PartyPopper className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={PartyPopper}>
           <p>Aucun litige pour le moment — c&apos;est plutôt bon signe 🎉</p>
-        </div>
+        </EmptyState>
       )}
 
       {!error && disputes && disputes.length > 0 && (

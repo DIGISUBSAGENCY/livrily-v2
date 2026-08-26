@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Bell } from 'lucide-react'
 import { hrefFor } from '@/lib/notifications/hrefFor'
 import { Card } from '@/components/ui/Card'
+import { EmptyState } from '@/components/ui/EmptyState'
 import type { NotificationRow } from '@/lib/notifications/actions'
 
 interface RecentActivityProps {
@@ -22,7 +23,11 @@ export function RecentActivity({ notifications }: RecentActivityProps) {
       </h2>
 
       {notifications.length === 0 ? (
-        <Card className="py-8 text-center text-sm text-slate-500">Aucune notification pour l&apos;instant.</Card>
+        <Card>
+          <EmptyState icon={Bell} className="mt-0 py-4">
+            <p>Aucune notification pour l&apos;instant.</p>
+          </EmptyState>
+        </Card>
       ) : (
         <Card className="divide-y divide-slate-100 p-0">
           {notifications.map((notification) => {

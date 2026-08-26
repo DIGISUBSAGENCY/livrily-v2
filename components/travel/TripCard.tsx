@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/Card'
 import { Avatar } from '@/components/ui/Avatar'
 import { TripStatusBadge } from '@/components/travel/TripStatusBadge'
 import { BoostBadge, isBoosted } from '@/components/travel/BoostBadge'
-import { formatTND } from '@/lib/format'
+import { Price } from '@/components/ui/Price'
 import type { Trip } from '@/types/database'
 
 interface TripCardProps {
@@ -50,7 +50,11 @@ export function TripCard({ trip, ownerName, ownerAvatarUrl }: TripCardProps) {
           <Weight className="h-3.5 w-3.5" aria-hidden /> {trip.available_weight_kg} kg disponibles
         </p>
         {trip.indicative_price !== null && (
-          <p className="text-sm font-medium text-brand-700">À partir de {formatTND(trip.indicative_price)} (indicatif)</p>
+          <p className="flex items-baseline gap-1.5">
+            <span className="text-xs text-slate-500">À partir de</span>
+            <Price amount={trip.indicative_price} size="md" />
+            <span className="text-xs text-slate-400">indicatif</span>
+          </p>
         )}
       </Card>
     </Link>

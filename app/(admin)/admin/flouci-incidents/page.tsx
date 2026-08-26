@@ -6,6 +6,7 @@ import { FlouciIncidentSearchFilters } from '@/components/admin/FlouciIncidentSe
 import { Card } from '@/components/ui/Card'
 import { Alert } from '@/components/ui/Alert'
 import { formatTND } from '@/lib/format'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 interface AdminFlouciIncidentsPageProps {
   searchParams: Promise<{ q?: string; status?: string }>
@@ -63,10 +64,9 @@ export default async function AdminFlouciIncidentsPage({ searchParams }: AdminFl
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger les incidents.</p>}
 
       {!error && filtered.length === 0 && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
-          <AlertOctagon className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={AlertOctagon}>
           <p>Aucun incident ne correspond à ces critères.</p>
-        </div>
+        </EmptyState>
       )}
 
       {!error && filtered.length > 0 && (

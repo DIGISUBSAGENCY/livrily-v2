@@ -9,10 +9,8 @@ interface StatCardProps {
   className?: string
 }
 
-// Généralise components/travel/DashboardStatCard.tsx (laissé tel quel,
-// encore utilisé par /jibli) en composant partagé réutilisable partout —
-// reproduit exactement son rendu. La fusion des deux (suppression de
-// DashboardStatCard) est prévue en vague B de la refonte v3.
+// Tuile de statistique partagée — ex-DashboardStatCard (fusionnée ici,
+// refonte v3 vague B), même rendu.
 export function StatCard({ icon: Icon, value, label, className }: StatCardProps) {
   return (
     <Card className={cn('flex items-center gap-3', className)}>

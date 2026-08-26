@@ -4,6 +4,7 @@ import { BoostPaymentActions } from '@/components/admin/BoostPaymentActions'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatTND } from '@/lib/format'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 // Mini page admin dédiée, mirror de /admin/jibli-paiements — liste simple,
 // pas un dashboard (cf. plan validé). boosted_until est déjà posé depuis
@@ -59,10 +60,9 @@ export default async function BoostPaiementsPage() {
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger les paiements.</p>}
 
       {!error && payments && payments.length === 0 && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
-          <Sparkles className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={Sparkles}>
           <p>Aucun paiement en attente de vérification.</p>
-        </div>
+        </EmptyState>
       )}
 
       {!error && payments && payments.length > 0 && (

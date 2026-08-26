@@ -7,11 +7,9 @@ import { submitIdentityVerification, type ActionResult } from '@/app/profil/veri
 import { Label } from '@/components/ui/Label'
 import { ErrorText } from '@/components/ui/ErrorText'
 import { SubmitButton } from '@/components/ui/SubmitButton'
+import { FileInput } from '@/components/ui/FileInput'
 
 const initialState: ActionResult = { error: null }
-
-const fileInputClassName =
-  'block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100'
 
 export function VerificationForm() {
   const router = useRouter()
@@ -38,12 +36,12 @@ export function VerificationForm() {
     >
       <div>
         <Label htmlFor="id_document">Pièce d&apos;identité (CIN, recto)</Label>
-        <input id="id_document" name="id_document" type="file" accept="image/*" required className={fileInputClassName} />
+        <FileInput id="id_document" name="id_document" required />
       </div>
 
       <div>
         <Label htmlFor="selfie">Selfie</Label>
-        <input id="selfie" name="selfie" type="file" accept="image/*" required className={fileInputClassName} />
+        <FileInput id="selfie" name="selfie" required />
         <p className="mt-1.5 text-xs text-slate-500">Visage bien visible, sans lunettes de soleil ni couvre-chef.</p>
       </div>
 

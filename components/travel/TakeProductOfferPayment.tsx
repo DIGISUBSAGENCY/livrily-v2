@@ -11,8 +11,9 @@ import { Button } from '@/components/ui/Button'
 import { Label } from '@/components/ui/Label'
 import { ErrorText } from '@/components/ui/ErrorText'
 import { SubmitButton } from '@/components/ui/SubmitButton'
-import { cn } from '@/lib/utils'
 import type { BankTransferInfo } from '@/types/database'
+import { FileInput } from '@/components/ui/FileInput'
+import { PaymentMethodToggle } from '@/components/ui/PaymentMethodToggle'
 
 type PlatformPaymentInfo = Pick<BankTransferInfo, 'bank_name' | 'account_holder' | 'rib' | 'flouci_phone'>
 
@@ -47,28 +48,7 @@ export function TakeProductOfferPayment({ offerId, bankInfo }: TakeProductOfferP
 
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 p-3">
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => setMethod('virement')}
-          className={cn(
-            'rounded-lg px-3 py-1.5 text-sm font-medium',
-            method === 'virement' ? 'bg-brand-600 text-white' : 'border border-slate-300 bg-white text-slate-600'
-          )}
-        >
-          Virement
-        </button>
-        <button
-          type="button"
-          onClick={() => setMethod('flouci')}
-          className={cn(
-            'rounded-lg px-3 py-1.5 text-sm font-medium',
-            method === 'flouci' ? 'bg-brand-600 text-white' : 'border border-slate-300 bg-white text-slate-600'
-          )}
-        >
-          Flouci
-        </button>
-      </div>
+      <PaymentMethodToggle method={method} onChange={setMethod} />
 
       {method === 'virement' &&
         (!bankInfo ? (
@@ -91,14 +71,7 @@ export function TakeProductOfferPayment({ offerId, bankInfo }: TakeProductOfferP
             </div>
             <div>
               <Label htmlFor="payment_proof">Preuve de virement</Label>
-              <input
-                id="payment_proof"
-                name="payment_proof"
-                type="file"
-                accept="image/*"
-                required
-                className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
-              />
+              <FileInput id="payment_proof" name="payment_proof" required />
             </div>
             {virementState.error && <ErrorText>{virementState.error}</ErrorText>}
             <SubmitButton size="sm" pendingLabel="Envoi…">

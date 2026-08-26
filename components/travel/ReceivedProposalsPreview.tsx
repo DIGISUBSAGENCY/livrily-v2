@@ -5,6 +5,7 @@ import { ProposalAmounts } from '@/components/travel/ProposalAmounts'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import type { TravelProposal } from '@/types/database'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 interface ReceivedProposalsPreviewProps {
   proposals: TravelProposal[]
@@ -42,24 +43,25 @@ export function ReceivedProposalsPreview({
       </div>
 
       {proposals.length === 0 && (
-        <Card className="flex flex-col items-center py-10 text-center text-slate-500">
-          <Inbox className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
-          {hasAnyRequest ? (
-            <>
-              <p>Aucune proposition reçue pour l&apos;instant.</p>
-              <p className="mt-1 text-sm">Les voyageurs intéressés apparaîtront ici.</p>
-              <Link href="/jibli/mes-demandes" className="mt-3 text-sm font-medium text-brand-600 hover:underline">
-                Voir mes demandes
-              </Link>
-            </>
-          ) : (
-            <>
-              <p>Publie une demande pour commencer à recevoir des propositions.</p>
-              <Link href="/jibli/nouvelle-demande" className="mt-3">
-                <Button size="sm">Publier une demande</Button>
-              </Link>
-            </>
-          )}
+        <Card>
+          <EmptyState icon={Inbox} className="mt-0 py-4">
+            {hasAnyRequest ? (
+              <>
+                <p>Aucune proposition reçue pour l&apos;instant.</p>
+                <p className="mt-1 text-sm">Les voyageurs intéressés apparaîtront ici.</p>
+                <Link href="/jibli/mes-demandes" className="mt-3 text-sm font-medium text-brand-600 hover:underline">
+                  Voir mes demandes
+                </Link>
+              </>
+            ) : (
+              <>
+                <p>Publie une demande pour commencer à recevoir des propositions.</p>
+                <Link href="/jibli/nouvelle-demande" className="mt-3">
+                  <Button size="sm">Publier une demande</Button>
+                </Link>
+              </>
+            )}
+          </EmptyState>
         </Card>
       )}
 

@@ -117,15 +117,10 @@ export default async function HomePage() {
               </Button>
             </Link>
             <Link href="/jibli">
-              {/* Contour brand plutôt que le gris neutre par défaut de
-                  variant="secondary" — distinction nette avec le CTA
-                  primaire plein, sans toucher au composant Button partagé
-                  (override via className, twMerge dédoublonne). */}
-              <Button
-                variant="secondary"
-                size="lg"
-                className="border-2 border-brand-600 bg-transparent text-brand-700 shadow-none hover:bg-brand-50"
-              >
+              {/* variant="outline" (v3) : formalise l'ancien override
+                  local — contour brand, distinction nette avec le CTA
+                  primaire plein. */}
+              <Button variant="outline" size="lg">
                 <Wallet className="h-4 w-4" aria-hidden />
                 Devenir voyageur
               </Button>

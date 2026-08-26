@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/Label'
 import { ErrorText } from '@/components/ui/ErrorText'
 import { SubmitButton } from '@/components/ui/SubmitButton'
 import type { ActionResult } from '@/app/(client)/jibli/[id]/actions'
+import { FileInput } from '@/components/ui/FileInput'
 
 const initialState: ActionResult = { error: null }
 
@@ -26,14 +27,7 @@ export function ResubmitPaymentProof({ requestId }: { requestId: string }) {
       <form action={formAction} className="space-y-3">
         <div>
           <Label htmlFor="payment_proof">Nouvelle preuve de virement</Label>
-          <input
-            id="payment_proof"
-            name="payment_proof"
-            type="file"
-            accept="image/*"
-            required
-            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
-          />
+          <FileInput id="payment_proof" name="payment_proof" required />
         </div>
         {state.error && <ErrorText>{state.error}</ErrorText>}
         <SubmitButton size="sm" pendingLabel="Envoi…">

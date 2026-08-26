@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { DisputeStatusBadge } from '@/components/travel/DisputeStatusBadge'
 import { DisputeSearchFilters } from '@/components/admin/DisputeSearchFilters'
 import { Card } from '@/components/ui/Card'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 interface AdminLitigesPageProps {
   searchParams: Promise<{ q?: string; status?: string }>
@@ -88,10 +89,9 @@ export default async function AdminLitigesPage({ searchParams }: AdminLitigesPag
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger les litiges.</p>}
 
       {!error && rows.length === 0 && (
-        <div className="mt-16 flex flex-col items-center text-center text-slate-500">
-          <AlertTriangle className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={AlertTriangle}>
           <p>Aucun litige ne correspond à ces critères.</p>
-        </div>
+        </EmptyState>
       )}
 
       {!error && rows.length > 0 && (

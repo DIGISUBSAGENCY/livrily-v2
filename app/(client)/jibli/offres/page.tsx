@@ -8,6 +8,7 @@ import { isBoosted } from '@/components/travel/BoostBadge'
 import { Button } from '@/components/ui/Button'
 import { pageMetadata } from '@/lib/seo'
 import { getPublicProfileSummaries } from '@/lib/profiles'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Offres',
@@ -89,8 +90,7 @@ export default async function ProductOffersPage({ searchParams }: ProductOffersP
       )}
 
       {!error && offers && offers.length === 0 && (
-        <div className="mt-10 flex flex-col items-center text-center text-slate-500">
-          <Tag className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={Tag} className="mt-10">
           {hasActiveFilters ? (
             <>
               <p>Aucune offre ne correspond à ces filtres.</p>
@@ -101,7 +101,7 @@ export default async function ProductOffersPage({ searchParams }: ProductOffersP
           ) : (
             <p>Aucune offre publiée pour l&apos;instant.</p>
           )}
-        </div>
+        </EmptyState>
       )}
 
       {!error && offers && offers.length > 0 && (

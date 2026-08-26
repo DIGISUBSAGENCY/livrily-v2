@@ -4,7 +4,7 @@ import { Plane, Package, ClipboardList, Inbox, Luggage } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { RequestCard } from '@/components/travel/RequestCard'
 import { RequestFilters, type RequestSort } from '@/components/travel/RequestFilters'
-import { DashboardStatCard } from '@/components/travel/DashboardStatCard'
+import { StatCard } from '@/components/ui/StatCard'
 import { MyRequestsPreview } from '@/components/travel/MyRequestsPreview'
 import { MyProposalsPreview } from '@/components/travel/MyProposalsPreview'
 import { ReceivedProposalsPreview } from '@/components/travel/ReceivedProposalsPreview'
@@ -15,6 +15,7 @@ import { getIdentityStatus } from '@/lib/identity'
 import { getPublicProfileSummaries } from '@/lib/profiles'
 import { pageMetadata } from '@/lib/seo'
 import type { TravelRequest, TravelProposal, TravelRequestStatus } from '@/types/database'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Jibli chay men l’a5er — Crowd-shipping',
@@ -204,9 +205,9 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
           <IdentityBanner status={identityStatus} rejectionReason={identityRejectionReason} />
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <DashboardStatCard icon={ClipboardList} value={myRequestsTotal} label="Mes demandes" />
-            <DashboardStatCard icon={Inbox} value={proposalsReceivedCount} label="Propositions reçues" />
-            <DashboardStatCard icon={Luggage} value={myProposalsTotal} label="Mes propositions envoyées" />
+            <StatCard icon={ClipboardList} value={myRequestsTotal} label="Mes demandes" />
+            <StatCard icon={Inbox} value={proposalsReceivedCount} label="Propositions reçues" />
+            <StatCard icon={Luggage} value={myProposalsTotal} label="Mes propositions envoyées" />
           </div>
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -283,8 +284,7 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
       )}
 
       {!error && requests && requests.length === 0 && (
-        <div className="mt-10 flex flex-col items-center text-center text-slate-500">
-          <Package className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+        <EmptyState icon={Package} className="mt-10">
           {hasActiveFilters ? (
             <>
               <p>Aucune demande ne correspond à ces filtres.</p>
@@ -295,7 +295,7 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
           ) : (
             <p>Aucune demande ouverte pour l&apos;instant.</p>
           )}
-        </div>
+        </EmptyState>
       )}
 
       {!error && requests && requests.length > 0 && (
