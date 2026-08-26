@@ -1,7 +1,7 @@
 import { type ButtonHTMLAttributes, forwardRef } from 'react'
 import { cn } from '@/lib/utils'
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline'
 type ButtonSize = 'sm' | 'md' | 'lg'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -17,6 +17,11 @@ const variantClasses: Record<ButtonVariant, string> = {
   ghost:
     'rounded-lg bg-transparent text-slate-700 hover:bg-slate-100 disabled:text-slate-300 focus-visible:ring-brand-500',
   danger: 'rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300 focus-visible:ring-brand-500',
+  // Contour de marque (refonte v3, vague B) : CTA secondaire distinctif à
+  // côté d'un primaire plein — formalise l'override local que l'accueil
+  // improvisait via className, preuve que le besoin était réel.
+  outline:
+    'rounded-lg border-2 border-brand-600 bg-transparent text-brand-700 shadow-none hover:bg-brand-50 disabled:border-brand-300 disabled:text-brand-300 focus-visible:ring-brand-500',
 }
 
 const sizeClasses: Record<ButtonSize, string> = {
