@@ -9,8 +9,9 @@ import { BoostBadge, isBoosted } from '@/components/travel/BoostBadge'
 import { BoostPayment } from '@/components/travel/BoostPayment'
 import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
-import { formatTND } from '@/lib/format'
 import type { BankTransferInfo, BoostPricingTier } from '@/types/database'
+import { Heading } from '@/components/ui/Typography'
+import { Price } from '@/components/ui/Price'
 
 type PlatformPaymentInfo = Pick<BankTransferInfo, 'bank_name' | 'account_holder' | 'rib'>
 // Forme renvoyée par get_boost_pricing_tiers() (RPC), pas la ligne de table
@@ -73,10 +74,10 @@ export default async function TripPage({ params }: TripPageProps) {
       </Link>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+        <Heading level="h1" className="flex items-center gap-2">
           <Plane className="h-6 w-6 text-brand-600" aria-hidden />
           {trip.origin_country} → {trip.destination_city}
-        </h1>
+        </Heading>
         <div className="flex items-center gap-1.5">
           {isBoosted(trip.boosted_until) && <BoostBadge />}
           <TripStatusBadge status={trip.status} />
@@ -103,7 +104,7 @@ export default async function TripPage({ params }: TripPageProps) {
                 <Wallet className="h-3.5 w-3.5" aria-hidden /> Prix indicatif
               </dt>
               <dd className="mt-0.5 text-sm text-slate-900">
-                {formatTND(trip.indicative_price)} — point de départ, négociable une fois en contact
+                <Price amount={trip.indicative_price} size="sm" /> — point de départ, négociable une fois en contact
               </dd>
             </div>
           )}

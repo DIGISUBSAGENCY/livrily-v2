@@ -18,6 +18,8 @@ import { pageMetadata } from '@/lib/seo'
 import { getIdentityStatus } from '@/lib/identity'
 import { getTrustScore } from '@/lib/trust'
 import type { BankTransferInfo, BoostPricingTier } from '@/types/database'
+import { Heading } from '@/components/ui/Typography'
+import { Price } from '@/components/ui/Price'
 
 type PlatformPaymentInfo = Pick<BankTransferInfo, 'bank_name' | 'account_holder' | 'rib' | 'flouci_phone'>
 // Forme renvoyée par get_boost_pricing_tiers() (RPC), pas la ligne de table
@@ -120,7 +122,7 @@ export default async function ProductOfferPage({ params }: ProductOfferPageProps
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2">
               <Tag className="h-5 w-5 flex-shrink-0 text-brand-600" aria-hidden />
-              <h1 className="text-xl font-bold text-slate-900">{offer.item_description}</h1>
+              <Heading level="h1">{offer.item_description}</Heading>
             </div>
             <div className="flex flex-shrink-0 items-center gap-1.5">
               {isBoosted(offer.boosted_until) && <BoostBadge />}
@@ -140,14 +142,17 @@ export default async function ProductOfferPage({ params }: ProductOfferPageProps
           <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-3">
             <div>
               <p className="text-xs text-slate-500">Prix du produit</p>
-              <p className="font-semibold text-slate-900">{formatTND(offer.item_price)}</p>
+              <p><Price amount={offer.item_price} size="sm" /></p>
             </div>
             <div>
               <p className="text-xs text-slate-500">Frais de service</p>
-              <p className="font-semibold text-slate-900">{formatTND(offer.delivery_fee)}</p>
+              <p><Price amount={offer.delivery_fee} size="sm" /></p>
             </div>
           </div>
-          <p className="mt-2 text-sm font-medium text-brand-700">Total : {formatTND(total)}</p>
+          <p className="mt-3 flex items-baseline gap-1.5">
+            <span className="text-xs text-slate-500">Total</span>
+            <Price amount={total} size="lg" />
+          </p>
 
           {canBoost && (
             <div className="mt-5">

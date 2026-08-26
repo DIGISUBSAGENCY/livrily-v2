@@ -5,6 +5,7 @@ import { ExternalLink, Inbox } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { TravelRequestStatusBadge } from '@/components/travel/TravelRequestStatusBadge'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 import { TravelPaymentStatusBadge } from '@/components/travel/TravelPaymentStatusBadge'
 import { ResubmitPaymentProof } from '@/components/travel/ResubmitPaymentProof'
 import { ProposalCard } from '@/components/travel/ProposalCard'
@@ -313,7 +314,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
       )}
 
       <div className="mt-3 flex items-start justify-between gap-4">
-        <h1 className="text-xl font-bold tracking-tight text-slate-900">{request.item_description}</h1>
+        <Heading level="h1">{request.item_description}</Heading>
         <TravelRequestStatusBadge status={request.status} />
       </div>
 
@@ -381,7 +382,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
 
       {canConfirmReceipt && (
         <Card className="mt-4">
-          <h2 className="mb-2 font-semibold text-slate-900">Réception</h2>
+          <Heading level="h3" as="h2" className="mb-2">Réception</Heading>
           <p className="mb-3 text-sm text-slate-600">
             Le voyageur a marqué l&apos;objet comme remis. Confirme si tu l&apos;as bien reçu — ça
             libère le paiement.
@@ -398,7 +399,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
 
       {isAcceptedVoyageur && (
         <Card className="mt-4">
-          <h2 className="mb-3 font-semibold text-slate-900">Suivi de la mission</h2>
+          <Heading level="h3" as="h2" className="mb-3">Suivi de la mission</Heading>
           <VoyageurStatusActions requestId={request.id} status={request.status} />
           {autoReleaseDate && (
             <p className="mt-3 text-xs text-slate-400">
@@ -418,7 +419,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
 
       {canReview && (
         <Card className="mt-4">
-          <h2 className="mb-3 font-semibold text-slate-900">Avis</h2>
+          <Heading level="h3" as="h2" className="mb-3">Avis</Heading>
           {myReview ? (
             <div>
               <StarRating value={myReview.rating} size="sm" />
@@ -433,9 +434,9 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
 
       {isOwner && (
         <div className="mt-6">
-          <h2 className="mb-3 font-semibold text-slate-900">
+          <Heading level="h3" as="h2" className="mb-3">
             Propositions reçues {proposals.length > 0 && `(${proposals.length})`}
-          </h2>
+          </Heading>
           {proposals.length === 0 && (
             <EmptyState icon={Inbox} className="mt-6">
               <p>Aucune proposition pour l&apos;instant.</p>
@@ -464,7 +465,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
 
       {!isOwner && myProposal && (
         <div className="mt-6">
-          <h2 className="mb-3 font-semibold text-slate-900">Ta proposition</h2>
+          <Heading level="h3" as="h2" className="mb-3">Ta proposition</Heading>
           <ProposalCard
             proposal={myProposal}
             offers={offersByProposal.get(myProposal.id) ?? []}
@@ -482,7 +483,7 @@ export default async function TravelRequestPage({ params, searchParams }: Travel
             defaultOpen={voyageurIdentityStatus === 'unverified' || voyageurIdentityStatus === 'rejected'}
           />
           <Card className="mt-6">
-            <h2 className="mb-3 font-semibold text-slate-900">Faire une proposition</h2>
+            <Heading level="h3" as="h2" className="mb-3">Faire une proposition</Heading>
             {/*
               key=sourceTrip?.id : Next.js ne démonte PAS l'arbre de
               composants d'une page quand seuls les searchParams changent

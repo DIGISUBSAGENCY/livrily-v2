@@ -1,6 +1,6 @@
 import { TrendingUp } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { formatTND } from '@/lib/format'
+import { Price } from '@/components/ui/Price'
 import type { GainEstimate } from '@/lib/travel/estimateGain'
 
 interface VoyageurGainCardProps {
@@ -23,18 +23,18 @@ export function VoyageurGainCard({ rewardBasis, gain }: VoyageurGainCardProps) {
         <h2 className="font-semibold text-slate-900">{rewardBasis ? 'Ton gain' : 'Gain estimé'}</h2>
       </div>
 
-      <p className="mt-3 text-3xl font-bold tracking-tight text-brand-700">{formatTND(gain.amount)}</p>
+      <p className="mt-3"><Price amount={gain.amount} size="lg" /></p>
       <p className="text-sm text-slate-500">+{gain.percentOfItemPrice}% du prix de l&apos;objet</p>
 
       {rewardBasis && (
         <div className="mt-4 space-y-1 border-t border-slate-200 pt-3 text-sm text-slate-600">
           <div className="flex justify-between">
             <span>Prix de l&apos;objet (remboursé)</span>
-            <span className="font-medium text-slate-900">{formatTND(rewardBasis.itemPrice)}</span>
+            <Price amount={rewardBasis.itemPrice} size="sm" />
           </div>
           <div className="flex justify-between">
             <span>Frais de service (ton gain)</span>
-            <span className="font-medium text-slate-900">{formatTND(rewardBasis.deliveryFee)}</span>
+            <Price amount={rewardBasis.deliveryFee} size="sm" />
           </div>
         </div>
       )}
