@@ -12,9 +12,9 @@ import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { ErrorText } from '@/components/ui/ErrorText'
 import { SubmitButton } from '@/components/ui/SubmitButton'
-import { cn } from '@/lib/utils'
 import type { BankTransferInfo } from '@/types/database'
 import { FileInput } from '@/components/ui/FileInput'
+import { PaymentMethodToggle } from '@/components/ui/PaymentMethodToggle'
 
 type PlatformPaymentInfo = Pick<BankTransferInfo, 'bank_name' | 'account_holder' | 'rib' | 'flouci_phone'>
 
@@ -64,28 +64,7 @@ export function WalletDepositForm({ bankInfo }: { bankInfo: PlatformPaymentInfo 
         />
       </div>
 
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => setMethod('virement')}
-          className={cn(
-            'rounded-lg px-3 py-1.5 text-sm font-medium',
-            method === 'virement' ? 'bg-brand-600 text-white' : 'border border-slate-300 bg-white text-slate-600'
-          )}
-        >
-          Virement
-        </button>
-        <button
-          type="button"
-          onClick={() => setMethod('flouci')}
-          className={cn(
-            'rounded-lg px-3 py-1.5 text-sm font-medium',
-            method === 'flouci' ? 'bg-brand-600 text-white' : 'border border-slate-300 bg-white text-slate-600'
-          )}
-        >
-          Flouci
-        </button>
-      </div>
+      <PaymentMethodToggle method={method} onChange={setMethod} />
 
       {method === 'virement' &&
         (!bankInfo ? (
