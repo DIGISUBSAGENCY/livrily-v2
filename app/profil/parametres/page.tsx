@@ -18,6 +18,7 @@ import { CollapsibleSection } from '@/components/ui/CollapsibleSection'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { pageMetadata } from '@/lib/seo'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Paramètres du compte',
@@ -61,7 +62,7 @@ export default async function ParametresPage() {
     <main className="mx-auto max-w-2xl px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Paramètres du compte</h1>
+          <Heading level="h1">Paramètres du compte</Heading>
           <p className="mt-1 text-sm text-slate-500">Identité, informations, sécurité et notifications.</p>
         </div>
         <Link href="/profil">
@@ -86,10 +87,10 @@ export default async function ParametresPage() {
       </div>
 
       <Card className="mt-4">
-        <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+        <Heading level="h3" as="h2" className="flex items-center gap-2">
           <ShieldAlert className="h-5 w-5 text-brand-600" aria-hidden />
           Vérification du compte
-        </h2>
+        </Heading>
         <div className="mt-4">
           <VerificationStepper emailVerified={emailVerified} kycVerified={kycVerified} />
         </div>
@@ -137,7 +138,7 @@ export default async function ParametresPage() {
       </div>
 
       <Card className="mt-4">
-        <h2 className="mb-4 font-semibold text-slate-900">Actions sensibles</h2>
+        <Heading level="h3" as="h2" className="mb-4">Actions sensibles</Heading>
         <DangerZone />
       </Card>
     </main>

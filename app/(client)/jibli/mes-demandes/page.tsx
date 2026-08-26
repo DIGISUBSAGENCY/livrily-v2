@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import { pageMetadata } from '@/lib/seo'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Mes demandes',
@@ -34,7 +35,7 @@ export default async function MyTravelRequestsPage() {
       <Link href="/jibli" className="text-sm text-brand-600 transition-colors hover:text-brand-700 hover:underline">
         ← Jibli chay men l&apos;a5er
       </Link>
-      <h1 className="mt-3 text-2xl font-bold text-slate-900">Mes demandes</h1>
+      <Heading level="h1" className="mt-3">Mes demandes</Heading>
 
       {error && <p className="mt-8 text-sm text-red-600">Impossible de charger tes demandes.</p>}
 

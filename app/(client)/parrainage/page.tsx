@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card'
 import { formatTND } from '@/lib/format'
 import { pageMetadata } from '@/lib/seo'
 import { getSiteUrl } from '@/lib/site'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Parrainage',
@@ -42,14 +43,14 @@ export default async function ParrainagePage() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="text-2xl font-bold text-slate-900">Parrainage</h1>
+      <Heading level="h1">Parrainage</Heading>
 
       <div className="mt-6 space-y-4">
         {profile?.referral_code && <ReferralCodeCard code={profile.referral_code} shareUrl={shareUrl} />}
 
         {history && history.length > 0 && (
           <Card>
-            <h2 className="mb-2 font-semibold text-slate-900">Historique</h2>
+            <Heading level="h3" as="h2" className="mb-2">Historique</Heading>
             <ul className="divide-y divide-slate-100">
               {history.map((entry) => (
                 <li key={entry.id} className="flex items-center justify-between py-2 text-sm">
