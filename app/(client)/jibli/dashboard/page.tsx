@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { ClipboardList, Tag, ArrowLeftRight, PlusCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { IdentityBanner } from '@/components/account/IdentityBanner'
-import { DashboardStatCard } from '@/components/travel/DashboardStatCard'
+import { StatCard } from '@/components/ui/StatCard'
 import { CountryFlowSection } from '@/components/travel/CountryFlowSection'
 import { MyRequestsPreview } from '@/components/travel/MyRequestsPreview'
 import { MyOffersPreview } from '@/components/travel/MyOffersPreview'
@@ -168,9 +168,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       </div>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        <DashboardStatCard icon={ClipboardList} value={requestsCount} label="Mes demandes" />
-        <DashboardStatCard icon={Tag} value={offersCount} label="Mes articles" />
-        <DashboardStatCard icon={ArrowLeftRight} value={proposalsCount} label="Propositions" />
+        <StatCard icon={ClipboardList} value={requestsCount} label="Mes demandes" />
+        <StatCard icon={Tag} value={offersCount} label="Mes articles" />
+        <StatCard icon={ArrowLeftRight} value={proposalsCount} label="Propositions" />
       </div>
 
       <div className="mt-6 flex flex-wrap gap-2">

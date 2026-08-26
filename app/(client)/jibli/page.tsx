@@ -4,7 +4,7 @@ import { Plane, Package, ClipboardList, Inbox, Luggage } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { RequestCard } from '@/components/travel/RequestCard'
 import { RequestFilters, type RequestSort } from '@/components/travel/RequestFilters'
-import { DashboardStatCard } from '@/components/travel/DashboardStatCard'
+import { StatCard } from '@/components/ui/StatCard'
 import { MyRequestsPreview } from '@/components/travel/MyRequestsPreview'
 import { MyProposalsPreview } from '@/components/travel/MyProposalsPreview'
 import { ReceivedProposalsPreview } from '@/components/travel/ReceivedProposalsPreview'
@@ -205,9 +205,9 @@ export default async function JibliHomePage({ searchParams }: JibliPageProps) {
           <IdentityBanner status={identityStatus} rejectionReason={identityRejectionReason} />
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <DashboardStatCard icon={ClipboardList} value={myRequestsTotal} label="Mes demandes" />
-            <DashboardStatCard icon={Inbox} value={proposalsReceivedCount} label="Propositions reçues" />
-            <DashboardStatCard icon={Luggage} value={myProposalsTotal} label="Mes propositions envoyées" />
+            <StatCard icon={ClipboardList} value={myRequestsTotal} label="Mes demandes" />
+            <StatCard icon={Inbox} value={proposalsReceivedCount} label="Propositions reçues" />
+            <StatCard icon={Luggage} value={myProposalsTotal} label="Mes propositions envoyées" />
           </div>
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
