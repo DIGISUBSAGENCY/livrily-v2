@@ -4,6 +4,7 @@ import { Plane, ShieldCheck, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { pageMetadata } from '@/lib/seo'
+import { Heading } from '@/components/ui/Typography'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Comment ça marche',
@@ -18,9 +19,9 @@ const jibliSteps = [
 
 export default function CommentCaMarchePage() {
   return (
-    <main className="mx-auto max-w-3xl px-4 py-12">
+    <main className="mx-auto max-w-2xl px-4 py-12">
       <div className="text-center">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Comment ça marche</h1>
+        <Heading level="h1">Comment ça marche</Heading>
         <p className="mt-3 text-slate-600">Jibli chay men l&apos;a5er — le crowd-shipping Livrily, expliqué simplement.</p>
       </div>
 
